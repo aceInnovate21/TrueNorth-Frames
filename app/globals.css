@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --ink: #0A0A0A;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-white text-ink font-sans;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* 3D card tilt */
+  .card-3d {
+    transform-style: preserve-3d;
+    perspective: 1000px;
+  }
+
+  .card-3d-inner {
+    transition: transform 0.4s ease;
+  }
+
+  .card-3d:hover .card-3d-inner {
+    transform: rotateY(-4deg) rotateX(2deg) translateZ(8px);
+  }
+
+  /* Subtle grid pattern */
+  .grid-pattern {
+    background-image:
+      linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* Depth shadow layers */
+  .shadow-depth {
+    box-shadow:
+      0 1px 2px rgba(0,0,0,0.04),
+      0 4px 8px rgba(0,0,0,0.06),
+      0 12px 24px rgba(0,0,0,0.08);
+  }
+
+  .shadow-depth-hover {
+    box-shadow:
+      0 2px 4px rgba(0,0,0,0.06),
+      0 8px 16px rgba(0,0,0,0.10),
+      0 24px 48px rgba(0,0,0,0.12);
+  }
+}

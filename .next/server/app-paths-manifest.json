@@ -1,0 +1,17 @@
+{
+  "/photographers/your-profile/page": "app/photographers/your-profile/page.js",
+  "/api/photographer/preview/route": "app/api/photographer/preview/route.js",
+  "/dashboard/photographer/edit/page": "app/dashboard/photographer/edit/page.js",
+  "/api/photographer/profile/route": "app/api/photographer/profile/route.js",
+  "/api/photographer/packages/route": "app/api/photographer/packages/route.js",
+  "/api/photographer/account/route": "app/api/photographer/account/route.js",
+  "/api/photographer/bookings/route": "app/api/photographer/bookings/route.js",
+  "/dashboard/photographer/page": "app/dashboard/photographer/page.js",
+  "/api/photographer/faqs/route": "app/api/photographer/faqs/route.js",
+  "/api/photographer/availability/route": "app/api/photographer/availability/route.js",
+  "/api/photographer/messages/route": "app/api/photographer/messages/route.js",
+  "/api/photographer/notifications/route": "app/api/photographer/notifications/route.js",
+  "/api/photographer/groups/route": "app/api/photographer/groups/route.js",
+  "/api/photographer/albums/route": "app/api/photographer/albums/route.js",
+  "/api/photographer/connections/route": "app/api/photographer/connections/route.js"
+}

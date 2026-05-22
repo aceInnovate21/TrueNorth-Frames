@@ -1,0 +1,1609 @@
+// TrueNorth Frames — Production Database Schema
+// Phase 1 · dbdiagram.io compatible DBML
+// Updated: 2026-05-18 (v2)
+// ──────────────────────────────────────────────
+// Supabase (PostgreSQL 15) backend
+// All timestamps: timestamptz, default now()
+// UUIDs: gen_random_uuid() via pgcrypto
+// RLS enabled on every table
+// ──────────────────────────────────────────────
+
+// ═══════════════════════════════════════════════
+//  ENUMS
+// ═══════════════════════════════════════════════
+
+Enum user_role {
+  client
+  photographer
+  admin
+}
+
+// [CHANGE 1] Structured account status replaces bare is_active boolean
+Enum account_status {
+  active
+  suspended    // temporary, admin-imposed
+  banned       // permanent, admin-imposed
+  deactivated  // user-initiated soft delete
+}
+
+// [CHANGE 2] Photographer profile lifecycle for admin approval workflow
+Enum photographer_profile_status {
+  draft        // incomplete, not submitted
+  pending      // submitted for admin review
+  approved     // live and publicly discoverable
+  suspended    // temporarily hidden by admin
+  banned       // permanently removed
+}
+
+Enum booking_status {
+  pending               // submitted, awaiting photographer action
+  approved              // photographer accepted
+  declined              // photographer declined
+  cancelled             // cancelled before approval (client) OR after approval via formal request (both)
+  cancellation_pending  // post-approval cancellation requested — awaiting photographer confirmation
+  completed             // session delivered, eligible for review
+}
+
+Enum cancellation_actor {
+  client
+  photographer
+  admin
+}
+
+Enum billing_type {
+  hourly
+  package
+}
+
+// [CHANGE 3] tentative added to match frontend booking/scheduling behaviour
+Enum availability_status {
+  available
+  tentative    // soft hold, e.g. pending booking exists
+  busy         // confirmed unavailable
+}
+
+Enum connection_status {
+  pending
+  accepted
+  declined
+  blocked
+}
+
+Enum group_invite_status {
+  pending
+  accepted
+  declined
+}
+
+Enum cover_request_status {
+  pending     // sent, awaiting recipient response
+  accepted    // recipient agreed to cover
+  declined    // recipient declined
+  withdrawn   // requester cancelled before response
+}
+
+Enum review_flag_status {
+  none
+  flagged
+  flag_resolved
+}
+
+Enum platform_name {
+  google
+  yelp
+  facebook
+  instagram
+}
+
+Enum trust_sync_status {
+  success
+  partial
+  failed
+}
+
+Enum support_ticket_status {
+  open
+  in_review
+  resolved
+  closed
+}
+
+Enum support_ticket_category {
+  fake_review
+  inappropriate_content
+  spam_report           // client reported a photographer conversation as spam
+  billing_dispute
+  account_issue
+  other
+}
+
+Enum notification_type {
+  booking_request        // photographer receives new request
+  booking_approved       // client notified of approval
+  booking_declined       // client notified of decline
+  booking_cancelled      // photographer notified of cancellation
+  booking_completed      // both parties
+  new_message            // in-app message received
+  connection_request     // new connection invite
+  connection_accepted    // connection confirmed
+  group_invite           // invited to a group
+  review_received        // photographer gets new review
+  review_reply           // client sees photographer reply
+  trust_score_updated    // photographer trust score changed
+}
+
+Enum message_sender_type {
+  client
+  photographer
+}
+
+Enum email_queue_status {
+  queued
+  sent
+  failed
+}
+
+// ═══════════════════════════════════════════════
+//  CORE IDENTITY
+// ═══════════════════════════════════════════════
+
+Table users {
+  id                  uuid           [pk, default: `gen_random_uuid()`]
+  email               varchar(255)   [unique, not null]
+  role                user_role      [not null]
+  full_name           varchar(120)   [not null]
+  avatar_url          text
+  // [CHANGE 1] enum replaces is_active boolean
+  account_status      account_status [not null, default: 'active']
+  status_reason       text           // admin note explaining suspension/ban
+  status_changed_at   timestamptz
+  status_changed_by   uuid           [ref: > users.id]  // admin who acted
+  is_verified         boolean        [default: false]   // email verified
+  // Auth rate limiting (managed by API, reset by cron or on successful login)
+  failed_login_count  smallint       [default: 0]       // incremented on failed attempt; reset on success
+  locked_until        timestamptz                       // non-null = account temporarily locked
+  password_reset_count smallint      [default: 0]       // resets sent in current hour window
+  password_reset_window_start timestamptz               // start of current reset rate-limit window
+  created_at          timestamptz    [default: `now()`]
+  updated_at          timestamptz    [default: `now()`]
+  last_active_at      timestamptz
+  deleted_at          timestamptz    // soft delete (deactivated state)
+
+  Note: 'Auth record mirrors Supabase auth.users. One row per user regardless of role. failed_login_count and locked_until support brute-force lockout; password_reset_* support reset rate limiting.'
+}
+
+Table client_profiles {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  user_id             uuid          [unique, not null, ref: > users.id]
+  bio                 varchar(500)  // capped — platform_config key: max_client_bio_length
+  location            varchar(120)  // e.g. "Edmonton, AB"
+  preferred_style     varchar(80)   // e.g. "Documentary, Candid"
+  avatar_url          text          // overrides users.avatar_url if set
+
+  Note: 'Extended profile for client-role users.'
+}
+
+Table photographer_profiles {
+  id                        uuid                       [pk, default: `gen_random_uuid()`]
+  user_id                   uuid                       [unique, not null, ref: > users.id]
+  username                  varchar(40)                [unique, not null]  // URL slug: /photographers/:username
+  display_name              varchar(120)               [not null]
+  tagline                   varchar(160)
+  bio                       varchar(1200)              // capped — platform_config key: max_photographer_bio_length
+  location                  varchar(120)
+  // specialties normalised into photographer_specialties table (removed from here)
+  years_experience          smallint
+  avatar_url                text
+  cover_image_url           text
+  instagram_url             text
+  website_url               text
+
+  // Pricing
+  rate_display              varchar(40)                // e.g. "$180 / hr" — display string
+  rate_note                 varchar(160)               // e.g. "Packages from $450"
+
+  // Trust & ratings (denormalised for fast profile loads — recomputed by cron)
+  trust_score               numeric(4,1)               [default: 0, note: 'CHECK (trust_score BETWEEN 0 AND 100)']
+  native_avg_rating         numeric(3,2)               [default: 0, note: 'CHECK (native_avg_rating BETWEEN 0 AND 5)']
+  native_review_count       integer                    [default: 0]
+  last_trust_sync_at        timestamptz
+
+  // Profile views (denormalised total — source of truth is photographer_profile_views)
+  profile_view_count        integer                    [default: 0]   // incremented by API on each unique daily view insert
+
+  // Profile completeness (0–100, shown on photographer dashboard)
+  completeness_score        smallint                   [default: 0]
+
+  // [CHANGE 2] proper status enum with admin approval metadata
+  // portfolio_urls array removed — normalised into portfolio_albums/portfolio_photos
+  profile_status            photographer_profile_status [not null, default: 'draft']
+  submitted_for_review_at   timestamptz
+  approved_at               timestamptz
+  approved_by               uuid                       [ref: > users.id]  // admin
+  status_note               text                       // admin note on suspension/rejection
+
+  created_at                timestamptz                [default: `now()`]
+  updated_at                timestamptz                [default: `now()`]
+
+  Note: 'One row per photographer. profile_status drives public discoverability. Portfolio images live in portfolio_albums/portfolio_photos. profile_view_count is a denormalised total incremented by API on each unique daily view insert — source of truth is photographer_profile_views. Specialties normalised into photographer_specialties.'
+}
+
+// ─── Photographer Specialties ─────────────────────────────────────────────────
+// Normalised from text[] — enables DB-level filtering, search, and analytics.
+// Specialty values are free-form but validated against a known set at the API layer
+// (e.g. Wedding, Portrait, Corporate, Real Estate, Newborn, Family, Event, etc.)
+
+Table photographer_specialties {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  photographer_id     uuid          [not null, ref: > photographer_profiles.id]
+  specialty           varchar(60)   [not null]   // e.g. 'Wedding', 'Portrait', 'Real Estate'
+
+  indexes {
+    (photographer_id, specialty) [unique]  // no duplicates per photographer
+    specialty                              // fast filter: find all wedding photographers
+  }
+
+  Note: 'One row per specialty per photographer. Replacing the former text[] column allows DB-level search filtering. API validates specialty against the platform allowed-list before insert.'
+}
+
+// ═══════════════════════════════════════════════
+//  PROFILE VIEWS
+// ═══════════════════════════════════════════════
+
+// Event log — one row per unique viewer per photographer per calendar day.
+// Deduplication key: (photographer_id, viewer_fingerprint, view_date).
+// viewer_id is null for unauthenticated visits; viewer_fingerprint holds an
+// anonymous stable identifier (hashed IP + UA) so they still deduplicate.
+
+Table photographer_profile_views {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  photographer_id     uuid          [not null, ref: > photographer_profiles.id]
+
+  // Viewer identity — one of these is always set
+  viewer_id           uuid          [ref: > users.id]   // null = unauthenticated visitor
+  viewer_role         varchar(20)                        // 'client' | 'photographer' | null (anonymous)
+
+  // Deduplication — one unique view per (photographer, fingerprint, calendar day)
+  viewer_fingerprint  varchar(64)   [not null]           // sha256(viewer_id OR hashed IP+UA) — never stores raw IP
+  view_date           date          [not null]           // date in MST (application layer sets this)
+
+  // Context
+  referrer_type       varchar(40)                        // 'search' | 'saved_list' | 'direct' | 'cover_request' | null
+  viewed_at           timestamptz   [default: `now()`]   // exact timestamp of first view that day
+
+  indexes {
+    (photographer_id, viewer_fingerprint, view_date) [unique, name: 'idx_profile_view_dedup']
+    (photographer_id, view_date)     // fast windowed aggregation: views this week / month
+    viewer_id                        // look up what profiles a client has viewed
+  }
+
+  Note: 'Append-only view event log. Unique constraint prevents double-counting: same viewer visiting a profile multiple times in one day = 1 row. viewer_fingerprint is a sha256 hash — raw IP is never stored. Rows older than 365 days are purged by cron. profile_view_count on photographer_profiles is a denormalised total kept in sync by the same API write.'
+}
+
+// ═══════════════════════════════════════════════
+//  PORTFOLIO  [CHANGE 4 — normalised from text[] array]
+// ═══════════════════════════════════════════════
+
+Table portfolio_albums {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  photographer_id     uuid          [not null, ref: > photographer_profiles.id]
+  title               varchar(120)  [not null]   // e.g. "Wedding Season 2025"
+  description         text
+  cover_photo_id      uuid          // ref set after first photo added (circular — set by app)
+  sort_order          smallint      [default: 0]
+  is_published        boolean       [default: false]
+  created_at          timestamptz   [default: `now()`]
+  updated_at          timestamptz   [default: `now()`]
+
+  indexes {
+    (photographer_id, sort_order)
+  }
+
+  Note: 'Cap: 3 albums per photographer, enforced at application layer. cover_photo_id is set after first photo insert to avoid circular FK.'
+}
+
+Table portfolio_photos {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  album_id            uuid          [not null, ref: > portfolio_albums.id]
+  photographer_id     uuid          [not null, ref: > photographer_profiles.id]  // denormalised for fast queries
+  storage_asset_id    uuid          [not null, ref: > storage_assets.id]
+  caption             varchar(255)
+  alt_text            varchar(255)  // accessibility
+  sort_order          smallint      [default: 0]
+  width_px            integer
+  height_px           integer
+  uploaded_at         timestamptz   [default: `now()`]
+
+  indexes {
+    (album_id, sort_order)
+    photographer_id
+  }
+
+  Note: 'Ordered photos within an album. sort_order controls gallery display sequence. Cap: 50 photos per photographer across all albums. Max upload: 5 MB per photo (client-side enforced). Server compresses to WebP before R2 storage.'
+}
+
+// ─── Portfolio Videos ────────────────────────────────────────────────────────
+// Cap: 3 videos per photographer total; max 2 per album. Enforced at app layer.
+// Target format: MP4 H.264, max 1080p, max 90 seconds. ~60 MB stored per video.
+// Storage estimate: 3 videos × 60 MB = ~180 MB per photographer.
+
+Table portfolio_videos {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  album_id            uuid          [not null, ref: > portfolio_albums.id]
+  photographer_id     uuid          [not null, ref: > photographer_profiles.id]  // denormalised for fast queries
+  storage_asset_id    uuid          [not null, ref: > storage_assets.id]         // MP4 in R2
+  thumbnail_asset_id  uuid          [ref: > storage_assets.id]                   // poster frame, auto-generated
+  title               varchar(120)
+  caption             varchar(255)
+  duration_seconds    smallint                   // recorded at upload time
+  sort_order          smallint      [default: 0]
+  uploaded_at         timestamptz   [default: `now()`]
+
+  indexes {
+    (album_id, sort_order)
+    photographer_id
+  }
+
+  Note: 'Max 3 videos per photographer total; max 2 per album. Max upload: 100 MB per video (client-side enforced). Server compresses to H.264 MP4 1080p before R2 storage. thumbnail_asset_id points to auto-extracted poster frame.'
+}
+
+// ═══════════════════════════════════════════════
+//  FAQ
+// ═══════════════════════════════════════════════
+
+Table photographer_faqs {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  photographer_id     uuid          [not null, ref: > photographer_profiles.id]
+  question            varchar(160)  [not null]
+  answer              varchar(600)  [not null]
+  sort_order          smallint      [not null, default: 0]  // 0-based; controls accordion display order
+  is_published        boolean       [default: true]         // false = draft, hidden from public profile
+  created_at          timestamptz   [default: `now()`]
+  updated_at          timestamptz   [default: `now()`]
+
+  indexes {
+    (photographer_id, sort_order)
+  }
+
+  Note: 'Max 5 FAQs per photographer enforced at application layer. Displayed as an accordion on the public profile between portfolio and reviews sections. sort_order is rewritten 0-N on every reorder.'
+}
+
+// ═══════════════════════════════════════════════
+//  PACKAGES & PRICING
+// ═══════════════════════════════════════════════
+
+Table packages {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  photographer_id     uuid          [not null, ref: > photographer_profiles.id]
+  name                varchar(120)  [not null]   // e.g. "Golden Hour Portrait Session"
+  description         varchar(800)               // capped — platform_config key: max_package_description_length
+  billing_type        billing_type  [not null]
+  price               numeric(10,2) [not null, note: 'CHECK (price >= 0)']
+  duration_minutes    integer       [note: 'CHECK (duration_minutes IS NULL OR duration_minutes > 0)']
+  deliverables        text[]                     // e.g. {20 edited photos, digital gallery}
+  is_active           boolean       [default: true]
+  sort_order          smallint      [default: 0]
+  created_at          timestamptz   [default: `now()`]
+  updated_at          timestamptz   [default: `now()`]
+
+  Note: 'A photographer may have multiple packages of mixed billing types.'
+}
+
+// ═══════════════════════════════════════════════
+//  AVAILABILITY
+// ═══════════════════════════════════════════════
+
+Table availability_day_status {
+  id                  uuid                [pk, default: `gen_random_uuid()`]
+  photographer_id     uuid                [not null, ref: > photographer_profiles.id]
+  date                date                [not null]
+  status              availability_status [not null]  // available | tentative | busy
+  note                varchar(255)        // internal note
+
+  indexes {
+    (photographer_id, date) [unique]
+  }
+
+  Note: 'Explicit per-day overrides. tentative is set automatically when a pending booking exists. No row = no data (neutral).'
+}
+
+// [CHANGE 5] structured time fields replace slot_label display string
+Table weekly_time_slots {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  photographer_id     uuid          [not null, ref: > photographer_profiles.id]
+  day_of_week         smallint      [not null, note: 'CHECK (day_of_week BETWEEN 0 AND 6)']
+  start_time          time          [not null]  // e.g. 09:00:00
+  end_time            time          [not null, note: 'CHECK (end_time > start_time)']
+  slot_label          varchar(60)   [not null]  // display string: "9:00 AM – 11:00 AM" (generated/stored for UI)
+  max_clients         smallint      [not null, default: 1]  // concurrent bookings allowed in this window
+  is_active           boolean       [default: true]
+
+  indexes {
+    (photographer_id, day_of_week, start_time) [unique]
+  }
+
+  Note: 'Recurring weekly availability windows. start_time/end_time enable overlap detection; max_clients supports multi-booking slots.'
+}
+
+// ═══════════════════════════════════════════════
+//  BOOKINGS
+// ═══════════════════════════════════════════════
+
+Table booking_requests {
+  id                  uuid           [pk, default: `gen_random_uuid()`]
+  client_id           uuid           [not null, ref: > users.id]
+  photographer_id     uuid           [not null, ref: > photographer_profiles.id]
+  package_id          uuid           [ref: > packages.id]  // null = custom/hourly request
+  time_slot_id        uuid           [ref: > weekly_time_slots.id]  // null = custom time
+
+  // What the client asked for
+  occasion            varchar(120)   [not null]   // e.g. "Wedding Reception"
+  description         varchar(600)               // capped — platform_config key: max_booking_description_length
+  billing_type        billing_type   [not null]
+  billing_detail      varchar(120)              // e.g. "2 hours · $180/hr" or "Golden Hour Package"
+  requested_date      date           [not null]
+  time_slot           varchar(80)    [not null]  // display snapshot of slot at time of booking
+  location_note       varchar(255)               // capped — platform_config key: max_booking_location_note_length
+
+  // Lifecycle
+  status              booking_status [not null, default: 'pending']
+  photographer_note   varchar(800)               // capped — platform_config key: max_photographer_response_length
+  cancellation_reason varchar(120)   // preset reason chosen by client
+  cancellation_note   varchar(400)               // capped — platform_config key: max_cancellation_note_length
+
+  // Completion
+  completed_at        timestamptz    // set when status → completed
+
+  created_at          timestamptz    [default: `now()`]
+  updated_at          timestamptz    [default: `now()`]
+
+  indexes {
+    (client_id, photographer_id, requested_date) [name: 'idx_booking_client_photographer_date']
+    status
+    (photographer_id, requested_date)
+  }
+
+  Note: 'State machine: pending → approved/declined/cancelled; approved → cancellation_pending → cancelled; approved → completed. Post-approval cancellations go through booking_cancellation_requests. Pending booking sets availability_day_status to tentative.'
+}
+
+// ─── Post-Approval Cancellation Requests ─────────────────────────────────────
+// When a booking is approved, the client can no longer cancel unilaterally.
+// They submit a cancellation_request; the photographer confirms or declines.
+// On confirm → booking.status = 'cancelled'. On decline → booking remains approved.
+// Admin can force-cancel at any time regardless of photographer response.
+
+Table booking_cancellation_requests {
+  id                  uuid                  [pk, default: `gen_random_uuid()`]
+  booking_id          uuid                  [not null, ref: > booking_requests.id]
+  requested_by        uuid                  [not null, ref: > users.id]          // client or admin
+  actor               cancellation_actor    [not null]                           // 'client' | 'admin'
+  reason              varchar(120)          [not null]                           // preset reason
+  note                varchar(400)                                               // optional free-text — platform_config key: max_cancellation_note_length
+  photographer_response varchar(20)                                              // 'confirmed' | 'declined' — set by photographer
+  responded_at        timestamptz
+  resolved_at         timestamptz           // when booking.status was updated to 'cancelled' or request was declined
+  created_at          timestamptz           [default: `now()`]
+
+  indexes {
+    booking_id
+    requested_by
+  }
+
+  Note: 'One active request per booking at a time [API]. On photographer confirmation or admin force-cancel: booking.status → cancelled, availability_day_status tentative cleared. On photographer decline: request resolved, booking remains approved.'
+}
+
+// ═══════════════════════════════════════════════
+//  REVIEWS
+// ═══════════════════════════════════════════════
+
+Table reviews {
+  id                  uuid               [pk, default: `gen_random_uuid()`]
+  booking_id          uuid               [unique, not null, ref: > booking_requests.id]  // one review per booking
+  client_id           uuid               [not null, ref: > users.id]
+  photographer_id     uuid               [not null, ref: > photographer_profiles.id]
+
+  // Content
+  rating              smallint           [not null, note: 'CHECK (rating BETWEEN 1 AND 5)']
+  body                varchar(1500)                   // capped — platform_config key: max_review_body_length
+
+  // Photographer response (always public when set)
+  public_reply        varchar(800)                    // capped — platform_config key: max_review_reply_length
+  replied_at          timestamptz
+
+  // Flagging (admin moderation only — review is always public)
+  flag_status         review_flag_status [not null, default: 'none']
+  flag_reason         varchar(600)                    // capped — platform_config key: max_flag_reason_length
+  flag_submitted_at   timestamptz
+  flag_resolved_at    timestamptz
+  flag_resolved_by    uuid               [ref: > users.id]  // admin who resolved
+
+  // Internal only
+  private_note        varchar(600)                    // capped — platform_config key: max_review_private_note_length
+
+  created_at          timestamptz        [default: `now()`]
+  updated_at          timestamptz        [default: `now()`]
+
+  indexes {
+    photographer_id
+    rating
+    flag_status
+  }
+
+  Note: 'Reviews are always public. Photographers can reply publicly or flag to admin. No hide/suppress capability.'
+}
+
+// ═══════════════════════════════════════════════
+//  EXTERNAL PLATFORM TRUST
+// ═══════════════════════════════════════════════
+
+Table external_platform_links {
+  id                    uuid          [pk, default: `gen_random_uuid()`]
+  photographer_id       uuid          [not null, ref: > photographer_profiles.id]
+  platform              platform_name [not null]
+  profile_url           text          [not null]
+  platform_rating       numeric(3,2)            // last fetched rating
+  platform_review_count integer               // last fetched count
+  is_verified           boolean       [default: false]
+  last_fetched_at       timestamptz
+  created_at            timestamptz   [default: `now()`]
+
+  indexes {
+    (photographer_id, platform) [unique]
+  }
+
+  Note: 'One row per platform per photographer. Verified flag set after admin/cron confirms the URL belongs to them.'
+}
+
+Table trust_sync_log {
+  id                  uuid              [pk, default: `gen_random_uuid()`]
+  photographer_id     uuid              [not null, ref: > photographer_profiles.id]
+  platform            platform_name     [not null]
+  status              trust_sync_status [not null]
+  fetched_rating      numeric(3,2)
+  fetched_count       integer
+  error_message       text
+  synced_at           timestamptz       [default: `now()`]
+
+  indexes {
+    (photographer_id, synced_at)
+  }
+
+  Note: 'Append-only audit log of every Vercel Cron trust-data fetch (daily 6 AM MST). Used for health dashboard.'
+}
+
+// Trust score weights (reference, enforced in application layer):
+// Google 35% · Yelp 20% · Native 20% · Facebook 15% · Instagram 10%
+
+// ═══════════════════════════════════════════════
+//  MESSAGING
+// ═══════════════════════════════════════════════
+
+// [CHANGE 6] moderation fields added to conversations
+Table conversations {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  booking_id          uuid          [ref: > booking_requests.id]  // null = general enquiry
+  client_id           uuid          [not null, ref: > users.id]
+  photographer_id     uuid          [not null, ref: > photographer_profiles.id]
+  last_message_at     timestamptz
+  // Moderation
+  is_frozen           boolean       [default: false]   // admin locked; no new messages
+  is_flagged          boolean       [default: false]   // flagged for admin review
+  flag_reason         text          // reason submitted when flagging
+  flagged_at          timestamptz
+  flagged_by          uuid          [ref: > users.id]
+  frozen_at           timestamptz
+  frozen_by           uuid          [ref: > users.id]  // admin who froze
+  created_at          timestamptz   [default: `now()`]
+
+  indexes {
+    (client_id, photographer_id) [unique, name: 'idx_conv_participants']
+    last_message_at
+    is_flagged
+  }
+
+  Note: 'One conversation thread per client–photographer pair. is_frozen blocks new messages; is_flagged queues for admin review.'
+}
+
+// [CHANGE 7] read_at timestamp replaces is_read boolean
+Table messages {
+  id                  uuid                [pk, default: `gen_random_uuid()`]
+  conversation_id     uuid                [not null, ref: > conversations.id]
+  sender_id           uuid                [not null, ref: > users.id]
+  sender_type         message_sender_type [not null]
+  body                text                [not null]
+  read_at             timestamptz         // null = unread; set when recipient first views
+  created_at          timestamptz         [default: `now()`]
+
+  indexes {
+    (conversation_id, created_at)
+    (sender_id, read_at)  // null read_at = unread messages for this sender's counterpart
+  }
+
+  Note: 'read_at is null until the recipient opens the message. Enables precise unread counts and delivery analytics.'
+}
+
+// ─── Message Rate Limits ────────────────────────────────────────────────────
+// Lightweight rolling-window counter. One row per client per hour bucket.
+// Bucket key = floor(unix_epoch / 3600). Row expires after 2 hours (cron purge).
+
+Table message_rate_limits {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  client_id           uuid          [not null, ref: > users.id]
+  hour_bucket         bigint        [not null]  // floor(unix_epoch / 3600) — rolling 1-hour window
+  message_count       smallint      [not null, default: 0]
+  created_at          timestamptz   [default: `now()`]
+  updated_at          timestamptz   [default: `now()`]
+
+  indexes {
+    (client_id, hour_bucket) [unique]
+  }
+
+  Note: 'Tracks outbound message count per client per hour. Incremented atomically on each send. Rows older than 2 hours are purged by cron. Cap: 20 messages/hour [API].'
+}
+
+// ─── Client Blocks ──────────────────────────────────────────────────────────
+// Client-initiated block of a photographer. Silent from the photographer's perspective.
+
+Table client_blocks {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  client_id           uuid          [not null, ref: > users.id]
+  photographer_id     uuid          [not null, ref: > photographer_profiles.id]
+  blocked_at          timestamptz   [default: `now()`]
+  block_reason        varchar(120)  // optional client-provided note (not shown to photographer)
+
+  indexes {
+    (client_id, photographer_id) [unique]
+    photographer_id
+  }
+
+  Note: 'Photographer cannot send new messages once blocked. Row is deleted on unblock. Photographer is never notified of the block.'
+}
+
+// ═══════════════════════════════════════════════
+//  SAVED / FAVOURITES
+// ═══════════════════════════════════════════════
+
+Table saved_photographers {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  client_id           uuid          [not null, ref: > users.id]
+  photographer_id     uuid          [not null, ref: > photographer_profiles.id]
+  saved_at            timestamptz   [default: `now()`]
+
+  indexes {
+    (client_id, photographer_id) [unique]
+  }
+
+  Note: 'Client bookmarks / favourites list.'
+}
+
+// ═══════════════════════════════════════════════
+//  PHOTOGRAPHER NETWORK & CONNECTIONS
+// ═══════════════════════════════════════════════
+
+Table photographer_connections {
+  id                  uuid              [pk, default: `gen_random_uuid()`]
+  requester_id        uuid              [not null, ref: > photographer_profiles.id]
+  addressee_id        uuid              [not null, ref: > photographer_profiles.id]
+  status              connection_status [not null, default: 'pending']
+  requested_at        timestamptz       [default: `now()`]
+  responded_at        timestamptz
+
+  indexes {
+    (requester_id, addressee_id) [unique]
+    status
+  }
+
+  Note: 'Directed connection request; accepted creates a bidirectional relationship at application layer.'
+}
+
+Table connection_groups {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  owner_id            uuid          [not null, ref: > photographer_profiles.id]
+  name                varchar(120)  [not null]
+  emoji               varchar(8)
+  description         text
+  member_count        integer       [default: 1]  // denormalised; incremented on join
+  created_at          timestamptz   [default: `now()`]
+  updated_at          timestamptz   [default: `now()`]
+
+  Note: 'Max 2 groups OWNED per photographer (max_owned_groups_per_photographer). No cap on joining groups created by others. Enforced at application layer.'
+}
+
+Table group_members {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  group_id            uuid          [not null, ref: > connection_groups.id]
+  photographer_id     uuid          [not null, ref: > photographer_profiles.id]
+  joined_at           timestamptz   [default: `now()`]
+  is_owner            boolean       [default: false]
+
+  indexes {
+    (group_id, photographer_id) [unique]
+  }
+}
+
+Table group_invites {
+  id                  uuid                [pk, default: `gen_random_uuid()`]
+  group_id            uuid                [not null, ref: > connection_groups.id]
+  inviter_id          uuid                [not null, ref: > photographer_profiles.id]
+  invitee_id          uuid                [not null, ref: > photographer_profiles.id]
+  status              group_invite_status [not null, default: 'pending']
+  invited_at          timestamptz         [default: `now()`]
+  responded_at        timestamptz
+
+  indexes {
+    (group_id, invitee_id) [unique, name: 'idx_group_invite_unique']
+    invitee_id
+  }
+
+  Note: 'Appears under Network → Requests on the invitee dashboard. Inviter must be a connection of invitee.'
+}
+
+Table group_messages {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  group_id            uuid          [not null, ref: > connection_groups.id]
+  sender_id           uuid          [not null, ref: > photographer_profiles.id]
+  body                varchar(1000) [not null]  // platform_config key: max_message_length (shared with DM)
+  created_at          timestamptz   [default: `now()`]
+
+  indexes {
+    (group_id, created_at)
+    sender_id
+  }
+}
+
+// ─── Group Message Rate Limits ────────────────────────────────────────────────
+// Mirrors message_rate_limits for DMs — same rolling 1-hour bucket pattern.
+// Separate table so DM and group limits are independently configurable.
+
+Table group_message_rate_limits {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  sender_id           uuid          [not null, ref: > photographer_profiles.id]
+  hour_bucket         bigint        [not null]  // floor(unix_epoch / 3600) — rolling 1-hour window
+  message_count       smallint      [not null, default: 0]
+  created_at          timestamptz   [default: `now()`]
+  updated_at          timestamptz   [default: `now()`]
+
+  indexes {
+    (sender_id, hour_bucket) [unique]
+  }
+
+  Note: 'Tracks group message count per photographer per hour. Incremented atomically on each send. Rows older than 2 hours purged by cron. Cap: max_group_messages_per_hour from platform_config.'
+}
+
+// ═══════════════════════════════════════════════
+//  COVER REQUESTS (Photographer-to-Photographer)
+// ═══════════════════════════════════════════════
+
+Table cover_requests {
+  id                  uuid                  [pk, default: `gen_random_uuid()`]
+  requester_id        uuid                  [not null, ref: > photographer_profiles.id]  // needs cover
+  recipient_id        uuid                  [not null, ref: > photographer_profiles.id]  // asked to cover
+  booking_id          uuid                  [ref: > booking_requests.id]
+  message             varchar(600)          // capped — platform_config key: max_cover_request_message_length
+  status              cover_request_status  [not null, default: 'pending']
+  created_at          timestamptz           [default: `now()`]
+  responded_at        timestamptz
+
+  indexes {
+    (requester_id, booking_id)
+    recipient_id
+  }
+
+  Note: 'Photographer asks a connection to cover their booked session. Uses cover_request_status — not connection_status — as blocked/accepted semantics differ.'
+}
+
+// ═══════════════════════════════════════════════
+//  NOTIFICATIONS
+// ═══════════════════════════════════════════════
+
+Table notifications {
+  id                  uuid              [pk, default: `gen_random_uuid()`]
+  user_id             uuid              [not null, ref: > users.id]
+  type                notification_type [not null]
+  title               varchar(160)      [not null]
+  body                varchar(400)                    // capped — platform_config key: max_notification_body_length
+  read_at             timestamptz       // null = unread; consistent with messages.read_at
+  expires_at          timestamptz       // set by cron; null = no expiry — platform_config key: notification_retention_days
+  entity_type         varchar(40)       // e.g. 'booking_request', 'review', 'message'
+  entity_id           uuid
+  created_at          timestamptz       [default: `now()`]
+
+  indexes {
+    (user_id, read_at, created_at)
+    (user_id, expires_at)  // cron purge: delete where expires_at < now()
+    entity_id
+  }
+
+  Note: 'In-app notification feed. entity_type + entity_id allow deep-linking. expires_at enables TTL-based purge by cron. platform_config: notification_retention_days = 90.'
+}
+
+Table notification_preferences {
+  id                    uuid          [pk, default: `gen_random_uuid()`]
+  user_id               uuid          [unique, not null, ref: > users.id]
+  email_booking         boolean       [default: true]
+  email_messages        boolean       [default: true]
+  email_connections     boolean       [default: true]
+  email_reviews         boolean       [default: true]
+  email_trust_updates   boolean       [default: false]
+  push_booking          boolean       [default: true]
+  push_messages         boolean       [default: true]
+  push_connections      boolean       [default: true]
+  updated_at            timestamptz   [default: `now()`]
+
+  Note: 'One row per user. SMS/phone deliberately excluded — not collected in Phase 1.'
+}
+
+// ═══════════════════════════════════════════════
+//  ADMIN / SUPPORT
+// ═══════════════════════════════════════════════
+
+Table support_tickets {
+  id                  uuid                    [pk, default: `gen_random_uuid()`]
+  submitted_by        uuid                    [not null, ref: > users.id]
+  review_id           uuid                    [ref: > reviews.id]          // set for fake_review category
+  conversation_id     uuid                    [ref: > conversations.id]    // set for spam_report category
+  reported_user_id    uuid                    [ref: > users.id]            // photographer being reported (spam_report)
+  spam_reason         varchar(120)            // preset reason from client (e.g. "Harassment", "Irrelevant offers")
+  spam_report_count   smallint               // denormalised: unique-client report count at time of ticket creation
+  category            support_ticket_category [not null]
+  subject             varchar(200)            [not null]
+  description         varchar(2000)           [not null]  // capped — platform_config key: max_ticket_description_length
+  status              support_ticket_status   [not null, default: 'open']
+  assigned_to         uuid                    [ref: > users.id]
+  resolution_note     varchar(1000)                       // capped — platform_config key: max_ticket_resolution_note_length
+  created_at          timestamptz             [default: `now()`]
+  updated_at          timestamptz             [default: `now()`]
+  resolved_at         timestamptz
+
+  indexes {
+    status
+    submitted_by
+    review_id
+    conversation_id
+    reported_user_id
+  }
+
+  Note: 'Ticket created automatically when a photographer flags a review (fake_review) or a client reports spam (spam_report). spam_report_count records how many unique clients have reported this photographer at ticket creation time.'
+}
+
+Table admin_audit_log {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  actor_id            uuid          [not null, ref: > users.id]
+  action              varchar(80)   [not null]   // e.g. 'resolve_flag', 'suspend_account', 'freeze_conversation'
+  entity_type         varchar(40)   [not null]
+  entity_id           uuid          [not null]
+  notes               text
+  ip_address          inet
+  created_at          timestamptz   [default: `now()`]
+
+  indexes {
+    (actor_id, created_at)
+    entity_id
+  }
+
+  Note: 'Append-only audit trail for all admin actions. Never mutated after insert.'
+}
+
+// ═══════════════════════════════════════════════
+//  SYSTEM / INFRASTRUCTURE
+// ═══════════════════════════════════════════════
+
+// ─── Platform Config ────────────────────────────────────────────────────────
+// Key-value store for every runtime business limit and operational threshold.
+// Changes are admin-only and automatically recorded in admin_audit_log.
+// Application reads are cached at the edge (Next.js revalidate: 300s).
+//
+// Seed rows — initial values at launch:
+//
+//  Category      Key                                Value      Type
+//  ─────────────────────────────────────────────────────────────────────────────
+//  content       max_photographer_bio_length        1200       integer
+//  content       max_client_bio_length              500        integer
+//  content       max_package_description_length     800        integer
+//  content       max_booking_description_length     600        integer
+//  content       max_booking_location_note_length   255        integer
+//  content       max_photographer_response_length   800        integer
+//  content       max_cancellation_note_length       400        integer
+//  content       max_review_body_length             1500       integer
+//  content       max_review_reply_length            800        integer
+//  content       max_flag_reason_length             600        integer
+//  content       max_review_private_note_length     600        integer
+//  content       max_cover_request_message_length   600        integer
+//  content       max_notification_body_length       400        integer
+//  content       max_ticket_description_length      2000       integer
+//  content       max_ticket_resolution_note_length  1000       integer
+//  portfolio     max_albums_per_photographer        3          integer
+//  portfolio     max_photos_per_photographer        50         integer
+//  portfolio     max_videos_per_photographer        3          integer
+//  portfolio     max_videos_per_album               2          integer
+//  portfolio     max_photo_bytes                    5242880    integer  (5 MB)
+//  portfolio     max_video_bytes                    104857600  integer  (100 MB)
+//  portfolio     max_avatar_bytes                   3145728    integer  (3 MB)
+//  portfolio     max_cover_bytes                    8388608    integer  (8 MB)
+//  portfolio     max_photo_caption_length           255        integer
+//  portfolio     max_video_title_length             120        integer
+//  portfolio     max_album_name_length              120        integer
+//  packages      max_package_name_length            120        integer
+//  packages      max_packages_per_photographer      10         integer
+//  faq           max_faqs_per_photographer          5          integer
+//  faq           max_faq_question_length            160        integer
+//  faq           max_faq_answer_length              600        integer
+//  messaging     max_message_length                 1000       integer
+//  messaging     max_messages_per_hour              20         integer  (DM cap: client → photographer)
+//  messaging     max_group_messages_per_hour        30         integer  (group cap — higher, collaborative context)
+//  messaging     max_unread_conversations_shown     15         integer
+//  messaging     rate_limit_warning_threshold       3          integer  (warn when ≤ N remaining this hour)
+//  messaging     spam_auto_suspend_threshold        3          integer  (unique-client reports before auto-suspend)
+//  messaging     rate_limit_row_ttl_hours           2          integer  (purge message_rate_limits rows after N hrs)
+//  notifications max_notification_badge_count       99         integer  (bell badge display cap — show "99+")
+//  network       max_owned_groups_per_photographer  2          integer  (cap on groups created — joining is unlimited)
+//  booking       booking_window_days                90         integer  (how far ahead clients can book)
+//  auth          login_max_failed_attempts          10         integer
+//  auth          login_lockout_minutes              15         integer
+//  auth          login_warning_threshold            3          integer  (warn when ≤ N attempts left before lockout)
+//  auth          password_reset_max_per_hour        3          integer
+//  auth          session_access_token_minutes       60         integer
+//  auth          session_refresh_token_days         7          integer
+//  api           api_rate_limit_per_minute          100        integer
+//  api           api_body_size_limit_mb             10         integer
+//  api           search_page_size                   20         integer
+//  storage       r2_presigned_url_expiry_seconds    900        integer  (15 min)
+//  storage       r2_orphan_asset_ttl_hours          1          integer
+//  storage       notification_retention_days        90         integer
+//  storage       group_message_retention_days       365        integer
+//  storage       audit_log_archive_after_days       730        integer
+//  email         max_email_retry_attempts           3          integer
+//  trust         trust_sync_stale_after_days        8          integer
+//  analytics     profile_view_retention_days        365        integer  (purge profile_views rows older than N days)
+
+Enum platform_config_type {
+  integer
+  numeric
+  boolean
+  text
+}
+
+Table platform_config {
+  id            uuid                   [pk, default: `gen_random_uuid()`]
+  key           varchar(80)            [unique, not null]   // e.g. 'max_photos_per_photographer'
+  value         text                   [not null]           // stored as text; cast using value_type
+  value_type    platform_config_type   [not null]
+  category      varchar(40)            [not null]           // 'portfolio' | 'storage' | 'messaging' | 'faq' | 'packages' | 'network' | 'booking' | 'email' | 'trust'
+  description   text                                        // human-readable explanation shown in admin UI
+  updated_at    timestamptz            [default: `now()`]
+  updated_by    uuid                   [ref: > users.id]    // admin who last changed this value
+
+  indexes {
+    category
+  }
+
+  Note: 'Single source of truth for all runtime business limits. Every write must also insert a row into admin_audit_log (entity_type=platform_config, entity_id=id). Application reads are cached at edge for 300 seconds. Never delete rows — update value instead.'
+}
+
+Table feature_flags {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  key                 varchar(80)   [unique, not null]
+  is_enabled          boolean       [default: false]
+  description         text
+  updated_at          timestamptz   [default: `now()`]
+  updated_by          uuid          [ref: > users.id]
+
+  Note: 'Runtime feature toggles managed by admin. Checked server-side on page render.'
+}
+
+Table email_queue {
+  id                  uuid               [pk, default: `gen_random_uuid()`]
+  to_email            varchar(255)       [not null]
+  template_id         varchar(80)        [not null]
+  payload             jsonb              [not null]
+  status              email_queue_status [not null, default: 'queued']
+  attempts            smallint           [default: 0]
+  last_attempted_at   timestamptz
+  sent_at             timestamptz
+  error               text
+  created_at          timestamptz        [default: `now()`]
+
+  indexes {
+    (status, created_at)
+  }
+
+  Note: 'Outbound email queue processed by Vercel Cron / Resend webhook. Retried up to 3 times.'
+}
+
+Table storage_assets {
+  id                  uuid          [pk, default: `gen_random_uuid()`]
+  owner_id            uuid          [not null, ref: > users.id]
+  bucket              varchar(60)   [not null]
+  key                 text          [not null]
+  content_type        varchar(80)
+  size_bytes          bigint
+  entity_type         varchar(40)   // 'portfolio_photo', 'portfolio_video', 'portfolio_video_thumbnail', 'avatar', 'cover'
+  entity_id           uuid          // null = orphaned (not yet linked after upload)
+  orphan_expires_at   timestamptz   // set at upload time; cron purges if still null entity_id at expiry
+  created_at          timestamptz   [default: `now()`]
+
+  indexes {
+    (owner_id, entity_type)
+    (bucket, key) [unique]
+    (entity_id, orphan_expires_at)  // cron: delete where entity_id IS NULL AND orphan_expires_at < now()
+  }
+
+  Note: 'Tracks every R2 object so orphans can be detected and purged. orphan_expires_at is set to now()+1hr at upload; cron purges rows still unlinked after expiry and deletes the R2 object. Presigned upload URLs expire in 15 min (platform_config: r2_presigned_url_expiry_seconds).'
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+//  BUSINESS RULES & LIMITS REFERENCE
+//  ─────────────────────────────────
+//  This section is the single source of truth for every hard cap, size limit,
+//  state machine rule, and weighted formula enforced across the platform.
+//
+//  Enforcement layers are noted per rule:
+//    [CLIENT]  — validated in the browser before any network request
+//    [API]     — validated in the Next.js API route / server action
+//    [DB]      — enforced by a constraint, unique index, or trigger
+//    [CRON]    — evaluated by Vercel Cron job
+//    [APP]     — enforced in application logic (not at DB level)
+//
+// ═══════════════════════════════════════════════════════════════════════════════
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  1. STORAGE — CLOUDFLARE R2
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  Tier              Limit         Notes
+//  ──────────────────────────────────────────────────────────────────────────────
+//  R2 free tier      10 GB total   No egress fees. Upgrade trigger: ~35 photographers.
+//  R2 paid tier      $0.015/GB/mo  100 GB = $1.50/mo. Upgrade at ~40 photographers.
+//  Class A ops       1 M/mo free   Writes + deletes. Paid: $4.50 per million.
+//  Class B ops       10 M/mo free  Reads. Paid: $0.36 per million.
+//
+//  Estimated storage per photographer (worst case, post-compression):
+//    Photos  : 50 photos × 1.5 MB (WebP 85%)        =  ~75 MB
+//    Videos  :  3 videos × 60 MB (H.264 1080p)      = ~180 MB
+//    Avatar  :  1 image  × 0.2 MB                   =  ~0.2 MB
+//    Cover   :  1 image  × 0.3 MB                   =  ~0.3 MB
+//    Total                                           = ~255 MB per photographer
+//
+//  Free tier headroom: 10,000 MB ÷ 255 MB ≈ 39 photographers before paid upgrade.
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  2. UPLOAD SIZE LIMITS
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  Asset type              Max upload size   Enforcement   Output format
+//  ──────────────────────────────────────────────────────────────────────────────
+//  Portfolio photo         5 MB              [CLIENT][API] WebP 85%, max 2400px long edge
+//  Portfolio video         100 MB            [CLIENT][API] H.264 MP4, max 1080p, max 90s
+//  Avatar                  3 MB              [CLIENT][API] WebP 90%, 400×400px square crop
+//  Cover image             8 MB              [CLIENT][API] WebP 85%, max 1400px wide
+//  Video thumbnail         Auto-generated    [API]         WebP, 640×360px poster frame
+//
+//  Accepted input formats:
+//    Photos : JPG, PNG, WEBP, HEIC
+//    Videos : MP4, MOV, AVI (re-encoded to H.264 MP4 server-side)
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  3. PORTFOLIO LIMITS  (table: portfolio_albums, portfolio_photos, portfolio_videos)
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  Limit                          Value   Enforcement
+//  ──────────────────────────────────────────────────────────────────────────────
+//  Albums per photographer        3       [CLIENT][API]
+//  Photos per photographer total  50      [CLIENT][API]
+//  Photos per album               No cap  (counted against photographer total)
+//  Videos per photographer total  3       [CLIENT][API]
+//  Videos per album               2       [CLIENT][API]
+//  Cover photo                    1       [DB] unique partial index on isCover=true
+//  Album name length              120 ch  [DB] varchar(120)
+//  Photo caption length           255 ch  [DB] varchar(255)
+//  Video title length             120 ch  [DB] varchar(120)
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  4. BOOKING STATE MACHINE  (table: booking_requests, booking_cancellation_requests)
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  Valid transitions:
+//    pending              → approved             (photographer action)
+//    pending              → declined             (photographer action)
+//    pending              → cancelled            (client action only — before photographer responds)
+//    approved             → cancellation_pending (client submits cancellation_request [API])
+//    cancellation_pending → cancelled            (photographer confirms OR admin force-cancels)
+//    cancellation_pending → approved             (photographer declines the request)
+//    approved             → completed            (system/admin after session date passes)
+//
+//  Invalid transitions (blocked at [API]):
+//    approved  → cancelled  directly             (must go through cancellation_pending)
+//    completed → any                             (terminal state)
+//    declined  → any                             (terminal state)
+//    cancelled → any                             (terminal state)
+//
+//  Side effects enforced at [API]:
+//    pending              created  → availability_day_status = 'tentative' for requested_date
+//    pending              resolved → availability_day_status 'tentative' cleared
+//    cancellation_pending created  → notification sent to photographer
+//    cancelled            (any path) → availability_day_status cleared
+//    completed            → client eligible for one review (booking_id unique)
+//
+//  Cancellation request rules (table: booking_cancellation_requests):
+//    One active request per booking at a time              [API]
+//    Only client or admin may submit                       [API] actor = 'client' | 'admin'
+//    Admin force-cancel skips photographer confirmation    [API]
+//    Photographer response logged in photographer_response [APP] 'confirmed' | 'declined'
+//
+//  One booking per client–photographer–date:              [DB] unique index
+//  One review per completed booking:                      [DB] unique index on booking_id
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  5. TRUST SCORE FORMULA  (table: photographer_profiles, external_platform_links)
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  Composite score range: 0–100, stored as numeric(4,1).
+//
+//  Component weights:
+//    Google Reviews   35%   platform_name = 'google'
+//    Native Reviews   20%   avg(reviews.rating) where photographer_id matches
+//    Yelp             20%   platform_name = 'yelp'
+//    Facebook         15%   platform_name = 'facebook'
+//    Instagram        10%   platform_name = 'instagram' (follower signal, not rating)
+//
+//  Formula (per component):
+//    component_score = (platform_rating / 5.0) × 100 × weight
+//    trust_score     = sum(component_scores for verified platforms only)
+//    trust_score     = rescaled to 0–100 based on sum of active weights
+//
+//  A platform only contributes if:
+//    external_platform_links.is_verified = true
+//    external_platform_links.last_fetched_at is within 8 days
+//
+//  Recomputed by: Vercel Cron daily at 06:00 MST  [CRON]
+//  Written to: photographer_profiles.trust_score, .last_trust_sync_at  [CRON]
+//  Logged to: trust_sync_log (append-only)  [CRON]
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  6. REVIEW RULES  (table: reviews)
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  Rule                                                  Enforcement
+//  ──────────────────────────────────────────────────────────────────────────────
+//  One review per completed booking                      [DB] unique index on booking_id
+//  Reviewer must be the booking's client_id              [API]
+//  Reviews are always public — no hide/suppress          [APP] no status column exists
+//  Photographer can reply publicly (public_reply)        [APP]
+//  Photographer can flag to admin (flag_status)          [APP]
+//  Flag creates a support_ticket automatically           [API]
+//  Flagged review remains public until admin resolves    [APP]
+//  Rating must be 1–5                                    [DB] check constraint
+//  Low-rating nudge shown to photographer at ≤ 2 stars  [APP]
+//  native_avg_rating recomputed on every review insert   [DB] trigger or [API]
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  7. PHOTOGRAPHER NETWORK LIMITS  (table: connection_groups, photographer_connections,
+//     cover_requests)
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  Limit                                    Value   Enforcement
+//  ──────────────────────────────────────────────────────────────────────────────
+//  Groups owned per photographer            2       [API]
+//  Groups joined (not owned)               No cap  [APP]
+//  Invitee must be a connection of inviter  —       [API] check photographer_connections
+//  One pending invite per invitee per group —       [DB] unique index (group_id, invitee_id)
+//  Group name length                        120 ch  [DB] varchar(120)
+//  Group emoji                              1 char  [DB] varchar(8)
+//  Connection request: one direction only   —       [DB] unique index (requester_id, addressee_id)
+//  Cover request status values              —       cover_request_status enum: pending/accepted/declined/withdrawn
+//  Specialty values                         —       [API] validated against platform allowed-list; normalised in photographer_specialties
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  8. MESSAGING RULES  (table: conversations, messages, group_messages,
+//     group_message_rate_limits)
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  Rule                                               Enforcement
+//  ──────────────────────────────────────────────────────────────────────────────
+//  One conversation thread per client–photographer    [DB] unique index (client_id, photographer_id)
+//  Frozen conversation: no new messages allowed       [API] check conversations.is_frozen
+//  Flagged conversation: queued for admin review      [APP]
+//  read_at null = unread; set on first view           [API]
+//  Unread count derived from messages where           [APP] read_at IS NULL AND sender_id ≠ viewer
+//  Group messages rate limit                          30/hr [API] group_message_rate_limits (separate from DM limit)
+//  Group message rate limit rows purged after         2 hr  [CRON] same TTL as DM rate limit rows
+//  Group message body cap                             1000 ch [DB] varchar — same as max_message_length
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  9. ACCOUNT & PROFILE RULES  (table: users, photographer_profiles)
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  Rule                                               Enforcement
+//  ──────────────────────────────────────────────────────────────────────────────
+//  Photographer profile visible only when approved    [API] profile_status = 'approved'
+//  Suspended account: login blocked, profile hidden   [API] account_status = 'suspended'
+//  Banned account: permanent, login blocked           [API] account_status = 'banned'
+//  Deactivated: soft delete, deleted_at set           [API] account_status = 'deactivated'
+//  Username is immutable after approval               [API]
+//  Email must be verified before booking              [API] users.is_verified = true
+//  SMS / phone number: not collected in Phase 1       [APP] no column exists
+//  Profile completeness score (0–100):                [API] recomputed on profile save
+//    Avatar          15%
+//    Cover photo     10%
+//    Bio (100+ ch)   20%
+//    Specialties     10%
+//    Rate display    10%
+//    1+ package      15%
+//    Availability    10%
+//    External link   10%
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  10. EMAIL QUEUE RULES  (table: email_queue)
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  Rule                                               Value / Enforcement
+//  ──────────────────────────────────────────────────────────────────────────────
+//  Max retry attempts                                 3       [CRON]
+//  Retry backoff                                      5 min → 30 min → 2 hr
+//  Provider                                           Resend
+//  Status after 3 failures                            'failed' — no further retries
+//  SMS alerts                                         Not supported in Phase 1
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  11. FAQ RULES  (table: photographer_faqs)
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  Limit                                    Value   Enforcement
+//  ──────────────────────────────────────────────────────────────────────────────
+//  FAQs per photographer                    5       [API]
+//  Question max length                      160 ch  [DB] varchar(160)
+//  Answer max length                        600 ch  [DB] varchar(600)
+//  sort_order                               0-based [API] rewritten 0–N on reorder
+//  is_published = false                     hidden  [APP] not rendered on public profile
+//  Public position                          —       Between portfolio and reviews sections
+//  Displayed as                             —       Accordion (one open at a time)
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  12. AVAILABILITY RULES  (table: availability_day_status, weekly_time_slots)
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  Rule                                               Enforcement
+//  ──────────────────────────────────────────────────────────────────────────────
+//  No row = no data (neutral / grey on calendar)      [APP]
+//  Pending booking sets date to 'tentative'           [API] on booking_requests insert
+//  Tentative cleared when booking resolves            [API] on status change
+//  Slot overlap detection uses start_time / end_time  [API]
+//  max_clients per slot (default 1)                   [API] count active bookings ≤ max_clients
+//  Past dates are read-only on public calendar        [APP]
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  13. MESSAGING LIMITS, BLOCK & SPAM REPORT FLOW
+//      (tables: messages, conversations, message_rate_limits, client_blocks,
+//               support_tickets)
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  ── Rate Limits ────────────────────────────────────────────────────────────────
+//
+//  Rule                                               Value   Enforcement
+//  ──────────────────────────────────────────────────────────────────────────────
+//  Max messages per client per hour                   20      [API] message_rate_limits
+//  Max message body length                            1000 ch [CLIENT][API] varchar enforced in UI + API
+//  Max unread conversations shown in inbox            15      [APP] UI only; does not delete rows
+//  Rate limit window                                  Rolling 1-hour bucket (floor epoch/3600)
+//  Warning shown to client                            At ≤ 3 remaining (i.e. count ≥ 17)
+//  Send blocked when                                  count ≥ 20 — toast shown, textarea disabled
+//  Rate limit row purged after                        2 hours [CRON] cleanup job
+//
+//  ── Block Flow (table: client_blocks) ──────────────────────────────────────────
+//
+//  Actor        Action                           Result
+//  ──────────────────────────────────────────────────────────────────────────────
+//  Client       Blocks photographer              Row inserted into client_blocks
+//               → Photographer cannot send       [API] checks client_blocks before insert
+//               → Photographer not notified      [APP] silent block
+//               → Client sees "Blocked" badge    [APP] in conversation list and thread header
+//               → Client can still view thread   [APP] read-only for blocked conversation
+//  Client       Unblocks photographer            Row deleted from client_blocks
+//               → Messaging resumes normally     [API]
+//  Admin        No involvement in block          Block is purely client-side; no ticket created
+//
+//  ── Spam Report Flow (table: support_tickets, client_blocks) ───────────────────
+//
+//  Step   Actor        Action                           Result
+//  ──────────────────────────────────────────────────────────────────────────────
+//  1      Client       Reports conversation as spam     support_ticket created
+//                      (reason + optional note)           category = 'spam_report'
+//                                                         conversation_id set
+//                                                         reported_user_id = photographer
+//                                                         spam_report_count = current unique count
+//         Client       Optionally checks "also block"   client_blocks row also inserted
+//  2      System       Counts unique-client reports      [API] count distinct submitted_by
+//                      for same photographer               where category = 'spam_report'
+//                      If count reaches 3               → users.account_status → 'suspended' [API]
+//                                                         status_reason set automatically
+//                                                         All open tickets for photographer
+//                                                           updated to 'in_review' [API]
+//  3      Admin        Reviews ticket queue              Sees category = 'spam_report' tickets
+//                      Can view conversation thread      conversation_id links to full thread
+//                      Can contact photographer          external — no in-app mechanism Phase 1
+//                      Can suspend / ban photographer    [APP] update users.account_status
+//                      Can dismiss report                [APP] update support_tickets.status → 'resolved'
+//                                                               resolution_note records decision
+//
+//  ── Photographer Perspective ───────────────────────────────────────────────────
+//
+//  The photographer is never notified that they were reported or blocked.
+//  If auto-suspended (3 unique reports), they receive a generic "account under review" email.
+//  Admin can lift the suspension at any time.
+//
+//  ── Unique-Report Counting (anti-abuse) ────────────────────────────────────────
+//
+//  Each client can submit at most 1 spam report per photographer [APP] (checked before insert).
+//  Auto-suspend threshold: 3 distinct clients (submitted_by) for the same reported_user_id.
+//  A single report only creates an admin ticket — it does NOT auto-suspend.
+//  This prevents bad-faith single reports from causing harm.
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  14. PLATFORM CONFIG & LIMITS  (table: platform_config)
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  platform_config is the runtime source of truth for every business limit in
+//  sections 1–13. The DBML comments above document the initial seed values; the
+//  table values take precedence at runtime.
+//
+//  Read pattern (application layer):
+//    • Next.js server component or API route calls getPlatformConfig(key)
+//    • Response is cached at edge with revalidate: 300 (5 min)
+//    • Returns typed value (integer, numeric, boolean, text) based on value_type
+//
+//  Write pattern (admin only):
+//    1. Admin updates platform_config.value via admin dashboard
+//    2. API route validates: new value must parse as declared value_type
+//               must be within safe range (e.g. max_messages_per_hour ≤ 1000)
+//    3. API inserts row into admin_audit_log:
+//         action      = 'update_platform_config'
+//         entity_type = 'platform_config'
+//         entity_id   = platform_config.id
+//         notes       = "key=X old=Y new=Z"
+//    4. Edge cache invalidated via Next.js revalidateTag('platform_config')
+//
+//  Categories and their keys:
+//
+//  Category    Key                                  Notes
+//  ──────────────────────────────────────────────────────────────────────────────
+//  portfolio   max_albums_per_photographer           Cap on album count [API]
+//  portfolio   max_photos_per_photographer           Cap across all albums [API]
+//  portfolio   max_videos_per_photographer           Cap across all albums [API]
+//  portfolio   max_videos_per_album                  Per-album video cap [API]
+//  portfolio   max_photo_bytes                       Upload size cap (bytes) [CLIENT][API]
+//  portfolio   max_video_bytes                       Upload size cap (bytes) [CLIENT][API]
+//  portfolio   max_avatar_bytes                      Upload size cap (bytes) [CLIENT][API]
+//  portfolio   max_cover_bytes                       Upload size cap (bytes) [CLIENT][API]
+//  portfolio   max_photo_caption_length              varchar cap in DB synced here [CLIENT][API]
+//  portfolio   max_video_title_length                varchar cap in DB synced here [CLIENT][API]
+//  portfolio   max_album_name_length                 varchar cap in DB synced here [CLIENT][API]
+//  packages    max_package_name_length               varchar cap — package name field [CLIENT][API]
+//  NOTE: r2_free_tier_bytes and r2_upgrade_threshold_photogs are infrastructure alert thresholds,
+//        not runtime app limits. They live in ops runbooks / monitoring config, not platform_config.
+//  faq         max_faqs_per_photographer             Cap on FAQ count
+//  faq         max_faq_question_length               varchar cap in DB synced here
+//  faq         max_faq_answer_length                 varchar cap in DB synced here
+//  messaging   max_message_length                    Hard cap enforced [CLIENT][API]
+//  messaging   max_messages_per_hour                 DM rate limit [API]
+//  messaging   max_group_messages_per_hour           Group chat rate limit [API]
+//  messaging   max_unread_conversations_shown        UI display cap [APP]
+//  messaging   rate_limit_warning_threshold          Warn when ≤ N remaining [APP]
+//  messaging   spam_auto_suspend_threshold           Unique reports before auto-suspend [API]
+//  messaging   rate_limit_row_ttl_hours              Cron purge window [CRON]
+//  notifications max_notification_badge_count        Bell badge display cap — show "N+" above this [APP]
+//  packages    max_packages_per_photographer         Cap on package count [API]
+//  network     max_owned_groups_per_photographer     Cap on groups created — no cap on joined groups [API]
+//  booking     booking_window_days                   How far ahead clients can book [API]
+//  email       max_email_retry_attempts              Resend retry cap [CRON]
+//  trust       trust_sync_stale_after_days           Max age before platform link ignored [CRON]
+//
+//  content     max_photographer_bio_length          1200    integer
+//  content     max_client_bio_length                500     integer
+//  content     max_package_description_length       800     integer
+//  content     max_booking_description_length       600     integer
+//  content     max_booking_location_note_length     255     integer
+//  content     max_photographer_response_length     800     integer
+//  content     max_cancellation_note_length         400     integer
+//  content     max_review_body_length               1500    integer
+//  content     max_review_reply_length              800     integer
+//  content     max_flag_reason_length               600     integer
+//  content     max_review_private_note_length       600     integer
+//  content     max_cover_request_message_length     600     integer
+//  content     max_notification_body_length         400     integer
+//  content     max_ticket_description_length        2000    integer
+//  content     max_ticket_resolution_note_length    1000    integer
+//  auth        login_max_failed_attempts            10      integer   (lockout after N consecutive failures)
+//  auth        login_lockout_minutes                15      integer   (lockout duration)
+//  auth        login_warning_threshold              3       integer   (warn when ≤ N attempts remaining before lockout)
+//  auth        password_reset_max_per_hour          3       integer   (reset emails per hour per account)
+//  auth        session_access_token_minutes         60      integer   (Supabase JWT TTL — informational)
+//  auth        session_refresh_token_days           7       integer   (Supabase refresh TTL — informational)
+//  api         api_rate_limit_per_minute            100     integer   (requests per IP per minute, enforced at edge)
+//  api         api_body_size_limit_mb               10      integer   (Next.js body parser limit in MB)
+//  api         search_page_size                     20      integer   (max photographers returned per search page)
+//  storage     r2_presigned_url_expiry_seconds      900     integer   (15 min — upload URL TTL)
+//  storage     r2_orphan_asset_ttl_hours            1       integer   (purge unlinked assets after N hours)
+//  storage     notification_retention_days          90      integer   (purge read notifications older than N days)
+//  storage     group_message_retention_days         365     integer   (purge group messages older than N days)
+//  storage     audit_log_archive_after_days         730     integer   (archive admin_audit_log rows after 2 years)
+//  analytics   profile_view_retention_days          365     integer   (purge photographer_profile_views rows older than N days)
+//
+//  Rules:
+//    • Rows are never deleted — update value to change a limit            [APP]
+//    • varchar-backed limits (e.g. caption length) are advisory here;     [APP]
+//      the DB column is the hard floor — platform_config may only tighten
+//    • All changes audit-logged                                            [API]
+//    • Admin UI shows category grouping, description, last changed by/at  [APP]
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  15. CONTENT LENGTH CAPS  (tables: reviews, booking_requests, packages,
+//      photographer_profiles, client_profiles, notifications, support_tickets,
+//      group_messages, cover_requests)
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  All uncapped `text` columns have been replaced with `varchar(N)` whose value
+//  matches the corresponding platform_config key (category: content).
+//  The DB column is the hard ceiling; platform_config may set a tighter app-layer
+//  limit but never looser than the varchar cap.
+//
+//  Field                                  Cap     platform_config key
+//  ──────────────────────────────────────────────────────────────────────────────
+//  photographer_profiles.bio              1200    max_photographer_bio_length
+//  client_profiles.bio                    500     max_client_bio_length
+//  packages.description                   800     max_package_description_length
+//  booking_requests.description           600     max_booking_description_length
+//  booking_requests.location_note         255     max_booking_location_note_length
+//  booking_requests.photographer_note     800     max_photographer_response_length
+//  booking_requests.cancellation_note     400     max_cancellation_note_length
+//  reviews.body                           1500    max_review_body_length
+//  reviews.public_reply                   800     max_review_reply_length
+//  reviews.flag_reason                    600     max_flag_reason_length
+//  reviews.private_note                   600     max_review_private_note_length
+//  cover_requests.message                 600     max_cover_request_message_length
+//  notifications.body                     400     max_notification_body_length
+//  support_tickets.description            2000    max_ticket_description_length
+//  support_tickets.resolution_note        1000    max_ticket_resolution_note_length
+//  group_messages.body                    1000    max_message_length (shared with DM)
+//
+//  Enforcement:
+//    [CLIENT] textarea maxLength attribute matches platform_config value (or DB cap if config unavailable)
+//    [API]    body validation rejects strings exceeding the cap with 400 Bad Request
+//    [DB]     varchar(N) is the hard stop — postgres will error above the cap
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  16. AUTH & SESSION LIMITS  (table: users, auth provider: Supabase)
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  Rule                                               Value   Enforcement
+//  ──────────────────────────────────────────────────────────────────────────────
+//  Max consecutive failed logins before lockout       10      [API] increment users.failed_login_count
+//  Lockout duration                                   15 min  [API] set users.locked_until = now() + interval
+//  Lockout check                                      [API] reject if locked_until > now() — error: "Too many attempts"
+//  Failed count reset                                 On successful login [API]
+//  Password reset emails per hour per account         3       [API] users.password_reset_count + window_start
+//  Reset window                                       Rolling 1-hour (users.password_reset_window_start)
+//  Password reset count reset                         When window_start + 1hr has passed [API]
+//  Supabase JWT access token TTL                      60 min  [CONFIG] Supabase project setting
+//  Supabase refresh token TTL                         7 days  [CONFIG] Supabase project setting
+//  Concurrent active sessions                         No hard cap in Phase 1 — Supabase manages sessions
+//  Session invalidation on ban/suspend                [API] revoke all Supabase sessions for user on status change
+//
+//  Login lockout user-facing behaviour:
+//    • After 7 failures: amber warning "3 attempts remaining before your account is temporarily locked"
+//    • After 10 failures: account locked, error shown, reset option offered
+//    • Lockout persists server-side — clearing cookies does not bypass it
+//
+//  Lockout lift:
+//    • Automatic: locked_until passes (15 min) — next attempt resets count to 0
+//    • Manual: admin sets locked_until = null and failed_login_count = 0 via admin panel
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  17. API & INFRASTRUCTURE LIMITS
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  ── Request Rate Limits ────────────────────────────────────────────────────────
+//
+//  Limit                                   Value     Enforcement
+//  ──────────────────────────────────────────────────────────────────────────────
+//  API requests per IP per minute          100       [EDGE] Vercel Edge Middleware + Upstash Redis
+//  Photographer profile page per IP/min    60        [EDGE] separate rule to prevent scraping
+//  Upload endpoint per user per minute     10        [EDGE] prevent upload spam
+//  Search endpoint per IP per minute       30        [EDGE] heavier query; tighter cap
+//  Response on rate limit exceeded         HTTP 429  Retry-After header set to seconds until reset
+//  Search results page size                20        [API] platform_config key: search_page_size
+//
+//  ── Request Body Size ──────────────────────────────────────────────────────────
+//
+//  Limit                                   Value     Notes
+//  ──────────────────────────────────────────────────────────────────────────────
+//  General API body size limit             10 MB     [API] Next.js bodyParser override (default 1 MB)
+//  Upload endpoint body size               110 MB    [API] separate Next.js config for upload routes
+//                                                    (100 MB video + 10 MB overhead)
+//
+//  ── Vercel Runtime ─────────────────────────────────────────────────────────────
+//
+//  Concern                                 Value     Notes
+//  ──────────────────────────────────────────────────────────────────────────────
+//  Serverless function timeout             60 s      Vercel Pro plan (Hobby = 10s — must upgrade)
+//  Function memory                         1024 MB   Default; increase to 3008 MB for video jobs
+//  Image/video processing strategy         Offload   Do NOT compress in Vercel function — use a
+//                                                    background queue (Cloudflare Worker or Trigger.dev)
+//
+//  ── Cloudflare R2 Upload ───────────────────────────────────────────────────────
+//
+//  Concern                                 Value     Enforcement
+//  ──────────────────────────────────────────────────────────────────────────────
+//  Presigned URL expiry                    15 min    [API] set at generation time; platform_config:
+//                                                         r2_presigned_url_expiry_seconds = 900
+//  Orphaned asset TTL                      1 hr      [CRON] purge storage_assets where entity_id IS NULL
+//                                                         AND orphan_expires_at < now()
+//  Multipart upload threshold              10 MB     [API] use multipart for files > 10 MB
+//  Concurrent multipart parts              4         [API] max parallel part uploads per session
+//
+//  ── Data Retention ─────────────────────────────────────────────────────────────
+//
+//  Data                                    Retention   Enforcement
+//  ──────────────────────────────────────────────────────────────────────────────
+//  Notifications (read)                    90 days     [CRON] delete where read_at IS NOT NULL
+//                                                            AND expires_at < now()
+//  Notifications (unread)                  No purge    Kept until read then subject to 90-day rule
+//  Group messages                          365 days    [CRON] delete where created_at < now() - interval
+//  message_rate_limits rows                2 hours     [CRON] delete where updated_at < now() - 2hr
+//  admin_audit_log                         Archive     After 2 years — move to cold storage; never delete
+//  storage_assets (orphaned)               1 hour      [CRON] delete row + R2 object if entity_id IS NULL
+//  photographer_profile_views              365 days    [CRON] delete where view_date < current_date - 365
+
+
+// ───────────────────────────────────────────────────────────────────────────────
+//  18. PROFILE VIEW TRACKING  (table: photographer_profile_views)
+// ───────────────────────────────────────────────────────────────────────────────
+//
+//  Rule                                               Enforcement
+//  ──────────────────────────────────────────────────────────────────────────────
+//  One row per viewer per photographer per calendar day  [DB] unique index (photographer_id, viewer_fingerprint, view_date)
+//  Authenticated viewer                               viewer_id = users.id; fingerprint = sha256(user_id)
+//  Unauthenticated visitor                            viewer_id = null; fingerprint = sha256(IP + User-Agent)
+//  Raw IP address                                     Never stored — only the sha256 hash                [API]
+//  view_date timezone                                 Set in MST (application layer) — consistent with platform calendar
+//  referrer_type values                               'search' | 'saved_list' | 'direct' | 'cover_request' | null
+//
+//  ── Write path (API) ──────────────────────────────────────────────────────────
+//
+//  1. Client visits /photographers/:username
+//  2. API computes viewer_fingerprint = sha256(viewer_id OR IP+UA)
+//  3. INSERT INTO photographer_profile_views … ON CONFLICT (photographer_id, viewer_fingerprint, view_date) DO NOTHING
+//  4. If INSERT wrote a row (rowCount = 1):
+//       UPDATE photographer_profiles SET profile_view_count = profile_view_count + 1 WHERE id = photographer_id
+//  5. If conflict (viewer already counted today): no-op — profile_view_count unchanged
+//
+//  ── Read path (photographer dashboard) ────────────────────────────────────────
+//
+//  Total views (all time):   SELECT profile_view_count FROM photographer_profiles  — O(1) from denormalised field
+//  Views this week:          SELECT count(*) FROM photographer_profile_views
+//                              WHERE photographer_id = ? AND view_date >= current_date - 7
+//  Views this month:         WHERE view_date >= date_trunc('month', current_date)
+//  Views by referrer:        GROUP BY referrer_type  — for future analytics breakdown
+//
+//  ── Data retention ────────────────────────────────────────────────────────────
+//
+//  Rows older than 365 days purged by cron.
+//  profile_view_count on photographer_profiles is NOT decremented on purge —
+//  it is a lifetime total counter, not a rolling window count.

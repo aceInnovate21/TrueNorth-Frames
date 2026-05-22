@@ -1,0 +1,22 @@
+name = "truenorth-r2-budget-guard"
+main = "r2-budget-guard.js"
+compatibility_date = "2024-01-01"
+
+# Cron: runs every 6 hours
+[triggers]
+crons = ["0 */6 * * *"]
+
+# KV namespace for storing check history
+# Create with: npx wrangler kv namespace create R2_BUDGET_LOG
+# Then paste the returned id below
+[[kv_namespaces]]
+binding = "R2_BUDGET_LOG"
+id = "PASTE_KV_NAMESPACE_ID_HERE"
+
+# Secrets — set these via: npx wrangler secret put <SECRET_NAME>
+# CF_API_TOKEN
+# CF_ACCOUNT_ID
+# CF_BUCKET_NAME
+# ALERT_EMAIL
+# RESEND_API_KEY
+# ALERT_FROM_EMAIL

@@ -1,0 +1,1168 @@
+{
+  "version": "2.0.0",
+  "darkMode": true,
+  "gridEnabling": false,
+  "currentViewName": null,
+  "defaultView": {
+    "detailLevel": "All",
+    "tablePositions": [
+      {
+        "name": "users",
+        "schemaName": "public",
+        "x": 385.10595703125,
+        "y": 32
+      },
+      {
+        "name": "client_profiles",
+        "schemaName": "public",
+        "x": 969.556640625,
+        "y": 73
+      },
+      {
+        "name": "photographer_profiles",
+        "schemaName": "public",
+        "x": 969.556640625,
+        "y": 343
+      },
+      {
+        "name": "portfolio_albums",
+        "schemaName": "public",
+        "x": 1379.4460094969477,
+        "y": 31.90311771334636
+      },
+      {
+        "name": "portfolio_photos",
+        "schemaName": "public",
+        "x": 2348.9345703125,
+        "y": 94
+      },
+      {
+        "name": "packages",
+        "schemaName": "public",
+        "x": 1415.271133893094,
+        "y": 591.8637148148487
+      },
+      {
+        "name": "availability_day_status",
+        "schemaName": "public",
+        "x": 1800.9883065582694,
+        "y": 940
+      },
+      {
+        "name": "weekly_time_slots",
+        "schemaName": "public",
+        "x": 1649.32861328125,
+        "y": 1182
+      },
+      {
+        "name": "booking_requests",
+        "schemaName": "public",
+        "x": 2348.9345703125,
+        "y": 492
+      },
+      {
+        "name": "reviews",
+        "schemaName": "public",
+        "x": 2831.210883825189,
+        "y": 88.52422057166336
+      },
+      {
+        "name": "external_platform_links",
+        "schemaName": "public",
+        "x": 1649.32861328125,
+        "y": 1516
+      },
+      {
+        "name": "trust_sync_log",
+        "schemaName": "public",
+        "x": 1649.32861328125,
+        "y": 1883
+      },
+      {
+        "name": "conversations",
+        "schemaName": "public",
+        "x": 2968.54052734375,
+        "y": 663
+      },
+      {
+        "name": "messages",
+        "schemaName": "public",
+        "x": 3571.18212890625,
+        "y": 32
+      },
+      {
+        "name": "saved_photographers",
+        "schemaName": "public",
+        "x": 1649.32861328125,
+        "y": 2487
+      },
+      {
+        "name": "photographer_connections",
+        "schemaName": "public",
+        "x": 1649.32861328125,
+        "y": 2217
+      },
+      {
+        "name": "connection_groups",
+        "schemaName": "public",
+        "x": 1649.32861328125,
+        "y": 2715
+      },
+      {
+        "name": "group_members",
+        "schemaName": "public",
+        "x": 2348.9345703125,
+        "y": 1178
+      },
+      {
+        "name": "group_invites",
+        "schemaName": "public",
+        "x": 2348.9345703125,
+        "y": 1417
+      },
+      {
+        "name": "group_messages",
+        "schemaName": "public",
+        "x": 2348.9345703125,
+        "y": 1719
+      },
+      {
+        "name": "cover_requests",
+        "schemaName": "public",
+        "x": 2968.54052734375,
+        "y": 1157
+      },
+      {
+        "name": "notifications",
+        "schemaName": "public",
+        "x": 969.556640625,
+        "y": 1285
+      },
+      {
+        "name": "notification_preferences",
+        "schemaName": "public",
+        "x": 969.556640625,
+        "y": 1651
+      },
+      {
+        "name": "support_tickets",
+        "schemaName": "public",
+        "x": 3571.18212890625,
+        "y": 334
+      },
+      {
+        "name": "admin_audit_log",
+        "schemaName": "public",
+        "x": 969.556640625,
+        "y": 2081
+      },
+      {
+        "name": "feature_flags",
+        "schemaName": "public",
+        "x": 969.556640625,
+        "y": 2415
+      },
+      {
+        "name": "email_queue",
+        "schemaName": "public",
+        "x": 12,
+        "y": 12
+      },
+      {
+        "name": "storage_assets",
+        "schemaName": "public",
+        "x": 969.556640625,
+        "y": 2685
+      },
+      {
+        "name": "portfolio_videos",
+        "schemaName": "public",
+        "x": 12,
+        "y": 3055
+      },
+      {
+        "name": "photographer_faqs",
+        "schemaName": "public",
+        "x": 12,
+        "y": 3457
+      },
+      {
+        "name": "message_rate_limits",
+        "schemaName": "public",
+        "x": 12,
+        "y": 3795
+      },
+      {
+        "name": "client_blocks",
+        "schemaName": "public",
+        "x": 325.55517578125,
+        "y": 3795
+      },
+      {
+        "name": "platform_config",
+        "schemaName": "public",
+        "x": 12,
+        "y": 4069
+      },
+      {
+        "name": "photographer_specialties",
+        "schemaName": "public",
+        "x": 1812.0231892927623,
+        "y": 451.19417081320495
+      },
+      {
+        "name": "photographer_profile_views",
+        "schemaName": "public",
+        "x": 1686.63525390625,
+        "y": 115
+      },
+      {
+        "name": "booking_cancellation_requests",
+        "schemaName": "public",
+        "x": 3213.614000496945,
+        "y": -242.26109468608766
+      },
+      {
+        "name": "group_message_rate_limits",
+        "schemaName": "public",
+        "x": 1686.63525390625,
+        "y": 3729
+      }
+    ],
+    "tableGroupCollapseStates": [],
+    "stickyNoteLayouts": [],
+    "referencePaths": [
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "status_changed_by"
+        ],
+        "secondTableName": "users",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "user_id"
+        ],
+        "secondTableName": "client_profiles",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "user_id"
+        ],
+        "secondTableName": "photographer_profiles",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "approved_by"
+        ],
+        "secondTableName": "photographer_profiles",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "photographer_id"
+        ],
+        "secondTableName": "portfolio_albums",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "portfolio_albums",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "album_id"
+        ],
+        "secondTableName": "portfolio_photos",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "photographer_id"
+        ],
+        "secondTableName": "portfolio_photos",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "storage_assets",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "storage_asset_id"
+        ],
+        "secondTableName": "portfolio_photos",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "photographer_id"
+        ],
+        "secondTableName": "packages",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "photographer_id"
+        ],
+        "secondTableName": "availability_day_status",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "photographer_id"
+        ],
+        "secondTableName": "weekly_time_slots",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "client_id"
+        ],
+        "secondTableName": "booking_requests",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "photographer_id"
+        ],
+        "secondTableName": "booking_requests",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "packages",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "package_id"
+        ],
+        "secondTableName": "booking_requests",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "weekly_time_slots",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "time_slot_id"
+        ],
+        "secondTableName": "booking_requests",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "booking_requests",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "booking_id"
+        ],
+        "secondTableName": "reviews",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "client_id"
+        ],
+        "secondTableName": "reviews",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "photographer_id"
+        ],
+        "secondTableName": "reviews",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "flag_resolved_by"
+        ],
+        "secondTableName": "reviews",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "photographer_id"
+        ],
+        "secondTableName": "external_platform_links",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "photographer_id"
+        ],
+        "secondTableName": "trust_sync_log",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "booking_requests",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "booking_id"
+        ],
+        "secondTableName": "conversations",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "client_id"
+        ],
+        "secondTableName": "conversations",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "photographer_id"
+        ],
+        "secondTableName": "conversations",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "flagged_by"
+        ],
+        "secondTableName": "conversations",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "frozen_by"
+        ],
+        "secondTableName": "conversations",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "conversations",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "conversation_id"
+        ],
+        "secondTableName": "messages",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "sender_id"
+        ],
+        "secondTableName": "messages",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "client_id"
+        ],
+        "secondTableName": "saved_photographers",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "photographer_id"
+        ],
+        "secondTableName": "saved_photographers",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "requester_id"
+        ],
+        "secondTableName": "photographer_connections",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "addressee_id"
+        ],
+        "secondTableName": "photographer_connections",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "owner_id"
+        ],
+        "secondTableName": "connection_groups",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "connection_groups",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "group_id"
+        ],
+        "secondTableName": "group_members",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "photographer_id"
+        ],
+        "secondTableName": "group_members",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "connection_groups",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "group_id"
+        ],
+        "secondTableName": "group_invites",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "inviter_id"
+        ],
+        "secondTableName": "group_invites",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "invitee_id"
+        ],
+        "secondTableName": "group_invites",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "connection_groups",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "group_id"
+        ],
+        "secondTableName": "group_messages",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "sender_id"
+        ],
+        "secondTableName": "group_messages",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "requester_id"
+        ],
+        "secondTableName": "cover_requests",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "recipient_id"
+        ],
+        "secondTableName": "cover_requests",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "booking_requests",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "booking_id"
+        ],
+        "secondTableName": "cover_requests",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "user_id"
+        ],
+        "secondTableName": "notifications",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "user_id"
+        ],
+        "secondTableName": "notification_preferences",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "submitted_by"
+        ],
+        "secondTableName": "support_tickets",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "reviews",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "review_id"
+        ],
+        "secondTableName": "support_tickets",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "assigned_to"
+        ],
+        "secondTableName": "support_tickets",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "actor_id"
+        ],
+        "secondTableName": "admin_audit_log",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "updated_by"
+        ],
+        "secondTableName": "feature_flags",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "owner_id"
+        ],
+        "secondTableName": "storage_assets",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "portfolio_albums",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "album_id"
+        ],
+        "secondTableName": "portfolio_videos",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "photographer_id"
+        ],
+        "secondTableName": "portfolio_videos",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "storage_assets",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "storage_asset_id"
+        ],
+        "secondTableName": "portfolio_videos",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "storage_assets",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "thumbnail_asset_id"
+        ],
+        "secondTableName": "portfolio_videos",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "photographer_id"
+        ],
+        "secondTableName": "photographer_faqs",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "client_id"
+        ],
+        "secondTableName": "message_rate_limits",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "client_id"
+        ],
+        "secondTableName": "client_blocks",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "photographer_profiles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "photographer_id"
+        ],
+        "secondTableName": "client_blocks",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "conversations",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "conversation_id"
+        ],
+        "secondTableName": "support_tickets",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "reported_user_id"
+        ],
+        "secondTableName": "support_tickets",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "updated_by"
+        ],
+        "secondTableName": "platform_config",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      }
+    ]
+  },
+  "views": {}
+}
