@@ -533,7 +533,7 @@ function BookingRequestsTab({
         req={clientReviewTarget}
         onClose={() => setClientReviewTarget(null)}
         onSuccess={(id) => {
-          setClientReviewedIds(prev => new Set([...prev, id]))
+          setClientReviewedIds(prev => { const s = new Set(prev); s.add(id); return s })
           setClientReviewTarget(null)
         }}
       />

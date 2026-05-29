@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   Search, Send, Smile, ArrowLeft, CheckCheck, Check, MoreVertical,
@@ -215,7 +215,7 @@ function ConvRow({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function PhotographerMessagesPage() {
+function PhotographerMessagesInner() {
   const searchParams = useSearchParams()
   const deepLinkConvId = searchParams.get('conv')
 
@@ -890,5 +890,13 @@ export default function PhotographerMessagesPage() {
         />
       )}
     </div>
+  )
+}
+
+export default function PhotographerMessagesPage() {
+  return (
+    <Suspense fallback={<div className="h-screen flex items-center justify-center"><div className="w-6 h-6 border-2 border-ink-200 border-t-ink rounded-full animate-spin" /></div>}>
+      <PhotographerMessagesInner />
+    </Suspense>
   )
 }
