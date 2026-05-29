@@ -52,6 +52,7 @@ export async function GET(
       from: m.sender_type === 'photographer' ? 'me' : 'them',
       text: m.body,
       time: m.created_at,
+      isSystem: (m.body as string).startsWith('📅'),
       attachmentUrl: m.attachment_url ?? null,
       attachmentType: m.attachment_type ?? null,
       attachmentName: m.attachment_name ?? null,
@@ -99,6 +100,7 @@ export async function POST(
     .from('messages')
     .insert({
       conversation_id: conversationId,
+      sender_id: user.id,
       sender_type: 'photographer',
       body: text?.trim() ?? '',
       attachment_url: attachment_url ?? null,

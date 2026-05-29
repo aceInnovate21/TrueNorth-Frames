@@ -2,11 +2,11 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft, CheckCircle2, User, MapPin, Camera, Bell,
-  AlertCircle, Save, ChevronRight, Lock, LogOut, Trash2,
+  AlertCircle, Save, Lock, LogOut, Trash2, Loader2,
 } from 'lucide-react'
 
 import { PLATFORM_CONFIG } from '@/lib/platform-config'
@@ -23,15 +23,10 @@ const PHOTOGRAPHY_INTERESTS = [
   'Real Estate', 'Product', 'Boudoir', 'Sports', 'Food', 'Travel',
 ]
 
-type SaveState = 'idle' | 'saving' | 'saved'
+type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
 function Spinner() {
-  return (
-    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-    </svg>
-  )
+  return <Loader2 className="w-4 h-4 animate-spin" />
 }
 
 function SectionCard({ id, title, icon: Icon, children }: {
@@ -58,13 +53,15 @@ function SaveButton({ state, onClick }: { state: SaveState; onClick: () => void 
   return (
     <button onClick={onClick} disabled={state === 'saving'}
       className={`flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-xl transition-all ${
-        state === 'saved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+        state === 'saved'  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+        : state === 'error'  ? 'bg-red-50 text-red-600 border border-red-200'
         : state === 'saving' ? 'bg-ink-50 text-ink-400 cursor-not-allowed border border-ink-100'
         : 'bg-ink text-white hover:bg-ink-800'
       }`}
     >
-      {state === 'saved' ? <><CheckCircle2 className="w-4 h-4" /> Saved</>
-       : state === 'saving' ? <><Spinner /> Saving…</>
+      {state === 'saved'   ? <><CheckCircle2 className="w-4 h-4" /> Saved</>
+       : state === 'error'   ? <><AlertCircle className="w-4 h-4" /> Failed — retry</>
+       : state === 'saving'  ? <><Spinner /> Saving…</>
        : <><Save className="w-4 h-4" /> Save changes</>}
     </button>
   )
@@ -72,19 +69,24 @@ function SaveButton({ state, onClick }: { state: SaveState; onClick: () => void 
 
 export default function ClientEditProfilePage() {
   const router = useRouter()
+  const [loading, setLoading] = useState(true)
+
   // Profile fields
-  const [firstName, setFirstName] = useState('Alex')
-  const [lastName, setLastName] = useState('Johnson')
-  const [email, setEmail] = useState('alex@example.com')
-  const [area, setArea] = useState('Oliver')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [email, setEmail] = useState('')
+  const [area, setArea] = useState('')
   const [customArea, setCustomArea] = useState('')
   const [bio, setBio] = useState('')
-  const [interests, setInterests] = useState<string[]>(['Wedding', 'Portrait'])
+  const [interests, setInterests] = useState<string[]>([])
+  const [memberSince, setMemberSince] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
   // Password change
   const [currentPw, setCurrentPw] = useState('')
   const [newPw, setNewPw] = useState('')
   const [confirmPw, setConfirmPw] = useState('')
+  const [pwError, setPwError] = useState('')
 
   // Notification prefs
   const [notifs, setNotifs] = useState({
@@ -97,32 +99,153 @@ export default function ClientEditProfilePage() {
   // Save states
   const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({
     profile: 'idle',
+    interests: 'idle',
     password: 'idle',
     notifications: 'idle',
   })
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   const [touched, setTouched] = useState<Record<string, boolean>>({})
-  const [pwError, setPwError] = useState('')
 
   function touch(f: string) { setTouched(t => ({ ...t, [f]: true })) }
 
-  async function saveSection(key: string, validate?: () => boolean) {
-    if (validate && !validate()) return
+  // ── Load all data on mount ────────────────────────────────────────────────
+  useEffect(() => {
+    async function load() {
+      const [meRes, prefsRes] = await Promise.all([
+        fetch('/api/client/me'),
+        fetch('/api/client/notifications/preferences'),
+      ])
+
+      if (meRes.ok) {
+        const me = await meRes.json()
+        const nameParts = (me.full_name ?? '').trim().split(' ')
+        setFirstName(nameParts[0] ?? '')
+        setLastName(nameParts.slice(1).join(' '))
+        setEmail(me.email ?? '')
+        setBio(me.bio ?? '')
+        setAvatarUrl(me.avatar_url ?? null)
+        setMemberSince(me.created_at
+          ? new Date(me.created_at).toLocaleDateString('en-CA', { month: 'long', year: 'numeric' })
+          : '')
+        setInterests(me.interests ?? [])
+
+        const loc = me.location ?? ''
+        if (EDMONTON_AREAS.includes(loc)) {
+          setArea(loc)
+        } else if (loc) {
+          setArea('other')
+          setCustomArea(loc)
+        }
+      }
+
+      if (prefsRes.ok) {
+        const prefs = await prefsRes.json()
+        setNotifs({
+          bookingUpdates:  prefs.email_booking  ?? true,
+          newMessages:     prefs.email_messages ?? true,
+          reviewReminders: prefs.email_reviews  ?? true,
+          marketingEmails: prefs.email_trust_updates ?? false,
+        })
+      }
+
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  // ── Save helpers ──────────────────────────────────────────────────────────
+  function setSave(key: string, state: SaveState) {
     clearTimeout(timers.current[key])
-    setSaveStates(s => ({ ...s, [key]: 'saving' }))
-    await new Promise(r => setTimeout(r, 800))
-    setSaveStates(s => ({ ...s, [key]: 'saved' }))
-    timers.current[key] = setTimeout(() => setSaveStates(s => ({ ...s, [key]: 'idle' })), 2500)
+    setSaveStates(s => ({ ...s, [key]: state }))
+    if (state === 'saved') {
+      timers.current[key] = setTimeout(() => setSaveStates(s => ({ ...s, [key]: 'idle' })), 2500)
+    }
   }
 
-  function savePassword() {
+  async function saveProfile() {
+    if (!firstName.trim()) { touch('firstName'); return }
+    if (!email.includes('@')) { touch('email'); return }
+    setSave('profile', 'saving')
+
+    const location = area === 'other' ? customArea.trim() : area
+
+    // Update email via Supabase auth if changed
+    const { data: { user } } = await supabase.auth.getUser()
+    const currentEmail = user?.email ?? ''
+    if (email.trim() !== currentEmail) {
+      const { error } = await supabase.auth.updateUser({ email: email.trim() })
+      if (error) { setSave('profile', 'error'); return }
+    }
+
+    const res = await fetch('/api/client/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+        bio: bio.trim(),
+        location,
+      }),
+    })
+    setSave('profile', res.ok ? 'saved' : 'error')
+  }
+
+  async function saveInterests() {
+    setSave('interests', 'saving')
+    const res = await fetch('/api/client/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interests }),
+    })
+    setSave('interests', res.ok ? 'saved' : 'error')
+  }
+
+  async function savePassword() {
     setPwError('')
     if (!currentPw) { setPwError('Enter your current password'); return }
     if (newPw.length < 8) { setPwError('New password must be at least 8 characters'); return }
     if (newPw !== confirmPw) { setPwError('Passwords do not match'); return }
-    saveSection('password')
+
+    setSave('password', 'saving')
+
+    // Verify current password by re-authenticating
+    const { data: { user } } = await supabase.auth.getUser()
+    const { error: signInErr } = await supabase.auth.signInWithPassword({
+      email: user?.email ?? '',
+      password: currentPw,
+    })
+    if (signInErr) {
+      setPwError('Current password is incorrect')
+      setSave('password', 'idle')
+      return
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: newPw })
+    if (error) {
+      setPwError(error.message)
+      setSave('password', 'error')
+      return
+    }
+
+    setSave('password', 'saved')
     setCurrentPw(''); setNewPw(''); setConfirmPw('')
+  }
+
+  async function saveNotifications() {
+    setSave('notifications', 'saving')
+    const res = await fetch('/api/client/notifications/preferences', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email_booking:       notifs.bookingUpdates,
+        push_booking:        notifs.bookingUpdates,
+        email_messages:      notifs.newMessages,
+        push_messages:       notifs.newMessages,
+        email_reviews:       notifs.reviewReminders,
+        email_trust_updates: notifs.marketingEmails,
+      }),
+    })
+    setSave('notifications', res.ok ? 'saved' : 'error')
   }
 
   function toggleInterest(s: string) {
@@ -140,11 +263,19 @@ export default function ClientEditProfilePage() {
   const emailErr = touched.email && !email.includes('@') ? 'Enter a valid email' : ''
 
   const NAV_SECTIONS = [
-    { id: 'profile', label: 'Profile', icon: User },
-    { id: 'interests', label: 'Interests', icon: Camera },
-    { id: 'password', label: 'Password', icon: Lock },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'profile',       label: 'Profile',       icon: User },
+    { id: 'interests',     label: 'Interests',      icon: Camera },
+    { id: 'password',      label: 'Password',       icon: Lock },
+    { id: 'notifications', label: 'Notifications',  icon: Bell },
   ]
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-ink-50 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-ink-300" />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-ink-50">
@@ -203,19 +334,17 @@ export default function ClientEditProfilePage() {
           {/* Main content */}
           <div className="lg:col-span-2 space-y-6">
 
-            {/* ── Profile ───────────────────────────────────────────────── */}
+            {/* ── Profile ─────────────────────────────────────────────── */}
             <SectionCard id="profile" title="Profile" icon={User}>
-              {/* Avatar placeholder */}
               <div className="flex items-center gap-4 mb-6">
-                <div className="w-16 h-16 rounded-2xl bg-ink flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
-                  {firstName ? firstName[0].toUpperCase() : 'A'}
+                <div className="w-16 h-16 rounded-2xl overflow-hidden bg-ink flex items-center justify-center text-white text-xl font-bold flex-shrink-0">
+                  {avatarUrl
+                    ? <Image src={avatarUrl} alt="Avatar" width={64} height={64} className="object-cover w-full h-full" />
+                    : (firstName ? firstName[0].toUpperCase() : '?')}
                 </div>
                 <div>
                   <p className="text-sm font-medium text-ink">{firstName} {lastName}</p>
-                  <p className="text-xs text-ink-300 mt-0.5">Client since May 2026</p>
-                  <button className="text-xs text-ink-400 hover:text-ink underline underline-offset-2 mt-1 transition-colors">
-                    Change photo
-                  </button>
+                  {memberSince && <p className="text-xs text-ink-300 mt-0.5">Client since {memberSince}</p>}
                 </div>
               </div>
 
@@ -250,6 +379,7 @@ export default function ClientEditProfilePage() {
                   }`}
                 />
                 {emailErr && <p className="mt-1.5 flex items-center gap-1 text-xs text-red-600"><AlertCircle className="w-3 h-3" />{emailErr}</p>}
+                <p className="text-[10px] text-ink-300 mt-1.5">Changing your email will send a confirmation to the new address.</p>
               </div>
 
               <div className="mb-4">
@@ -282,20 +412,20 @@ export default function ClientEditProfilePage() {
                   <label className="block text-sm font-medium text-ink">Short bio <span className="text-ink-300 font-normal">(optional)</span></label>
                   <span className={`text-xs ${bio.length >= bioMax ? 'text-red-500' : bio.length > bioMax - 60 ? 'text-amber-500' : 'text-ink-300'}`}>{bio.length}/{bioMax}</span>
                 </div>
-                <textarea rows={3} value={bio} onChange={e => { if (e.target.value.length <= bioMax) setBio(e.target.value) }} maxLength={bioMax}
+                <textarea rows={3} value={bio} onChange={e => { if (e.target.value.length <= bioMax) setBio(e.target.value) }}
                   placeholder="Tell photographers a little about yourself — the type of sessions you're looking for, your style, etc."
                   className="w-full border border-ink-100 rounded-xl px-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all resize-none"
                 />
               </div>
 
               <div className="flex justify-end">
-                <SaveButton state={saveStates.profile} onClick={() => saveSection('profile')} />
+                <SaveButton state={saveStates.profile} onClick={saveProfile} />
               </div>
             </SectionCard>
 
-            {/* ── Photography interests ─────────────────────────────────── */}
+            {/* ── Photography interests ───────────────────────────────── */}
             <SectionCard id="interests" title="Photography interests" icon={Camera}>
-              <p className="text-xs text-ink-300 mb-4">Select up to 6. We use these to personalise photographer recommendations for you.</p>
+              <p className="text-xs text-ink-300 mb-4">Select up to 6. We use these to personalise photographer recommendations.</p>
               <div className="flex flex-wrap gap-2 mb-4">
                 {PHOTOGRAPHY_INTERESTS.map(s => {
                   const selected = interests.includes(s)
@@ -323,7 +453,7 @@ export default function ClientEditProfilePage() {
                 </p>
               )}
               <div className="flex justify-end">
-                <SaveButton state={saveStates.profile} onClick={() => saveSection('profile')} />
+                <SaveButton state={saveStates.interests} onClick={saveInterests} />
               </div>
             </SectionCard>
 
@@ -344,7 +474,7 @@ export default function ClientEditProfilePage() {
                     className="w-full border border-ink-100 rounded-xl px-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
                   />
                   {newPw.length > 0 && (
-                    <div className="mt-2 flex gap-1">
+                    <div className="mt-2 flex items-center gap-1">
                       {[4, 6, 8, 10].map(len => (
                         <div key={len} className={`flex-1 h-1 rounded-full ${newPw.length >= len ? 'bg-ink' : 'bg-ink-100'}`} />
                       ))}
@@ -378,14 +508,14 @@ export default function ClientEditProfilePage() {
               </div>
             </SectionCard>
 
-            {/* ── Notifications ────────────────────────────────────────── */}
+            {/* ── Notifications ─────────────────────────────────────────── */}
             <SectionCard id="notifications" title="Notification preferences" icon={Bell}>
               <div className="space-y-4 mb-5">
                 {([
-                  { key: 'bookingUpdates', label: 'Booking updates', desc: 'Approved, rejected or changes to your booking requests' },
-                  { key: 'newMessages', label: 'New messages', desc: 'When a photographer replies to your enquiry' },
-                  { key: 'reviewReminders', label: 'Review reminders', desc: 'Reminders to leave a review after a session' },
-                  { key: 'marketingEmails', label: 'Promotions & tips', desc: 'Seasonal offers, photography tips and platform news' },
+                  { key: 'bookingUpdates', label: 'Booking updates',   desc: 'Approved, declined or changes to your booking requests' },
+                  { key: 'newMessages',    label: 'New messages',      desc: 'When a photographer replies to your enquiry' },
+                  { key: 'reviewReminders',label: 'Review reminders',  desc: 'Reminders to leave a review after a completed session' },
+                  { key: 'marketingEmails',label: 'Promotions & tips', desc: 'Seasonal offers, photography tips and platform news' },
                 ] as { key: keyof typeof notifs; label: string; desc: string }[]).map(item => (
                   <div key={item.key} className="flex items-start justify-between gap-4">
                     <div className="flex-1">
@@ -405,7 +535,7 @@ export default function ClientEditProfilePage() {
                 ))}
               </div>
               <div className="flex justify-end">
-                <SaveButton state={saveStates.notifications} onClick={() => saveSection('notifications')} />
+                <SaveButton state={saveStates.notifications} onClick={saveNotifications} />
               </div>
             </SectionCard>
 
@@ -413,7 +543,7 @@ export default function ClientEditProfilePage() {
             <div className="bg-white rounded-2xl p-6 border border-red-100"
               style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
               <h2 className="font-semibold text-ink mb-1">Danger zone</h2>
-              <p className="text-xs text-ink-300 mb-5">These actions cannot be undone. Please be certain before proceeding.</p>
+              <p className="text-xs text-ink-300 mb-5">These actions cannot be undone. Please be certain.</p>
               <div className="flex flex-wrap gap-3">
                 <button className="flex items-center gap-2 text-sm font-medium text-red-600 border border-red-200 px-4 py-2.5 rounded-xl hover:bg-red-50 transition-colors">
                   <Trash2 className="w-4 h-4" />Delete account

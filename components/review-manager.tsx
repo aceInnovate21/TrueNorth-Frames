@@ -24,6 +24,10 @@ export interface Review {
   privateNote: string       // private internal note (only photographer sees)
   flag: ReviewFlag
   flagReason: string
+  communicationRating?: number | null
+  qualityRating?: number | null
+  valueRating?: number | null
+  punctualityRating?: number | null
 }
 
 
@@ -151,6 +155,34 @@ function ReviewCard({
         <div className="px-4 pb-4 space-y-4 border-t border-ink-50 pt-4">
           {/* Full review */}
           <p className="text-sm text-ink-500 leading-relaxed">{review.text}</p>
+
+          {/* Sub-ratings from client */}
+          {(() => {
+            const subs = [
+              { label: 'Communication', value: review.communicationRating },
+              { label: 'Quality',       value: review.qualityRating },
+              { label: 'Punctuality',   value: review.punctualityRating },
+              { label: 'Value',         value: review.valueRating },
+            ].filter(s => s.value != null)
+            if (!subs.length) return null
+            return (
+              <div className="bg-ink-50/60 rounded-xl px-3 py-3 space-y-2">
+                {subs.map(s => (
+                  <div key={s.label} className="flex items-center gap-3">
+                    <span className="text-[11px] text-ink-400 w-24 flex-shrink-0">{s.label}</span>
+                    <div className="flex gap-0.5">
+                      {[1,2,3,4,5].map(n => (
+                        <Star key={n} className={`w-3 h-3 ${n <= (s.value ?? 0) ? 'text-amber-400 fill-amber-400' : 'text-ink-200'}`} />
+                      ))}
+                    </div>
+                    <span className="text-[10px] text-ink-300 ml-0.5">
+                      {['','Poor','Fair','Good','Great','Excellent'][s.value ?? 0]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
 
           {/* Low-rating nudge */}
           {isLowRating && (

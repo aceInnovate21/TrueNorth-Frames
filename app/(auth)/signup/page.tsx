@@ -2,8 +2,8 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowRight, Camera, User, CheckCircle2, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -31,7 +31,13 @@ function getStrength(pw: string) {
 }
 
 export default function SignupPage() {
+  return <Suspense><SignupForm /></Suspense>
+}
+
+function SignupForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectTo = searchParams.get('redirect') ?? null
   const [role, setRole] = useState<Role>(null)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -117,9 +123,12 @@ export default function SignupPage() {
       return
     }
 
-    // 3. Redirect to onboarding
+    // 3. Redirect — if there's a pending booking redirect, go there (draft will auto-submit)
     const params = new URLSearchParams({ firstName, lastName })
-    if (role === 'photographer') {
+    if (redirectTo && role === 'client') {
+      // Client signed up to send a booking — skip onboarding, go straight back
+      router.push(redirectTo)
+    } else if (role === 'photographer') {
       router.push(`/onboarding/photographer?${params.toString()}`)
     } else {
       router.push(`/onboarding?${params.toString()}`)

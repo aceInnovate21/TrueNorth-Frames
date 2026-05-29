@@ -8,17 +8,33 @@ export async function GET() {
   if (!user) return unauthorized()
   const db = adminDb as any
 
-  const { data: profile, error } = await db
+  let profileResult = await db
     .from('photographer_profiles')
     .select(`
       id, username, display_name, tagline, bio, location,
       avatar_url, cover_image_url, website_url, instagram_url,
       rate_display, rate_note, trust_score, native_avg_rating,
-      native_review_count, profile_view_count, created_at
+      native_review_count, profile_view_count, created_at,
+      contact_instagram_url, contact_facebook_url
     `)
     .eq('user_id', user.id)
     .single()
 
+  if (profileResult.error && profileResult.error.code !== 'PGRST116') {
+    // Contact columns may not exist yet — retry without them
+    profileResult = await db
+      .from('photographer_profiles')
+      .select(`
+        id, username, display_name, tagline, bio, location,
+        avatar_url, cover_image_url, website_url, instagram_url,
+        rate_display, rate_note, trust_score, native_avg_rating,
+        native_review_count, profile_view_count, created_at
+      `)
+      .eq('user_id', user.id)
+      .single()
+  }
+
+  const { data: profile, error } = profileResult
   if (error || !profile) return notFound('Photographer profile not found')
 
   const photographerId = profile.id
@@ -37,8 +53,8 @@ export async function GET() {
     { data: portfolioVideos },
   ] = await Promise.all([
     db.from('photographer_specialties').select('specialty').eq('photographer_id', photographerId),
-    db.from('external_platform_links').select('platform, profile_url, platform_rating, platform_review_count').eq('photographer_id', photographerId),
-    db.from('reviews').select('id, rating, body, created_at, client:users!client_id(full_name)').eq('photographer_id', photographerId).eq('flag_status', 'none').order('created_at', { ascending: false }).limit(10),
+    db.from('external_platform_links').select('platform, profile_url, platform_rating, platform_review_count, platform_username, follower_count, engagement_rate, posting_consistency, account_age_days, is_verified, is_oauth_connected').eq('photographer_id', photographerId),
+    db.from('reviews').select('id, rating, body, public_reply, client_reply, client_replied_at, created_at, communication_rating, quality_rating, value_rating, punctuality_rating, client:users!client_id(full_name)').eq('photographer_id', photographerId).eq('flag_status', 'none').order('created_at', { ascending: false }).limit(10),
     db.from('packages').select('id, name, description, billing_type, price, deliverables, is_popular').eq('photographer_id', photographerId).eq('is_active', true).order('sort_order', { ascending: true }),
     db.from('photographer_faqs').select('id, question, answer, sort_order').eq('photographer_id', photographerId).eq('is_published', true).order('sort_order', { ascending: true }),
     db.from('availability_day_status').select('date, status').eq('photographer_id', photographerId).gte('date', today).lte('date', in90),
@@ -78,9 +94,31 @@ export async function GET() {
     }
   }
 
-  const linksMap: Record<string, { url: string; rating: number | null; count: number | null }> = {}
+  const linksMap: Record<string, {
+    url: string
+    rating: number | null
+    count: number | null
+    username: string | null
+    follower_count: number | null
+    engagement_rate: number | null
+    posting_consistency: number | null
+    account_age_days: number | null
+    is_verified: boolean
+    is_oauth_connected: boolean
+  }> = {}
   for (const l of links ?? []) {
-    linksMap[l.platform] = { url: l.profile_url, rating: l.platform_rating, count: l.platform_review_count }
+    linksMap[l.platform] = {
+      url:                l.profile_url,
+      rating:             l.platform_rating,
+      count:              l.platform_review_count,
+      username:           l.platform_username ?? null,
+      follower_count:     l.follower_count ?? null,
+      engagement_rate:    l.engagement_rate ?? null,
+      posting_consistency: l.posting_consistency ?? null,
+      account_age_days:   l.account_age_days ?? null,
+      is_verified:        l.is_verified ?? false,
+      is_oauth_connected: l.is_oauth_connected ?? false,
+    }
   }
 
   const r2Base = process.env.R2_PUBLIC_URL ?? ''
@@ -103,14 +141,22 @@ export async function GET() {
     native_review_count: profile.native_review_count ?? 0,
     profile_view_count: profile.profile_view_count ?? 0,
     member_since: profile.created_at,
+    contact_instagram_url: profile.contact_instagram_url ?? null,
+    contact_facebook_url: profile.contact_facebook_url ?? null,
     specialties: (specialties ?? []).map((s: { specialty: string }) => s.specialty),
     links: linksMap,
     native_reviews: (nativeReviews ?? []).map((r: any) => ({
       id: r.id,
       rating: r.rating,
       body: r.body,
+      public_reply: r.public_reply ?? null,
+      client_reply: r.client_reply ?? null,
       created_at: r.created_at,
       reviewer_name: r.client?.full_name ?? 'Anonymous',
+      communication_rating: r.communication_rating ?? null,
+      quality_rating: r.quality_rating ?? null,
+      value_rating: r.value_rating ?? null,
+      punctuality_rating: r.punctuality_rating ?? null,
     })),
     packages: (packages ?? []).map((pkg: any) => ({
       id: pkg.id,

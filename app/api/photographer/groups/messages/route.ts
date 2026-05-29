@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
 import { PLATFORM_CONFIG } from '@/lib/platform-config'
+import { notify } from '@/lib/notify'
 
 // POST /api/photographer/groups/messages — send a message to a group
 export async function POST(request: NextRequest) {
@@ -56,6 +57,50 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) return serverError('Failed to send message')
+
+  // For DM groups: notify the other member
+  if (!is_system && !is_leave) {
+    const { data: groupRow } = await db
+      .from('connection_groups')
+      .select('is_dm, name')
+      .eq('id', group_id)
+      .single()
+
+    if (groupRow?.is_dm) {
+      // Find the other active member
+      const { data: otherMember } = await db
+        .from('group_members')
+        .select('photographer_id')
+        .eq('group_id', group_id)
+        .neq('photographer_id', me.id)
+        .is('removed_at', null)
+        .is('left_at', null)
+        .limit(1)
+        .single()
+
+      if (otherMember) {
+        // Resolve their user_id
+        const { data: otherProfile } = await db
+          .from('photographer_profiles')
+          .select('user_id')
+          .eq('id', otherMember.photographer_id)
+          .single()
+
+        if (otherProfile?.user_id) {
+          const preview = finalBody.length > 60 ? finalBody.slice(0, 60) + '…' : finalBody
+          await notify({
+            db,
+            userId: otherProfile.user_id,
+            type: 'new_message',
+            title: `New message from ${me.display_name}`,
+            body: preview,
+            entityType: 'connection_group',
+            entityId: group_id,
+          })
+        }
+      }
+    }
+  }
 
   return NextResponse.json(data)
 }

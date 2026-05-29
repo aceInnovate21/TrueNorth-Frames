@@ -22,15 +22,26 @@ export async function GET() {
 
   const db = adminDb as any
 
-  const { data: profile, error: profileError } = await db
+  // Try with new contact columns first; fall back to base select if columns don't exist yet
+  let profileResult = await db
     .from('photographer_profiles')
-    .select('id, username, display_name, bio, location, rate_display, website_url, instagram_url, avatar_url')
+    .select('id, username, display_name, bio, location, rate_display, website_url, instagram_url, avatar_url, cover_image_url, contact_instagram_url, contact_facebook_url')
     .eq('user_id', user.id)
     .single()
 
-  if (profileError && profileError.code !== 'PGRST116') {
-    return serverError('Failed to load profile')
+  if (profileResult.error && profileResult.error.code !== 'PGRST116') {
+    // Columns may not exist yet — retry with minimal set
+    profileResult = await db
+      .from('photographer_profiles')
+      .select('id, username, display_name, bio, location, rate_display, website_url, instagram_url, avatar_url, cover_image_url')
+      .eq('user_id', user.id)
+      .single()
+    if (profileResult.error && profileResult.error.code !== 'PGRST116') {
+      return serverError('Failed to load profile')
+    }
   }
+
+  const { data: profile } = profileResult
 
   const photographerId = profile?.id ?? null
 
@@ -66,10 +77,13 @@ export async function GET() {
     rate_unit: unit,
     website_url: profile?.website_url ?? '',
     avatar_url: profile?.avatar_url ?? '',
+    cover_image_url: profile?.cover_image_url ?? '',
     specialties,
     google_url: linksMap['google'] ?? '',
     instagram_url: profile?.instagram_url ?? linksMap['instagram'] ?? '',
     yelp_url: linksMap['yelp'] ?? '',
+    contact_instagram_url: profile?.contact_instagram_url ?? '',
+    contact_facebook_url: profile?.contact_facebook_url ?? '',
   })
 }
 
@@ -173,6 +187,23 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    return NextResponse.json({ success: true })
+  }
+
+  if (section === 'contacts') {
+    const { contact_instagram_url, contact_facebook_url, website_url } = body
+
+    const { error } = await db
+      .from('photographer_profiles')
+      .update({
+        website_url: website_url?.trim() || null,
+        contact_instagram_url: contact_instagram_url?.trim() || null,
+        contact_facebook_url: contact_facebook_url?.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', photographerId)
+
+    if (error) return serverError(`Failed to save links: ${error.message}`)
     return NextResponse.json({ success: true })
   }
 

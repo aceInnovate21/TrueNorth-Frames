@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { ArrowRight, ArrowLeft, CheckCircle2, Camera, MapPin, DollarSign, User, Globe, Instagram } from 'lucide-react'
+import { ArrowRight, ArrowLeft, CheckCircle2, Camera, MapPin, DollarSign, User, Globe, Instagram, Shield, Zap, Facebook, AlertCircle } from 'lucide-react'
 
 const SPECIALTIES = [
   'Wedding', 'Portrait', 'Corporate', 'Newborn', 'Family', 'Event',
@@ -17,7 +17,7 @@ const EDMONTON_AREAS = [
   'West Edmonton', 'North Edmonton', 'South Edmonton',
 ]
 
-const STEPS = ['Account', 'Basics', 'Specialties', 'Links', 'Done']
+const STEPS = ['Account', 'Basics', 'Specialties', 'Trust', 'Done']
 
 function PhotographerOnboardingForm() {
   const searchParams = useSearchParams()
@@ -35,10 +35,6 @@ function PhotographerOnboardingForm() {
   // Specialties
   const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>([])
 
-  // Links
-  const [googleUrl, setGoogleUrl] = useState('')
-  const [instagramUrl, setInstagramUrl] = useState('')
-  const [yelpUrl, setYelpUrl] = useState('')
   const [websiteUrl, setWebsiteUrl] = useState('')
 
   const [submitting, setSubmitting] = useState(false)
@@ -81,9 +77,6 @@ function PhotographerOnboardingForm() {
         location: area,
         rate,
         specialties: selectedSpecialties,
-        google_url: googleUrl,
-        instagram_url: instagramUrl,
-        yelp_url: yelpUrl,
         website_url: websiteUrl,
       }),
     })
@@ -300,7 +293,7 @@ function PhotographerOnboardingForm() {
             disabled={!step2Valid}
             className="w-full bg-ink hover:bg-ink-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
           >
-            Next: Review links
+            Next: Trust score
             <ArrowRight className="w-4 h-4" />
           </button>
 
@@ -312,7 +305,7 @@ function PhotographerOnboardingForm() {
         </div>
       )}
 
-      {/* ── Step 3: Review links ──────────────────────────────────── */}
+      {/* ── Step 3: Trust score ───────────────────────────────────── */}
       {step === 3 && (
         <div>
           <button onClick={() => setStep(2)} className="inline-flex items-center gap-1.5 text-xs text-ink-400 hover:text-ink transition-colors mb-6">
@@ -321,43 +314,96 @@ function PhotographerOnboardingForm() {
 
           <div className="mb-8">
             <div className="w-12 h-12 bg-ink-50 rounded-2xl flex items-center justify-center mb-4">
-              <Globe className="w-5 h-5 text-ink-400" />
+              <Shield className="w-5 h-5 text-ink-400" />
             </div>
-            <h1 className="font-serif text-3xl font-bold text-ink mb-2">Connect your reviews</h1>
+            <h1 className="font-serif text-3xl font-bold text-ink mb-2">Build your trust score</h1>
             <p className="text-ink-300 text-sm leading-relaxed">
-              We pull your ratings from these platforms weekly to build your trust score. Add whatever you have — none are required right now.
+              Connect your social and review platforms so clients can see your real-world reputation. Each connection adds verified signal to your score — all optional, connect what you have.
             </p>
           </div>
 
-          <div className="space-y-4 mb-8">
+          {/* Platform connect cards */}
+          <div className="space-y-3 mb-6">
             {[
-              { label: 'Google Business profile URL', value: googleUrl, set: setGoogleUrl, placeholder: 'https://g.page/your-business', icon: Globe, hint: 'Strongest signal — adds star rating + review count.' },
-              { label: 'Instagram profile URL', value: instagramUrl, set: setInstagramUrl, placeholder: 'https://instagram.com/yourhandle', icon: Instagram, hint: 'Follower count used as reach indicator.' },
-              { label: 'Yelp profile URL', value: yelpUrl, set: setYelpUrl, placeholder: 'https://yelp.com/biz/your-business', icon: Globe, hint: 'Strong for local service trust.' },
-              { label: 'Website', value: websiteUrl, set: setWebsiteUrl, placeholder: 'https://yoursite.com', icon: Globe, hint: 'Shown as a link on your profile.' },
-            ].map(({ label, value, set, placeholder, icon: Icon, hint }) => (
-              <div key={label}>
-                <label className="block text-sm font-medium text-ink mb-1.5 flex items-center gap-1.5">
-                  <Icon className="w-3.5 h-3.5 text-ink-300" />
-                  {label}
-                  <span className="text-ink-300 font-normal ml-1">Optional</span>
-                </label>
-                <input
-                  type="url"
-                  placeholder={placeholder}
-                  value={value}
-                  onChange={e => set(e.target.value)}
-                  className="w-full border border-ink-100 rounded-xl px-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
-                />
-                <p className="mt-1 text-xs text-ink-300">{hint}</p>
-              </div>
+              {
+                platform: 'instagram',
+                label: 'Instagram',
+                desc: 'Followers · engagement rate · posting consistency',
+                gradient: 'from-pink-500 to-purple-600',
+                bg: 'from-pink-50 to-purple-50',
+                border: 'border-pink-100',
+                Icon: Instagram,
+                accountRequirement: 'Business or Creator account required',
+              },
+              {
+                platform: 'facebook',
+                label: 'Facebook Page',
+                desc: 'Page likes · reviews · account age',
+                gradient: 'from-blue-600 to-blue-400',
+                bg: 'from-blue-50 to-sky-50',
+                border: 'border-blue-100',
+                Icon: Facebook,
+                accountRequirement: 'Facebook Page required (not personal profile)',
+              },
+              {
+                platform: 'google',
+                label: 'Google Business',
+                desc: 'Review rating · review count · verified badge',
+                gradient: 'from-red-500 to-yellow-400',
+                bg: 'from-slate-50 to-white',
+                border: 'border-slate-100',
+                Icon: Globe,
+                isGoogle: true,
+                accountRequirement: null,
+              },
+            ].map(({ platform, label, desc, gradient, bg, border, Icon, isGoogle, accountRequirement }) => (
+              <a
+                key={platform}
+                href={`/api/oauth/${platform}?onboarding=1`}
+                className={`flex items-center gap-3 p-3.5 rounded-xl bg-gradient-to-r ${bg} border ${border} hover:shadow-sm transition-all group`}
+              >
+                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform`}>
+                  {isGoogle
+                    ? <span className="text-base font-black text-white leading-none">G</span>
+                    : <Icon className="w-5 h-5 text-white" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-ink">{label}</p>
+                  <p className="text-xs text-ink-300 truncate">{desc}</p>
+                  {accountRequirement && (
+                    <p className="text-[10px] text-amber-600 font-medium mt-0.5 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                      {accountRequirement}
+                    </p>
+                  )}
+                </div>
+                <span className="text-xs font-semibold text-ink border border-ink-200 bg-white px-3 py-1.5 rounded-lg group-hover:bg-ink group-hover:text-white group-hover:border-ink transition-all flex-shrink-0">
+                  Connect
+                </span>
+              </a>
             ))}
           </div>
 
+          {/* Website */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-ink mb-1.5 flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5 text-ink-300" />
+              Website
+              <span className="text-ink-300 font-normal">Optional</span>
+            </label>
+            <input
+              type="url"
+              placeholder="https://yoursite.com"
+              value={websiteUrl}
+              onChange={e => setWebsiteUrl(e.target.value)}
+              className="w-full border border-ink-100 rounded-xl px-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
+            />
+          </div>
+
           <div className="bg-ink-50 border border-ink-100 rounded-xl px-4 py-3 mb-6 flex items-start gap-2.5">
-            <CheckCircle2 className="w-4 h-4 text-ink flex-shrink-0 mt-0.5" />
+            <Zap className="w-4 h-4 text-ink flex-shrink-0 mt-0.5" />
             <p className="text-xs text-ink-400 leading-relaxed">
-              You can add or update these links anytime from your dashboard. Your trust score updates automatically each week.
+              Connecting a platform redirects you to authorise access, then brings you straight back here. You can connect more platforms anytime from the <strong>Trust Score</strong> tab in your dashboard.
             </p>
           </div>
 
@@ -379,6 +425,12 @@ function PhotographerOnboardingForm() {
               <>Go to my dashboard <ArrowRight className="w-4 h-4" /></>
             )}
           </button>
+
+          <p className="text-center text-xs text-ink-300 mt-4">
+            <button type="button" onClick={handleFinish} className="underline underline-offset-2 hover:text-ink transition-colors">
+              Skip for now
+            </button>
+          </p>
         </div>
       )}
     </div>
@@ -410,7 +462,7 @@ export default function PhotographerOnboardingPage() {
 
           <div className="pt-2 space-y-3">
             {[
-              'Verified trust score from your existing reviews',
+              'Verified trust score from Instagram, Facebook & Google',
               'Portfolio gallery — up to 20 photos',
               'Direct enquiries — no commission ever',
               'Availability toggle for same-day bookings',

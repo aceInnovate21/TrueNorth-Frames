@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { PLATFORM_CONFIG } from '@/lib/platform-config'
 import {
-  CheckCircle2, ChevronLeft, ChevronRight, LogOut, Paperclip, Plus, Search,
-  Send, Shield, UserCheck, UserMinus, UserPlus, Users, X, Zap, FileText, Play,
+  Ban, CheckCircle2, ChevronLeft, ChevronRight, LogOut, Paperclip, Plus, Search,
+  Send, Shield, Trash2, UserCheck, UserMinus, UserPlus, Users, X, Zap, FileText, Play,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -53,6 +53,11 @@ export interface Group {
   unread: number
   lastActivityAt?: string    // ISO timestamp of last message, for sorting
   isCoverGroup?: boolean
+  isDm?: boolean             // true for private 1-1 DM groups between photographers
+  dmPeerId?: string          // photographer id of the other person in a DM (not 'me')
+  dmPeerName?: string        // display name of the other person
+  dmPeerInitials?: string
+  dmPeerBg?: string
   isRemoved?: boolean        // true if current user was removed by owner
   isLeft?: boolean           // true if current user voluntarily left
 }
@@ -461,6 +466,7 @@ export function GroupChat({
   onLeave,
   onRemoveMember,
   onInviteSent,
+  onBlock,
 }: {
   group: Group
   allPhotographers: Photographer[]
@@ -471,9 +477,11 @@ export function GroupChat({
   onLeave: (groupId: string) => void
   onRemoveMember: (groupId: string, memberId: string) => void
   onInviteSent?: (groupId: string, inviteeId: string) => void
+  onBlock?: (groupId: string, peerId: string) => void
 }) {
   const [draft, setDraft] = useState('')
   const [confirmLeave, setConfirmLeave] = useState(false)
+  const [confirmBlock, setConfirmBlock] = useState(false)
   const [showMembers, setShowMembers] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
@@ -535,29 +543,43 @@ export function GroupChat({
 
   const members = allPhotographers.filter(p => group.memberIds.includes(p.id) && p.id !== 'me')
 
+  const displayName = group.isDm ? (group.dmPeerName ?? group.name) : group.name
+  const displayInitials = group.isDm ? (group.dmPeerInitials ?? group.name.slice(0, 2).toUpperCase()) : null
+  const displayBg = group.isDm ? (group.dmPeerBg ?? 'bg-ink-300') : null
+
   return (
-    <div className="flex flex-col h-[600px]">
+    <div className="flex flex-col h-[680px]">
       {/* Chat header */}
       <div className="flex items-center gap-3 px-4 py-3.5 border-b border-ink-50 flex-shrink-0">
         <button onClick={onClose} className="p-1 rounded-lg hover:bg-ink-50 text-ink-400 transition-colors">
           <ChevronLeft className="w-4 h-4" />
         </button>
-        <div className="w-9 h-9 rounded-full bg-ink-100 flex items-center justify-center text-lg flex-shrink-0">
-          {group.emoji}
-        </div>
+        {group.isDm ? (
+          <div className={`w-9 h-9 rounded-full ${displayBg} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
+            {displayInitials}
+          </div>
+        ) : (
+          <div className="w-9 h-9 rounded-full bg-ink-100 flex items-center justify-center text-lg flex-shrink-0">
+            {group.emoji}
+          </div>
+        )}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-ink">{group.name}</p>
-          <button
-            onClick={() => { if (isOwner) setShowMembers(v => !v) }}
-            className={`text-[10px] text-ink-300 ${isOwner ? 'hover:text-ink-500 transition-colors' : ''}`}
-          >
-            You{members.length > 0 ? `, ${members.map(m => m.name.split(' ')[0]).join(', ')}` : ''}
-            {' '}· {group.memberIds.length} member{group.memberIds.length !== 1 ? 's' : ''}
-            {isOwner && <span className="ml-1 text-ink-200">{showMembers ? '▲' : '▼'}</span>}
-          </button>
+          <p className="text-sm font-semibold text-ink">{displayName}</p>
+          {group.isDm ? (
+            <p className="text-[10px] text-ink-300">Photographer · Direct message</p>
+          ) : (
+            <button
+              onClick={() => { if (isOwner) setShowMembers(v => !v) }}
+              className={`text-[10px] text-ink-300 ${isOwner ? 'hover:text-ink-500 transition-colors' : ''}`}
+            >
+              You{members.length > 0 ? `, ${members.map(m => m.name.split(' ')[0]).join(', ')}` : ''}
+              {' '}· {group.memberIds.length} member{group.memberIds.length !== 1 ? 's' : ''}
+              {isOwner && <span className="ml-1 text-ink-200">{showMembers ? '▲' : '▼'}</span>}
+            </button>
+          )}
         </div>
-        {/* Invite — owner only, not shown if removed/left */}
-        {isOwner && !group.isRemoved && !group.isLeft && (
+        {/* Invite — owner only, not for DMs, not shown if removed/left */}
+        {!group.isDm && isOwner && !group.isRemoved && !group.isLeft && (
           <button
             onClick={() => { setShowInvite(v => !v); setShowMembers(false); setConfirmLeave(false) }}
             className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${showInvite ? 'bg-ink text-white' : 'hover:bg-ink-50 text-ink-300 hover:text-ink'}`}
@@ -566,8 +588,8 @@ export function GroupChat({
             <UserPlus className="w-4 h-4" />
           </button>
         )}
-        {/* Leave/Delete — not shown if already removed or left */}
-        {!group.isRemoved && !group.isLeft && (
+        {/* Leave/Delete — not for DMs, not shown if already removed or left */}
+        {!group.isDm && !group.isRemoved && !group.isLeft && (
           <button
             onClick={() => { setConfirmLeave(true); setShowMembers(false); setShowInvite(false) }}
             className="p-1.5 rounded-lg hover:bg-red-50 text-ink-300 hover:text-red-500 transition-colors flex-shrink-0"
@@ -576,8 +598,29 @@ export function GroupChat({
             <LogOut className="w-4 h-4" />
           </button>
         )}
-        {/* Dismiss — only for removed users */}
-        {group.isRemoved && (
+        {/* DM-specific actions: Delete chat + Block */}
+        {group.isDm && (
+          <>
+            <button
+              onClick={() => { setConfirmLeave(true); setConfirmBlock(false) }}
+              className="p-1.5 rounded-lg hover:bg-red-50 text-ink-300 hover:text-red-500 transition-colors flex-shrink-0"
+              title="Delete conversation"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+            {onBlock && group.dmPeerId && (
+              <button
+                onClick={() => { setConfirmBlock(true); setConfirmLeave(false) }}
+                className="p-1.5 rounded-lg hover:bg-red-50 text-ink-300 hover:text-red-500 transition-colors flex-shrink-0"
+                title="Block this photographer"
+              >
+                <Ban className="w-4 h-4" />
+              </button>
+            )}
+          </>
+        )}
+        {/* Dismiss — only for removed users (non-DM groups) */}
+        {!group.isDm && group.isRemoved && (
           <button
             onClick={() => onLeave(group.id)}
             className="p-1.5 rounded-lg hover:bg-ink-50 text-ink-300 hover:text-ink transition-colors flex-shrink-0"
@@ -586,8 +629,8 @@ export function GroupChat({
             <X className="w-4 h-4" />
           </button>
         )}
-        {/* Delete — for users who left */}
-        {group.isLeft && (
+        {/* Delete — for users who left (non-DM groups) */}
+        {!group.isDm && group.isLeft && (
           <button
             onClick={() => onLeave(group.id)}
             className="p-1.5 rounded-lg hover:bg-red-50 text-ink-300 hover:text-red-500 transition-colors flex-shrink-0"
@@ -681,7 +724,9 @@ export function GroupChat({
       {confirmLeave && (
         <div className="bg-red-50 border-b border-red-100 px-4 py-3 flex items-center gap-3 flex-shrink-0">
           <p className="text-xs text-red-700 flex-1">
-            {group.isCoverGroup
+            {group.isDm
+              ? 'Delete this conversation? This cannot be undone.'
+              : group.isCoverGroup
               ? 'Leave this cover chat? The other person will be notified.'
               : isOwner
               ? 'You created this group. Leaving will delete it for everyone.'
@@ -691,10 +736,31 @@ export function GroupChat({
             onClick={() => onLeave(group.id)}
             className="text-xs font-semibold bg-red-500 text-white px-3 py-1.5 rounded-lg hover:bg-red-600 transition-colors flex-shrink-0"
           >
-            {group.isCoverGroup ? 'Leave' : isOwner ? 'Delete group' : 'Leave'}
+            {group.isDm ? 'Delete' : group.isCoverGroup ? 'Leave' : isOwner ? 'Delete group' : 'Leave'}
           </button>
           <button
             onClick={() => setConfirmLeave(false)}
+            className="text-xs text-ink-400 hover:text-ink px-2"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Block confirm strip — DMs only */}
+      {confirmBlock && group.isDm && group.dmPeerId && (
+        <div className="bg-orange-50 border-b border-orange-100 px-4 py-3 flex items-center gap-3 flex-shrink-0">
+          <p className="text-xs text-orange-800 flex-1">
+            Block <strong>{group.dmPeerName ?? 'this photographer'}</strong>? They won't be able to start a new conversation with you. This will also delete the chat.
+          </p>
+          <button
+            onClick={() => { onBlock?.(group.id, group.dmPeerId!); setConfirmBlock(false) }}
+            className="text-xs font-semibold bg-orange-500 text-white px-3 py-1.5 rounded-lg hover:bg-orange-600 transition-colors flex-shrink-0"
+          >
+            Block
+          </button>
+          <button
+            onClick={() => setConfirmBlock(false)}
             className="text-xs text-ink-400 hover:text-ink px-2"
           >
             Cancel
@@ -901,7 +967,7 @@ export function PhotographerConnections({
   }
 
   const MAX_OWNED_GROUPS = PLATFORM_CONFIG.max_owned_groups_per_photographer
-  const ownedGroupCount = groups.filter(g => g.ownerId === 'me' && !g.isCoverGroup).length
+  const ownedGroupCount = groups.filter(g => g.ownerId === 'me' && !g.isCoverGroup && !g.isDm).length
 
   function acceptRequest(id: string) {
     setPhotographers(prev => prev.map(p => p.id === id ? { ...p, status: 'connected' as ConnectionStatus } : p))
@@ -1319,7 +1385,7 @@ export function PhotographerConnections({
           ) : (
             <div className="space-y-3">
               {/* Group list */}
-              {groups.map(g => {
+              {groups.filter(g => !g.isDm).map(g => {
                 const lastMsg = g.messages[g.messages.length - 1]
                 const members = photographers.filter(p => g.memberIds.includes(p.id))
                 return (

@@ -2,125 +2,45 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import {
-  ArrowLeft, Send, Smile, Paperclip, Mic, MoreVertical,
-  ExternalLink, Star, CheckCheck, Check, X,
+  ArrowLeft, Send, Smile, Paperclip, MoreVertical,
+  ExternalLink, CheckCheck, Check, Calendar, Loader2,
 } from 'lucide-react'
 import { PLATFORM_CONFIG } from '@/lib/platform-config'
+import { AttachmentBubble, AttachmentPreview } from '@/components/message-attachment'
 
 const MAX_MESSAGE_LENGTH = PLATFORM_CONFIG.max_message_length
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type MessageStatus = 'sent' | 'delivered' | 'read'
-type ConvStatus = 'online' | 'away' | 'offline'
 
 interface Msg {
-  id: number
+  id: string | number
   from: 'me' | 'them'
   text: string
   time: string
   status: MessageStatus
-  reaction?: string
+  isSystem?: boolean
+  attachmentUrl: string | null
+  attachmentType: string | null
+  attachmentName: string | null
+  attachmentSize: number | null
 }
 
-interface Conversation {
-  slug: string
-  name: string
-  initials: string
-  specialty: string
-  avatar: string
-  status: ConvStatus
-  lastSeen: string
-  rating: number
-  rate: string
-  messages: Msg[]
-}
-
-// ─── Seed data (same slugs as /messages and client dashboard) ─────────────────
-
-const CONVERSATIONS: Record<string, Conversation> = {
-  'sarah-chen': {
-    slug: 'sarah-chen',
-    name: 'Sarah Chen',
-    initials: 'SC',
-    specialty: 'Wedding · Portrait',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80&fit=crop&crop=face',
-    status: 'online',
-    lastSeen: 'Active now',
-    rating: 4.9,
-    rate: '$200/session',
-    messages: [
-      { id: 1, from: 'me', text: "Hi Sarah! I came across your profile on TrueNorth Frames and I love your work. We're looking for a wedding photographer for September 2026.", time: '10:14 AM', status: 'read' },
-      { id: 2, from: 'them', text: "Hi Alex! Thank you so much — that really means a lot. Congratulations on your upcoming wedding! 🎉", time: '10:22 AM', status: 'read' },
-      { id: 3, from: 'them', text: "September is actually one of my favourite months to shoot — the light is incredible here in Edmonton. Do you have a specific date in mind?", time: '10:22 AM', status: 'read' },
-      { id: 4, from: 'me', text: "We're thinking September 13th. It's at the Fairmont Macdonald downtown.", time: '10:45 AM', status: 'read' },
-      { id: 5, from: 'them', text: "Oh I love the Fairmont — shot there twice last year. The staircase is stunning for portraits.", time: '11:01 AM', status: 'read', reaction: '❤️' },
-      { id: 6, from: 'them', text: "Let me check my calendar… yes, September 13th is available! I'd love to set up a quick 20-minute call to learn more about your vision.", time: '11:02 AM', status: 'read' },
-      { id: 7, from: 'me', text: "That sounds perfect! Would Thursday afternoon work for you?", time: '2:30 PM', status: 'read' },
-      { id: 8, from: 'them', text: "Thursday works great. How about 3 PM? I'll send a calendar invite.", time: '2:41 PM', status: 'read' },
-      { id: 9, from: 'them', text: "Also — I have availability in September — shall we hop on a quick call to discuss packages too?", time: '2:41 PM', status: 'delivered' },
-    ],
-  },
-  'marcus-wright': {
-    slug: 'marcus-wright',
-    name: 'Marcus Wright',
-    initials: 'MW',
-    specialty: 'Corporate · Events',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=80&fit=crop&crop=face',
-    status: 'away',
-    lastSeen: 'Last seen 1h ago',
-    rating: 4.7,
-    rate: '$150/hr',
-    messages: [
-      { id: 1, from: 'me', text: "Hi Marcus, we're organizing our annual company conference in November and need a photographer for the full day. Do you do day-rate packages?", time: 'Yesterday 9:00 AM', status: 'read' },
-      { id: 2, from: 'them', text: "Hi! Yes absolutely — corporate events are my bread and butter. My full-day rate is $1,200 and includes edited hi-res images delivered within 5 business days.", time: 'Yesterday 9:45 AM', status: 'read' },
-      { id: 3, from: 'me', text: "That sounds reasonable. What does the package include exactly?", time: 'Yesterday 10:02 AM', status: 'read' },
-      { id: 4, from: 'them', text: "Happy to send over a full package breakdown.", time: 'Yesterday 10:15 AM', status: 'delivered' },
-    ],
-  },
-  'priya-patel': {
-    slug: 'priya-patel',
-    name: 'Priya Patel',
-    initials: 'PP',
-    specialty: 'Newborn · Family',
-    avatar: '',
-    status: 'offline',
-    lastSeen: 'Last seen 3 days ago',
-    rating: 4.8,
-    rate: '$175/session',
-    messages: [
-      { id: 1, from: 'me', text: "Hi Priya! We're expecting our first baby in July and would love newborn photos. When do you typically schedule sessions?", time: 'May 10 · 3:00 PM', status: 'read' },
-      { id: 2, from: 'them', text: "Congratulations!! 🥰 I schedule newborn sessions between 5–14 days after birth — that's the sweet spot when babies are sleepiest and most poseable.", time: 'May 10 · 4:30 PM', status: 'read' },
-      { id: 3, from: 'them', text: "I'd suggest booking me now and we can put a tentative date around your due date, then adjust once baby arrives.", time: 'May 10 · 4:31 PM', status: 'read' },
-      { id: 4, from: 'me', text: "Thanks Priya, I'll confirm the date by end of week.", time: 'May 11 · 9:15 AM', status: 'read' },
-    ],
-  },
-}
-
-const FALLBACK: Conversation = {
-  slug: 'unknown',
-  name: 'Photographer',
-  initials: 'P',
-  specialty: 'Photography',
-  avatar: '',
-  status: 'offline',
-  lastSeen: 'Last seen recently',
-  rating: 5.0,
-  rate: 'Contact for pricing',
-  messages: [],
+interface ConvMeta {
+  id: string
+  photographer_username: string | null
+  photographer_display_name: string | null
+  photographer_avatar_url: string | null
+  unread_count: number
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const EMOJIS = ['😊','😄','😍','🥰','😂','🙏','👍','❤️','🎉','🔥','✨','📸','💍','🌸','😎','🤝','💯','🙌','😮','😢']
-
-function StatusDot({ status }: { status: ConvStatus }) {
-  const color = status === 'online' ? 'bg-emerald-400' : status === 'away' ? 'bg-amber-400' : 'bg-ink-200'
-  return <span className={`w-2.5 h-2.5 rounded-full border-2 border-white ${color} flex-shrink-0`} />
-}
 
 function Tick({ status }: { status: MessageStatus }) {
   if (status === 'read') return <CheckCheck className="w-3 h-3 text-emerald-500" />
@@ -140,6 +60,31 @@ function EmojiPicker({ onPick, onClose }: { onPick: (e: string) => void; onClose
           {e}
         </button>
       ))}
+      <button type="button" onClick={onClose} className="col-span-5 text-xs text-ink-300 mt-1 hover:text-ink">Close</button>
+    </div>
+  )
+}
+
+// ─── Booking card bubble ──────────────────────────────────────────────────────
+
+function BookingBubble({ text }: { text: string }) {
+  // Parse: "📅 Booking request · {date} · {timeSlot}[\n\n{description}]"
+  const lines = text.split('\n\n')
+  const header = lines[0] ?? ''
+  const desc = lines.slice(1).join('\n\n').trim()
+  const parts = header.split(' · ')
+  const datePart = parts[1] ?? ''
+  const timePart = parts.slice(2).join(' · ')
+
+  return (
+    <div className="bg-ink-50 border border-ink-100 rounded-2xl px-4 py-3 max-w-xs">
+      <div className="flex items-center gap-2 mb-2">
+        <Calendar className="w-4 h-4 text-ink-400 flex-shrink-0" />
+        <span className="text-xs font-semibold text-ink-500 uppercase tracking-wide">Booking request</span>
+      </div>
+      {datePart && <p className="text-sm font-semibold text-ink leading-tight">{datePart}</p>}
+      {timePart && <p className="text-xs text-ink-400 mt-0.5">{timePart}</p>}
+      {desc && <p className="text-sm text-ink-500 mt-2 leading-relaxed border-t border-ink-100 pt-2">{desc}</p>}
     </div>
   )
 }
@@ -148,32 +93,136 @@ function EmojiPicker({ onPick, onClose }: { onPick: (e: string) => void; onClose
 
 export default function ThreadPage() {
   const params = useParams()
-  const slug = typeof params.slug === 'string' ? params.slug : ''
-  const conv = CONVERSATIONS[slug] ?? FALLBACK
+  // params.slug is actually the conversation UUID
+  const conversationId = typeof params.slug === 'string' ? params.slug : ''
 
-  const [messages, setMessages] = useState<Msg[]>(conv.messages)
+  const [conv, setConv] = useState<ConvMeta | null>(null)
+  const [messages, setMessages] = useState<Msg[]>([])
+  const [loading, setLoading] = useState(true)
   const [input, setInput] = useState('')
   const [showEmoji, setShowEmoji] = useState(false)
-  const [recording, setRecording] = useState(false)
+const [sending, setSending] = useState(false)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const loadThread = useCallback(async () => {
+    if (!conversationId) return
+    try {
+      const [msgsRes, convsRes] = await Promise.all([
+        fetch(`/api/client/messages/${conversationId}`),
+        fetch('/api/client/conversations'),
+      ])
+      if (msgsRes.ok) {
+        const data = await msgsRes.json()
+        setMessages(
+          (data as any[]).map((m: any) => ({
+            id: m.id,
+            from: m.from,
+            text: m.text,
+            time: m.time,
+            status: 'read' as MessageStatus,
+            isSystem: m.isSystem ?? false,
+            attachmentUrl: m.attachmentUrl ?? null,
+            attachmentType: m.attachmentType ?? null,
+            attachmentName: m.attachmentName ?? null,
+            attachmentSize: m.attachmentSize ?? null,
+          }))
+        )
+      }
+      if (convsRes.ok) {
+        const convs: ConvMeta[] = await convsRes.json()
+        const found = convs.find((c: ConvMeta) => c.id === conversationId)
+        if (found) setConv(found)
+      }
+    } catch { /* silent */ }
+    finally { setLoading(false) }
+  }, [conversationId])
+
+  useEffect(() => {
+    loadThread()
+  }, [loadThread])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
 
-  function sendMessage() {
+  async function sendMessage() {
     const text = input.trim()
-    if (!text || text.length > MAX_MESSAGE_LENGTH) return
-    setMessages(prev => [...prev, { id: Date.now(), from: 'me', text, time: 'now', status: 'sent' }])
+    if ((!text && !pendingFile) || text.length > MAX_MESSAGE_LENGTH || sending || uploading) return
+    setSending(true)
     setInput('')
     setShowEmoji(false)
-    inputRef.current?.focus()
+
+    let attachmentUrl: string | null = null
+    let attachmentType: string | null = null
+    let attachmentName: string | null = null
+    let attachmentSize: number | null = null
+
+    if (pendingFile) {
+      setUploading(true)
+      try {
+        const fd = new FormData()
+        fd.append('file', pendingFile)
+        fd.append('conversation_id', conversationId)
+        const upRes = await fetch('/api/client/messages/upload', { method: 'POST', body: fd })
+        if (upRes.ok) {
+          const upData = await upRes.json()
+          attachmentUrl = upData.url
+          attachmentType = upData.type
+          attachmentName = upData.name
+          attachmentSize = upData.size
+        }
+      } finally {
+        setPendingFile(null)
+        setUploading(false)
+      }
+    }
+
+    const optimisticId = Date.now()
+    setMessages(prev => [...prev, {
+      id: optimisticId, from: 'me', text, time: new Date().toISOString(), status: 'sent',
+      attachmentUrl, attachmentType, attachmentName, attachmentSize,
+    }])
+
+    try {
+      const res = await fetch(`/api/client/messages/${conversationId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, attachment_url: attachmentUrl, attachment_type: attachmentType, attachment_name: attachmentName, attachment_size: attachmentSize }),
+      })
+      if (res.ok) {
+        const msg = await res.json()
+        setMessages(prev => prev.map(m => m.id === optimisticId ? { ...msg, status: 'delivered' as MessageStatus } : m))
+      } else {
+        // Remove optimistic on failure
+        setMessages(prev => prev.filter(m => m.id !== optimisticId))
+        setInput(text)
+      }
+    } catch {
+      setMessages(prev => prev.filter(m => m.id !== optimisticId))
+      setInput(text)
+    } finally {
+      setSending(false)
+      inputRef.current?.focus()
+    }
   }
 
   function handleKey(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
   }
+
+  const photographerName = conv?.photographer_display_name ?? 'Photographer'
+  const photographerUsername = conv?.photographer_username ?? null
+  const avatarUrl = conv?.photographer_avatar_url ?? null
+  const initials = photographerName
+    .split(' ')
+    .filter(Boolean)
+    .map(w => w[0].toUpperCase())
+    .slice(0, 2)
+    .join('')
 
   return (
     <div className="h-screen flex flex-col bg-white overflow-hidden">
@@ -184,37 +233,33 @@ export default function ThreadPage() {
         </Link>
 
         <div className="relative flex-shrink-0">
-          {conv.avatar ? (
+          {avatarUrl ? (
             <div className="w-10 h-10 rounded-xl overflow-hidden">
-              <Image src={conv.avatar} alt={conv.name} width={40} height={40} className="object-cover w-full h-full" />
+              <Image src={avatarUrl} alt={photographerName} width={40} height={40} className="object-cover w-full h-full" />
             </div>
           ) : (
             <div className="w-10 h-10 rounded-xl bg-ink flex items-center justify-center text-white text-xs font-bold">
-              {conv.initials}
+              {initials}
             </div>
           )}
-          <div className="absolute -bottom-0.5 -right-0.5"><StatusDot status={conv.status} /></div>
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className="font-semibold text-ink text-sm">{conv.name}</p>
-            <span className="text-[10px] text-ink-300 bg-ink-50 px-1.5 py-0.5 rounded hidden sm:block">{conv.specialty}</span>
+            <p className="font-semibold text-ink text-sm">{photographerName}</p>
           </div>
-          <p className={`text-[10px] ${conv.status === 'online' ? 'text-emerald-500 font-medium' : 'text-ink-300'}`}>
-            {conv.lastSeen}
-          </p>
+          {photographerUsername && (
+            <p className="text-[10px] text-ink-300">@{photographerUsername}</p>
+          )}
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
-          <Link href={`/photographers/${conv.slug}`}
-            className="hidden sm:flex items-center gap-1.5 text-xs text-ink-400 hover:text-ink border border-ink-100 px-2.5 py-1.5 rounded-lg transition-colors">
-            <ExternalLink className="w-3 h-3" /> Profile
-          </Link>
-          <div className="hidden sm:flex items-center gap-1 text-xs text-ink-400 border border-ink-100 px-2.5 py-1.5 rounded-lg">
-            <Star className="w-3 h-3 fill-ink text-ink" />
-            {conv.rating}
-          </div>
+          {photographerUsername && (
+            <Link href={`/photographers/${photographerUsername}`}
+              className="hidden sm:flex items-center gap-1.5 text-xs text-ink-400 hover:text-ink border border-ink-100 px-2.5 py-1.5 rounded-lg transition-colors">
+              <ExternalLink className="w-3 h-3" /> Profile
+            </Link>
+          )}
           <button className="w-8 h-8 rounded-lg border border-ink-100 flex items-center justify-center hover:bg-ink-50 transition-colors">
             <MoreVertical className="w-4 h-4 text-ink-400" />
           </button>
@@ -223,18 +268,24 @@ export default function ThreadPage() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 bg-ink-50/30 space-y-1">
-        {messages.length === 0 && (
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-5 h-5 animate-spin text-ink-300" />
+          </div>
+        )}
+
+        {!loading && messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center py-12">
             <div className="w-14 h-14 rounded-2xl bg-ink-50 flex items-center justify-center mb-4">
-              {conv.avatar ? (
-                <Image src={conv.avatar} alt={conv.name} width={56} height={56} className="rounded-2xl object-cover" />
+              {avatarUrl ? (
+                <Image src={avatarUrl} alt={photographerName} width={56} height={56} className="rounded-2xl object-cover" />
               ) : (
-                <span className="text-ink-300 font-bold text-lg">{conv.initials}</span>
+                <span className="text-ink-300 font-bold text-lg">{initials}</span>
               )}
             </div>
-            <p className="font-semibold text-ink text-sm mb-1">Start a conversation with {conv.name}</p>
+            <p className="font-semibold text-ink text-sm mb-1">Start a conversation with {photographerName}</p>
             <p className="text-ink-300 text-xs max-w-xs leading-relaxed">
-              Ask about availability, packages, or anything about their work. They typically reply {conv.rate.includes('session') ? 'within a few hours' : 'quickly'}.
+              Ask about availability, packages, or anything about their work.
             </p>
           </div>
         )}
@@ -242,19 +293,29 @@ export default function ThreadPage() {
         {messages.map((msg, i) => {
           const fromMe = msg.from === 'me'
           const isLastInGroup = messages[i + 1]?.from !== msg.from
+
+          // Booking card bubble
+          if (msg.isSystem) {
+            return (
+              <div key={msg.id} className="flex justify-center my-3">
+                <BookingBubble text={msg.text} />
+              </div>
+            )
+          }
+
           return (
             <div key={msg.id}
               className={`flex items-end gap-2 ${fromMe ? 'justify-end' : 'justify-start'} ${i > 0 && messages[i - 1].from === msg.from ? 'mt-0.5' : 'mt-4'}`}>
               {!fromMe && (
                 <div className="w-7 h-7 flex-shrink-0 mb-1">
                   {isLastInGroup && (
-                    conv.avatar ? (
+                    avatarUrl ? (
                       <div className="w-7 h-7 rounded-lg overflow-hidden">
-                        <Image src={conv.avatar} alt={conv.name} width={28} height={28} className="object-cover" />
+                        <Image src={avatarUrl} alt={photographerName} width={28} height={28} className="object-cover" />
                       </div>
                     ) : (
                       <div className="w-7 h-7 rounded-lg bg-ink flex items-center justify-center text-white text-[9px] font-bold">
-                        {conv.initials}
+                        {initials}
                       </div>
                     )
                   )}
@@ -262,19 +323,29 @@ export default function ThreadPage() {
               )}
 
               <div className={`flex flex-col ${fromMe ? 'items-end' : 'items-start'} max-w-[72%] sm:max-w-[60%]`}>
-                <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed relative ${
+                <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
                   fromMe ? 'bg-ink text-white rounded-br-sm' : 'bg-white text-ink border border-ink-100 rounded-bl-sm'
                 }`} style={{ boxShadow: fromMe ? 'none' : '0 1px 2px rgba(0,0,0,0.04)' }}>
                   {msg.text}
-                  {msg.reaction && (
-                    <span className="absolute -bottom-3 -right-1 text-sm bg-white border border-ink-100 rounded-full w-6 h-6 flex items-center justify-center shadow-sm">
-                      {msg.reaction}
-                    </span>
+                  {msg.attachmentUrl && (
+                    <AttachmentBubble
+                      url={msg.attachmentUrl}
+                      type={msg.attachmentType ?? ''}
+                      name={msg.attachmentName}
+                      size={msg.attachmentSize}
+                      fromMe={fromMe}
+                    />
                   )}
                 </div>
                 {isLastInGroup && (
                   <div className={`flex items-center gap-1 mt-1.5 ${fromMe ? 'flex-row-reverse' : ''}`}>
-                    <span className="text-[10px] text-ink-200">{msg.time}</span>
+                    <span className="text-[10px] text-ink-200">
+                      {(() => {
+                        try {
+                          return new Date(msg.time).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })
+                        } catch { return msg.time }
+                      })()}
+                    </span>
                     {fromMe && <Tick status={msg.status} />}
                   </div>
                 )}
@@ -287,11 +358,26 @@ export default function ThreadPage() {
 
       {/* Composer */}
       <div className="bg-white border-t border-ink-100 px-4 sm:px-5 py-3 flex-shrink-0">
+        {pendingFile && (
+          <AttachmentPreview file={pendingFile} onRemove={() => setPendingFile(null)} />
+        )}
         <div className="flex items-end gap-2.5">
           <button type="button"
+            onClick={() => fileInputRef.current?.click()}
             className="w-9 h-9 rounded-xl border border-ink-100 flex items-center justify-center hover:bg-ink-50 transition-colors flex-shrink-0 mb-0.5">
             <Paperclip className="w-4 h-4 text-ink-400" />
           </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*,.pdf"
+            className="hidden"
+            onChange={e => {
+              const f = e.target.files?.[0]
+              if (f) setPendingFile(f)
+              e.target.value = ''
+            }}
+          />
 
           <div className="flex-1 relative">
             {showEmoji && (
@@ -312,7 +398,7 @@ export default function ThreadPage() {
                 }}
                 onKeyDown={handleKey}
                 maxLength={MAX_MESSAGE_LENGTH}
-                placeholder={`Message ${conv.name}…`}
+                placeholder={`Message ${photographerName}…`}
                 className="flex-1 bg-transparent text-ink text-sm placeholder-ink-300 outline-none resize-none leading-relaxed"
                 style={{ minHeight: 24, maxHeight: 120 }}
               />
@@ -323,27 +409,11 @@ export default function ThreadPage() {
             </div>
           </div>
 
-          {input.trim() ? (
-            <button type="button" onClick={sendMessage}
-              className="w-9 h-9 rounded-xl bg-ink hover:bg-ink-800 flex items-center justify-center transition-colors flex-shrink-0 mb-0.5">
-              <Send className="w-4 h-4 text-white" />
-            </button>
-          ) : (
-            <button type="button"
-              onMouseDown={() => setRecording(true)}
-              onMouseUp={() => setRecording(false)}
-              onMouseLeave={() => setRecording(false)}
-              className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all flex-shrink-0 mb-0.5 ${recording ? 'bg-ink border-ink scale-110' : 'border-ink-100 hover:bg-ink-50'}`}>
-              <Mic className={`w-4 h-4 ${recording ? 'text-white' : 'text-ink-400'}`} />
-            </button>
-          )}
+          <button type="button" onClick={sendMessage} disabled={(!input.trim() && !pendingFile) || sending || uploading}
+            className="w-9 h-9 rounded-xl bg-ink hover:bg-ink-800 flex items-center justify-center transition-colors flex-shrink-0 mb-0.5 disabled:opacity-30 disabled:cursor-not-allowed">
+            {(sending || uploading) ? <Loader2 className="w-4 h-4 text-white animate-spin" /> : <Send className="w-4 h-4 text-white" />}
+          </button>
         </div>
-        {recording && (
-          <div className="flex items-center gap-2 mt-2 px-1">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-xs text-ink-400">Hold to record · Release to send</span>
-          </div>
-        )}
       </div>
     </div>
   )

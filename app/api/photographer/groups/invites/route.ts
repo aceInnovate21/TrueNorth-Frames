@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
+import { notify } from '@/lib/notify'
 
 // POST /api/photographer/groups/invites — invite a photographer to a group
 // Body: { group_id, invitee_id }
@@ -56,6 +57,35 @@ export async function POST(request: NextRequest) {
     )
 
   if (error) return serverError('Failed to send invite')
+
+  // Notify invitee photographer
+  const { data: inviteeProfile } = await db
+    .from('photographer_profiles')
+    .select('user_id')
+    .eq('id', invitee_id)
+    .single()
+  const { data: group } = await db
+    .from('photographer_groups')
+    .select('name')
+    .eq('id', group_id)
+    .single()
+  const { data: inviterProfile } = await db
+    .from('photographer_profiles')
+    .select('display_name')
+    .eq('id', me.id)
+    .single()
+
+  if (inviteeProfile?.user_id) {
+    await notify({
+      db,
+      userId: inviteeProfile.user_id,
+      type: 'group_invite',
+      title: 'Group invitation',
+      body: `${inviterProfile?.display_name ?? 'A photographer'} invited you to join "${group?.name ?? 'a group'}".`,
+      entityType: 'photographer_group',
+      entityId: group_id,
+    })
+  }
 
   return NextResponse.json({ success: true })
 }

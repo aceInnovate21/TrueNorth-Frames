@@ -2,10 +2,10 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   ArrowLeft, Star, MapPin, Shield, Camera, CheckCircle2,
-  Globe, Instagram, ExternalLink, Award, Calendar, DollarSign,
+  Globe, Instagram, Facebook, ExternalLink, Award, Calendar, DollarSign,
   ChevronDown, Package, Eye, Pencil, AlertCircle, ChevronLeft, ChevronRight, X, Layers,
 } from 'lucide-react'
 
@@ -27,9 +27,11 @@ interface ProfileData {
   native_review_count: number
   profile_view_count: number
   member_since: string
+  contact_instagram_url: string | null
+  contact_facebook_url: string | null
   specialties: string[]
   links: Record<string, { url: string; rating: number | null; count: number | null }>
-  native_reviews: { id: string; rating: number; body: string; created_at: string; reviewer_name: string }[]
+  native_reviews: { id: string; rating: number; body: string; public_reply: string | null; client_reply: string | null; created_at: string; reviewer_name: string; communication_rating: number | null; quality_rating: number | null; value_rating: number | null; punctuality_rating: number | null }[]
   packages: { id: string; name: string; description: string; billingType: string; price: number; deliverables: string[]; isPopular: boolean }[]
   faqs: { id: string; question: string; answer: string }[]
   availability: { date: string; status: string }[]
@@ -126,20 +128,110 @@ function VideoModal({ src, title, onClose }: { src: string; title: string; onClo
 }
 
 function PortfolioPreview({ profile }: { profile: ProfileData }) {
-  const [openAlbumId, setOpenAlbumId] = useState<string | null>(null)
-  const [lightbox, setLightbox] = useState<{ photos: { id: string; src: string; caption: string }[]; idx: number } | null>(null)
-  const [activeVideo, setActiveVideo] = useState<{ src: string; title: string } | null>(null)
+  const [expanded, setExpanded] = useState(false)
+  const [openAlbum, setOpenAlbum] = useState<{ album: typeof profile.portfolio_albums[0]; slideIdx: number } | null>(null)
+  const slideRef = useRef<HTMLDivElement>(null)
 
   const albums = profile.portfolio_albums
   const allPhotos = profile.portfolio_photos
   const allVideos = profile.portfolio_videos
   const standalonePhotos = profile.standalone_photos
   const standaloneVideos = profile.standalone_videos
-
-  const openAlbum = openAlbumId ? albums.find(a => a.id === openAlbumId) ?? null : null
-  const albumPhotos = openAlbumId ? allPhotos.filter(p => p.album_id === openAlbumId) : []
-  const albumVideos = openAlbumId ? allVideos.filter(v => v.album_id === openAlbumId) : []
   const isEmpty = standalonePhotos.length === 0 && standaloneVideos.length === 0 && albums.length === 0
+
+  const postCount = standalonePhotos.length + standaloneVideos.length
+  const albumCount = albums.length
+
+  const albumSlides = openAlbum
+    ? [
+        ...allPhotos.filter(p => p.album_id === openAlbum.album.id).map(p => ({ id: p.id, src: p.src, label: p.caption, isVideo: false })),
+        ...allVideos.filter(v => v.album_id === openAlbum.album.id).map(v => ({ id: v.id, src: v.src, label: v.title, isVideo: true })),
+      ]
+    : []
+
+  function goSlide(dir: 1 | -1) {
+    if (!openAlbum) return
+    const next = Math.max(0, Math.min(albumSlides.length - 1, openAlbum.slideIdx + dir))
+    setOpenAlbum({ ...openAlbum, slideIdx: next })
+    slideRef.current?.children[next]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' })
+  }
+
+  useEffect(() => {
+    if (!expanded) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') { setOpenAlbum(null); setExpanded(false) }
+      if (openAlbum) {
+        if (e.key === 'ArrowRight') goSlide(1)
+        if (e.key === 'ArrowLeft') goSlide(-1)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [expanded, openAlbum, albumSlides.length])
+
+  const masonryItems = [
+    ...albums.map(a => ({ type: 'album' as const, id: a.id, src: a.cover_src || (a.collage_srcs?.[0] ?? ''), label: a.title, album: a })),
+    ...standalonePhotos.map(ph => ({ type: 'photo' as const, id: ph.id, src: ph.src, label: ph.caption, album: null as any })),
+    ...standaloneVideos.map(v => ({ type: 'video' as const, id: v.id, src: v.src, label: v.title, album: null as any })),
+  ]
+
+  function MasonryGrid() {
+    return (
+      <div className="columns-2 sm:columns-3" style={{ columnGap: '6px' }}>
+        {masonryItems.map(item => (
+          <div key={item.id} className="break-inside-avoid mb-1.5 relative rounded-xl overflow-hidden bg-ink-100 group cursor-pointer"
+            onClick={() => setExpanded(true)}>
+            {item.type === 'video' ? (
+              <div className="relative">
+                <video src={item.src} className="w-full h-auto block" muted preload="metadata" />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/50 transition-colors pointer-events-none">
+                  <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow">
+                    <svg className="w-3.5 h-3.5 text-ink ml-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="relative">
+                {item.src ? <img src={item.src} alt={item.label || ''} className="w-full h-auto block" /> : <div className="w-full aspect-square flex items-center justify-center bg-ink-100"><Camera className="w-6 h-6 text-ink-200" /></div>}
+                {item.type === 'album' && <div className="absolute top-1.5 right-1.5 bg-black/50 backdrop-blur-sm rounded-full px-1.5 py-0.5 flex items-center gap-1 pointer-events-none"><Layers className="w-2.5 h-2.5 text-white" /></div>}
+                {item.label && <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2 translate-y-full group-hover:translate-y-0 transition-transform duration-300 pointer-events-none"><p className="text-white text-[10px] font-medium line-clamp-2">{item.label}</p></div>}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  function FeedItem({ item }: { item: typeof masonryItems[0] }) {
+    return (
+      <div className="w-full mb-1">
+        {item.type === 'album' ? (
+          <button className="w-full relative group cursor-pointer" onClick={() => setOpenAlbum({ album: item.album, slideIdx: 0 })}>
+            {item.src ? <img src={item.src} alt={item.label || ''} className="w-full h-auto block" /> : <div className="w-full aspect-video bg-white/10 flex items-center justify-center"><Camera className="w-8 h-8 text-white/30" /></div>}
+            <div className="absolute inset-0 bg-black/30 group-hover:bg-black/50 transition-colors flex flex-col items-center justify-center gap-2">
+              <div className="bg-white/20 backdrop-blur-sm rounded-2xl px-5 py-3 flex items-center gap-2">
+                <Layers className="w-4 h-4 text-white" />
+                <span className="text-white font-semibold text-sm">{item.label}</span>
+                <span className="text-white/60 text-xs">· {item.album.photo_count + item.album.video_count} items</span>
+              </div>
+              <p className="text-white/60 text-xs">Tap to view album</p>
+            </div>
+          </button>
+        ) : item.type === 'video' ? (
+          <div className="relative w-full">
+            <video src={item.src} className="w-full h-auto block" controls preload="metadata" />
+            {item.label && <p className="text-white/60 text-xs px-1 pt-1.5">{item.label}</p>}
+          </div>
+        ) : (
+          <div className="relative w-full">
+            <img src={item.src} alt={item.label || ''} className="w-full h-auto block" />
+            {item.label && <p className="text-white/60 text-xs px-1 pt-1.5">{item.label}</p>}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   if (isEmpty) {
     return (
@@ -152,167 +244,94 @@ function PortfolioPreview({ profile }: { profile: ProfileData }) {
   }
 
   return (
-    <div>
-      {openAlbum ? (
-        /* ── Album drill-down ── */
-        <div>
-          <div className="flex items-center gap-2 mb-4 pb-3 border-b border-ink-100">
-            <button type="button" onClick={() => setOpenAlbumId(null)}
-              className="flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink transition-colors font-medium">
-              <ChevronLeft className="w-4 h-4" /> Portfolio
-            </button>
-            <span className="text-ink-200">/</span>
-            <span className="text-sm font-semibold text-ink">{openAlbum.title}</span>
-            <span className="text-xs text-ink-300">({albumPhotos.length + albumVideos.length} items)</span>
-          </div>
+    <>
+      {/* Scrollable masonry container */}
+      <div className="overflow-y-auto cursor-pointer" style={{ maxHeight: '480px' }} onClick={() => setExpanded(true)}>
+        <MasonryGrid />
+      </div>
+      <button onClick={() => setExpanded(true)}
+        className="mt-3 w-full text-xs text-ink-300 hover:text-ink transition-colors flex items-center justify-center gap-1">
+        <ChevronRight className="w-3.5 h-3.5" />Expand full view
+      </button>
 
-          {albumPhotos.length === 0 && albumVideos.length === 0 ? (
-            <div className="py-12 text-center">
-              <Camera className="w-8 h-8 text-ink-200 mx-auto mb-2" />
-              <p className="text-ink-400 text-sm">This album is empty</p>
-              <Link href="/dashboard/photographer?tab=portfolio" className="text-xs text-ink underline mt-1 inline-block">Add photos</Link>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {albumPhotos.length > 0 && (
-                <div className="columns-2 sm:columns-3" style={{ columnGap: '6px' }}>
-                  {albumPhotos.map((ph, idx) => (
-                    <button key={ph.id} type="button" onClick={() => setLightbox({ photos: albumPhotos, idx })}
-                      className="relative w-full break-inside-avoid rounded-xl overflow-hidden bg-ink-100 group block cursor-pointer"
-                      style={{ marginBottom: '6px' }}>
-                      <img src={ph.src} alt={ph.caption || ''} className="w-full h-auto block" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-300 pointer-events-none" />
-                      {ph.caption && (
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 translate-y-full group-hover:translate-y-0 transition-transform duration-300 pointer-events-none">
-                          <p className="text-white text-[10px] font-medium line-clamp-2">{ph.caption}</p>
-                        </div>
-                      )}
-                    </button>
+      {/* Fullscreen overlay */}
+      {expanded && (
+        <div className="fixed inset-0 z-50 bg-black flex flex-col">
+          {openAlbum ? (
+            <>
+              {/* Album slide header */}
+              <div className="flex items-center justify-between px-4 py-3 flex-shrink-0 border-b border-white/10">
+                <button onClick={() => setOpenAlbum(null)} className="flex items-center gap-1.5 text-white/70 hover:text-white transition-colors text-sm">
+                  <ChevronLeft className="w-4 h-4" />{openAlbum.album.title}
+                </button>
+                <span className="text-white/40 text-xs tabular-nums">{openAlbum.slideIdx + 1} / {albumSlides.length}</span>
+                <button onClick={() => { setOpenAlbum(null); setExpanded(false) }} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+                  <X className="w-4 h-4 text-white" />
+                </button>
+              </div>
+
+              {/* Horizontal scroll snap */}
+              <div className="relative flex-1 flex items-center">
+                <div ref={slideRef} className="flex w-full h-full overflow-x-auto" style={{ scrollSnapType: 'x mandatory', scrollBehavior: 'smooth' }}>
+                  {albumSlides.map((slide, i) => (
+                    <div key={slide.id} className="flex-shrink-0 w-full h-full flex items-center justify-center p-2 sm:p-6" style={{ scrollSnapAlign: 'start' }}>
+                      {slide.isVideo
+                        ? <video src={slide.src} className="max-w-full max-h-full w-auto h-auto rounded-xl" controls preload="metadata" />
+                        : <img src={slide.src} alt={slide.label || ''} className="max-w-full max-h-full w-auto h-auto rounded-xl object-contain" />
+                      }
+                    </div>
+                  ))}
+                </div>
+                {openAlbum.slideIdx > 0 && (
+                  <button onClick={() => goSlide(-1)} className="hidden sm:flex absolute left-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 items-center justify-center transition-colors z-10">
+                    <ChevronLeft className="w-5 h-5 text-white" />
+                  </button>
+                )}
+                {openAlbum.slideIdx < albumSlides.length - 1 && (
+                  <button onClick={() => goSlide(1)} className="hidden sm:flex absolute right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 items-center justify-center transition-colors z-10">
+                    <ChevronRight className="w-5 h-5 text-white" />
+                  </button>
+                )}
+              </div>
+
+              {/* Dot indicator */}
+              {albumSlides.length > 1 && (
+                <div className="flex justify-center gap-1 py-3 flex-shrink-0">
+                  {albumSlides.map((_, i) => (
+                    <button key={i} onClick={() => { setOpenAlbum({ ...openAlbum, slideIdx: i }); slideRef.current?.children[i]?.scrollIntoView({ behavior: 'smooth', inline: 'start' }) }}
+                      className={`rounded-full transition-all ${i === openAlbum.slideIdx ? 'w-4 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/30'}`} />
                   ))}
                 </div>
               )}
-              {albumVideos.length > 0 && (
-                <>
-                  {albumPhotos.length > 0 && <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wide">Videos</p>}
-                  <div className="grid grid-cols-2 gap-3">
-                    {albumVideos.map(vid => (
-                      <button key={vid.id} type="button" onClick={() => setActiveVideo({ src: vid.src, title: vid.title })}
-                        className="relative rounded-xl overflow-hidden bg-ink-900 group aspect-video block w-full cursor-pointer">
-                        {vid.src && <video src={vid.src} className="w-full h-full object-cover" muted preload="metadata" />}
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/50 transition-colors pointer-events-none">
-                          <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center shadow group-hover:scale-110 transition-transform">
-                            <svg className="w-4 h-4 text-ink ml-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-                          </div>
-                        </div>
-                        {vid.title && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 pointer-events-none">
-                            <p className="text-white text-[10px] font-medium line-clamp-1">{vid.title}</p>
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      ) : (
-        /* ── Top-level: albums + standalone photos + standalone videos ── */
-        <div className="space-y-6">
-          {albums.length > 0 && (
-            <div>
-              <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wide mb-2">Albums</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {albums.map(album => {
-                  const srcs = album.collage_srcs?.length ? album.collage_srcs : album.cover_src ? [album.cover_src] : []
-                  const total = album.photo_count + album.video_count
-                  return (
-                    <button key={album.id} type="button" onClick={() => setOpenAlbumId(album.id)}
-                      className="relative aspect-square rounded-xl overflow-hidden bg-ink-100 group cursor-pointer block w-full">
-                      {srcs.length >= 4 ? (
-                        <div className="grid grid-cols-2 gap-0.5 w-full h-full">
-                          {srcs.slice(0, 4).map((s, i) => (
-                            <div key={i} className="overflow-hidden">
-                              <img src={s} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                            </div>
-                          ))}
-                        </div>
-                      ) : srcs[0] ? (
-                        <img src={srcs[0]} alt={album.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-ink-100">
-                          <Camera className="w-8 h-8 text-ink-200" />
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent pointer-events-none" />
-                      <div className="absolute bottom-0 left-0 right-0 p-2.5 pointer-events-none">
-                        <p className="text-white text-xs font-semibold leading-tight truncate">{album.title}</p>
-                        <p className="text-white/60 text-[10px] mt-0.5">{total} item{total !== 1 ? 's' : ''}</p>
-                      </div>
-                      <div className="absolute top-2 right-2 pointer-events-none">
-                        <div className="flex items-center gap-1 bg-black/50 backdrop-blur-sm rounded-full px-1.5 py-0.5">
-                          <Layers className="w-2.5 h-2.5 text-white" />
-                          <span className="text-white text-[9px] font-semibold">{total}</span>
-                        </div>
-                      </div>
-                    </button>
-                  )
-                })}
+            </>
+          ) : (
+            <>
+              {/* Feed header */}
+              <div className="flex items-center justify-between px-4 py-3 flex-shrink-0 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <Camera className="w-4 h-4 text-white/60" />
+                  <span className="text-white font-semibold text-sm">Portfolio</span>
+                  <span className="text-white/40 text-xs">
+                    {postCount > 0 ? `${postCount} post${postCount !== 1 ? 's' : ''}` : ''}
+                    {albumCount > 0 ? `${postCount > 0 ? ' · ' : ''}${albumCount} album${albumCount !== 1 ? 's' : ''}` : ''}
+                  </span>
+                </div>
+                <button onClick={() => setExpanded(false)} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+                  <X className="w-4 h-4 text-white" />
+                </button>
               </div>
-            </div>
-          )}
 
-          {standalonePhotos.length > 0 && (
-            <div>
-              <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wide mb-2">Photos</p>
-              <div className="columns-2 sm:columns-3" style={{ columnGap: '6px' }}>
-                {standalonePhotos.map((ph, idx) => (
-                  <button key={ph.id} type="button" onClick={() => setLightbox({ photos: standalonePhotos, idx })}
-                    className="relative w-full break-inside-avoid rounded-xl overflow-hidden bg-ink-100 group block cursor-pointer"
-                    style={{ marginBottom: '6px' }}>
-                    <img src={ph.src} alt={ph.caption || ''} className="w-full h-auto block" />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-300 pointer-events-none" />
-                    {ph.caption && (
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 translate-y-full group-hover:translate-y-0 transition-transform duration-300 pointer-events-none">
-                        <p className="text-white text-[10px] font-medium line-clamp-2">{ph.caption}</p>
-                      </div>
-                    )}
-                  </button>
-                ))}
+              {/* Vertical Instagram-style feed */}
+              <div className="flex-1 overflow-y-auto">
+                <div className="max-w-2xl mx-auto py-2 px-2 sm:px-0 space-y-1">
+                  {masonryItems.map(item => <FeedItem key={item.id} item={item} />)}
+                </div>
               </div>
-            </div>
-          )}
-
-          {standaloneVideos.length > 0 && (
-            <div>
-              <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wide mb-2">Videos</p>
-              <div className="grid grid-cols-2 gap-3">
-                {standaloneVideos.map(vid => (
-                  <button key={vid.id} type="button" onClick={() => setActiveVideo({ src: vid.src, title: vid.title })}
-                    className="relative rounded-xl overflow-hidden bg-ink-900 group aspect-video block w-full cursor-pointer">
-                    {vid.src && <video src={vid.src} className="w-full h-full object-cover" muted preload="metadata" />}
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/50 transition-colors pointer-events-none">
-                      <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center shadow group-hover:scale-110 transition-transform">
-                        <svg className="w-4 h-4 text-ink ml-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-                      </div>
-                    </div>
-                    {vid.title && (
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 pointer-events-none">
-                        <p className="text-white text-[10px] font-medium line-clamp-1">{vid.title}</p>
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
+            </>
           )}
         </div>
       )}
-
-      {lightbox && <Lightbox photos={lightbox.photos} startIdx={lightbox.idx} onClose={() => setLightbox(null)} />}
-      {activeVideo && <VideoModal src={activeVideo.src} title={activeVideo.title} onClose={() => setActiveVideo(null)} />}
-    </div>
+    </>
   )
 }
 
@@ -340,7 +359,15 @@ function StarRow({ rating, count }: { rating: number; count: number }) {
   )
 }
 
+const REVIEW_SUB_LABELS = [
+  { key: 'communication_rating' as const, label: 'Communication' },
+  { key: 'quality_rating' as const,       label: 'Quality' },
+  { key: 'punctuality_rating' as const,   label: 'Punctuality' },
+  { key: 'value_rating' as const,         label: 'Value' },
+]
+
 function ReviewCard({ r }: { r: ProfileData['native_reviews'][0] }) {
+  const subRatings = REVIEW_SUB_LABELS.filter(s => r[s.key] != null)
   return (
     <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}>
       <div className="flex items-start justify-between mb-3">
@@ -359,7 +386,48 @@ function ReviewCard({ r }: { r: ProfileData['native_reviews'][0] }) {
           ))}
         </div>
       </div>
-      <p className="text-ink-500 text-sm leading-relaxed">{r.body}</p>
+      {subRatings.length > 0 && (
+        <div className="space-y-1.5 mb-3 pt-3 border-t border-ink-50">
+          {subRatings.map(s => (
+            <div key={s.key} className="flex items-center gap-3">
+              <span className="text-[10px] text-ink-300 w-20 flex-shrink-0">{s.label}</span>
+              <div className="flex items-center gap-0.5">
+                {[1,2,3,4,5].map(i => (
+                  <Star key={i} className={`w-3 h-3 ${i <= (r[s.key] ?? 0) ? 'text-ink fill-ink' : 'text-ink-100 fill-ink-100'}`} />
+                ))}
+              </div>
+              <span className="text-[10px] text-ink-200 ml-0.5">
+                {['','Poor','Fair','Good','Great','Excellent'][r[s.key] ?? 0]}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {r.body && <p className="text-ink-500 text-sm leading-relaxed">{r.body}</p>}
+      {r.public_reply && (
+        <div className="mt-3 pt-3 border-t border-ink-50 space-y-2.5">
+          <div className="flex gap-2.5">
+            <div className="w-6 h-6 rounded-lg bg-ink flex items-center justify-center flex-shrink-0 mt-0.5">
+              <span className="text-white text-[9px] font-bold">P</span>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold text-ink mb-0.5">Photographer's reply</p>
+              <p className="text-xs text-ink-500 leading-relaxed">{r.public_reply}</p>
+            </div>
+          </div>
+          {r.client_reply && (
+            <div className="flex gap-2.5 pl-2 border-l-2 border-ink-100">
+              <div className="w-5 h-5 rounded-md bg-ink-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-ink-500 text-[8px] font-bold">C</span>
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold text-ink-500 mb-0.5">{r.reviewer_name}</p>
+                <p className="text-xs text-ink-500 leading-relaxed">{r.client_reply}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -508,7 +576,12 @@ export default function YourProfilePreviewPage() {
 
   const hasPackages = p.packages.length > 0
   const hasFaqs = p.faqs.length > 0
-  const hasReviews = p.native_review_count > 0
+  const reviewList = p.native_reviews ?? []
+  const hasReviews = reviewList.length > 0
+  const liveReviewCount = reviewList.length
+  const liveAvgRating = hasReviews
+    ? Math.round((reviewList.reduce((s, r) => s + r.rating, 0) / reviewList.length) * 10) / 10
+    : 0
   const hasAvailability = p.availability.length > 0
 
   return (
@@ -516,20 +589,22 @@ export default function YourProfilePreviewPage() {
       {/* Preview banner */}
       <div className="sticky top-0 z-50 bg-ink text-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <Eye className="w-4 h-4 text-white/60" />
-            <p className="text-sm font-medium">
-              <span className="text-white/60">Profile preview —</span> this is how clients see your profile
+          <div className="flex items-center gap-2 min-w-0">
+            <Eye className="w-4 h-4 text-white/60 flex-shrink-0" />
+            <p className="text-sm font-medium truncate">
+              <span className="text-white/60 hidden sm:inline">Profile preview — </span>
+              <span className="text-white/60 sm:hidden">Preview</span>
+              <span className="hidden sm:inline">Client view</span>
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Link href="/dashboard/photographer/edit"
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Link href="/dashboard/photographer?tab=settings"
               className="flex items-center gap-1.5 text-xs font-semibold bg-white text-ink px-3 py-1.5 rounded-lg hover:bg-ink-50 transition-colors">
-              <Pencil className="w-3.5 h-3.5" /> Edit profile
+              <Pencil className="w-3.5 h-3.5" /><span className="hidden sm:inline">Edit profile</span><span className="sm:hidden">Edit</span>
             </Link>
             <Link href="/dashboard/photographer"
               className="flex items-center gap-1.5 text-xs text-white/70 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors">
-              <ArrowLeft className="w-3.5 h-3.5" /> Dashboard
+              <ArrowLeft className="w-3.5 h-3.5" /><span className="hidden sm:inline">Dashboard</span>
             </Link>
           </div>
         </div>
@@ -575,10 +650,6 @@ export default function YourProfilePreviewPage() {
                 </div>
               )}
             </div>
-            <div className="mb-1 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-100">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span className="text-[10px] font-semibold text-emerald-600">Available</span>
-            </div>
           </div>
 
           {/* Name row */}
@@ -587,23 +658,6 @@ export default function YourProfilePreviewPage() {
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h1 className="font-serif text-2xl sm:text-3xl font-bold text-ink">{p.display_name || 'Your name'}</h1>
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    {p.instagram_url && (
-                      <span className="w-6 h-6 rounded-md bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center" title="Instagram">
-                        <Instagram className="w-3 h-3 text-white" />
-                      </span>
-                    )}
-                    {p.links?.google?.url && (
-                      <span className="w-6 h-6 rounded-md bg-white border border-ink-100 flex items-center justify-center" title="Google Reviews">
-                        <span className="text-[9px] font-black text-blue-500 leading-none">G</span>
-                      </span>
-                    )}
-                    {p.website_url && (
-                      <span className="w-6 h-6 rounded-md bg-ink-100 flex items-center justify-center" title="Website">
-                        <Globe className="w-3 h-3 text-ink-500" />
-                      </span>
-                    )}
-                  </div>
                 </div>
                 {p.tagline && <p className="text-ink-400 text-sm mt-0.5">{p.tagline}</p>}
                 <div className="flex flex-wrap items-center gap-3 mt-2">
@@ -623,7 +677,7 @@ export default function YourProfilePreviewPage() {
                       <span className="text-ink-500 text-xs font-semibold">{p.rate_display}</span>
                     </div>
                   )}
-                  {hasReviews && <StarRow rating={p.native_avg_rating} count={p.native_review_count} />}
+                  {hasReviews && <StarRow rating={liveAvgRating} count={liveReviewCount} />}
                 </div>
               </div>
               {/* Disabled in preview mode */}
@@ -659,14 +713,14 @@ export default function YourProfilePreviewPage() {
               ) : (
                 <p className="text-ink-200 text-sm italic">
                   No bio yet.{' '}
-                  <Link href="/dashboard/photographer/edit#bio" className="text-ink underline">Add one</Link>
+                  <Link href="/dashboard/photographer?tab=settings" className="text-ink underline">Add one</Link>
                 </p>
               )}
             </div>
 
             {/* Portfolio */}
-            <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}>
-              <div className="flex items-center justify-between gap-2 mb-4">
+            <div className="bg-white rounded-2xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}>
+              <div className="flex items-center justify-between gap-2 px-6 pt-6 pb-4">
                 <div className="flex items-center gap-2">
                   <Camera className="w-4 h-4 text-ink-400" />
                   <h2 className="font-semibold text-ink text-base">Portfolio</h2>
@@ -681,7 +735,9 @@ export default function YourProfilePreviewPage() {
                   Edit
                 </Link>
               </div>
-              <PortfolioPreview profile={p} />
+              <div className="px-6 pb-6">
+                <PortfolioPreview profile={p} />
+              </div>
             </div>
 
             {/* Packages */}
@@ -698,7 +754,7 @@ export default function YourProfilePreviewPage() {
                 <div className="border-2 border-dashed border-ink-100 rounded-xl p-8 text-center">
                   <Package className="w-8 h-8 text-ink-200 mx-auto mb-2" />
                   <p className="text-ink-400 text-sm font-medium">No packages yet</p>
-                  <Link href="/dashboard/photographer/edit#packages" className="text-xs text-ink underline mt-1 inline-block">Add a package</Link>
+                  <Link href="/dashboard/photographer?tab=packages" className="text-xs text-ink underline mt-1 inline-block">Add a package</Link>
                 </div>
               )}
             </div>
@@ -708,9 +764,9 @@ export default function YourProfilePreviewPage() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <h2 className="font-semibold text-ink text-base">Reviews</h2>
-                  {hasReviews && <span className="text-ink-300 text-sm font-normal">({p.native_review_count})</span>}
+                  {hasReviews && <span className="text-ink-300 text-sm font-normal">({liveReviewCount})</span>}
                 </div>
-                {hasReviews && <StarRow rating={p.native_avg_rating} count={p.native_review_count} />}
+                {hasReviews && <StarRow rating={liveAvgRating} count={liveReviewCount} />}
               </div>
               {hasReviews ? (
                 <div className="space-y-3">
@@ -734,7 +790,7 @@ export default function YourProfilePreviewPage() {
                 <div className="py-6 text-center">
                   <p className="text-ink-400 text-sm font-medium">No FAQs yet</p>
                   <p className="text-ink-300 text-xs mt-1">
-                    <Link href="/dashboard/photographer/edit#faqs" className="text-ink underline">Add common questions</Link> clients might ask.
+                    <Link href="/dashboard/photographer?tab=faq" className="text-ink underline">Add common questions</Link> clients might ask.
                   </p>
                 </div>
               )}
@@ -790,7 +846,7 @@ export default function YourProfilePreviewPage() {
               <h3 className="font-semibold text-ink text-sm mb-4">At a glance</h3>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { label: 'Reviews', value: String(p.native_review_count), icon: Star },
+                  { label: 'Reviews', value: String(liveReviewCount), icon: Star },
                   { label: 'Specialties', value: String(p.specialties.length), icon: Camera },
                   { label: 'Trust score', value: Number(p.trust_score) > 0 ? Number(p.trust_score).toFixed(1) : '—', icon: Shield },
                   { label: 'Profile views', value: String(p.profile_view_count), icon: Award },
@@ -807,79 +863,42 @@ export default function YourProfilePreviewPage() {
               </div>
             </div>
 
-            {/* Social & Reviews */}
-            {(p.instagram_url || p.website_url || p.links?.google?.url || p.links?.yelp?.url) && (
+            {/* Links — contact socials as icons */}
+            {(p.contact_instagram_url || p.contact_facebook_url || p.website_url) && (
               <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}>
-                <p className="text-xs font-semibold text-ink mb-3">Social &amp; Reviews</p>
-                <div className="space-y-2">
-                  {p.instagram_url && (
-                    <a href={p.instagram_url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-2.5 rounded-xl bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-100 hover:border-pink-300 transition-colors group">
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-                        <Instagram className="w-4 h-4 text-white" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[10px] text-ink-400 leading-none mb-0.5">Instagram</p>
-                        <p className="text-xs font-semibold text-ink truncate">
-                          @{p.instagram_url.replace(/^https?:\/\/(www\.)?instagram\.com\/?/, '').replace(/\/$/, '') || p.instagram_url.replace(/^https?:\/\//, '')}
-                        </p>
-                      </div>
-                      <ExternalLink className="w-3 h-3 text-ink-300 group-hover:text-ink-500 transition-colors flex-shrink-0" />
+                <p className="text-xs font-semibold text-ink mb-3">Links</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {p.contact_instagram_url && (
+                    <a
+                      href={`https://instagram.com/${p.contact_instagram_url}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`@${p.contact_instagram_url} on Instagram`}
+                      className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center hover:opacity-80 transition-opacity"
+                    >
+                      <Instagram className="w-4 h-4 text-white" />
                     </a>
                   )}
-                  {p.links?.google?.url && (
-                    <a href={p.links.google.url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-2.5 rounded-xl bg-blue-50 border border-blue-100 hover:border-blue-300 transition-colors group">
-                      <div className="w-8 h-8 rounded-lg bg-white border border-blue-100 flex items-center justify-center flex-shrink-0">
-                        <span className="text-sm font-black text-blue-500 leading-none">G</span>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[10px] text-ink-400 leading-none mb-0.5">Google Reviews</p>
-                        {p.links.google.rating != null ? (
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs font-bold text-ink">{Number(p.links.google.rating).toFixed(1)}</span>
-                            <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                            {p.links.google.count && <span className="text-ink-300 text-[10px]">({p.links.google.count} reviews)</span>}
-                          </div>
-                        ) : (
-                          <p className="text-xs font-semibold text-ink">View reviews</p>
-                        )}
-                      </div>
-                      <ExternalLink className="w-3 h-3 text-ink-300 group-hover:text-ink-500 transition-colors flex-shrink-0" />
-                    </a>
-                  )}
-                  {p.links?.yelp?.url && (
-                    <a href={p.links.yelp.url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-2.5 rounded-xl bg-red-50 border border-red-100 hover:border-red-300 transition-colors group">
-                      <div className="w-8 h-8 rounded-lg bg-red-500 flex items-center justify-center flex-shrink-0">
-                        <span className="text-[10px] font-black text-white leading-none">★</span>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[10px] text-ink-400 leading-none mb-0.5">Yelp</p>
-                        {p.links.yelp.rating != null ? (
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs font-bold text-ink">{Number(p.links.yelp.rating).toFixed(1)}</span>
-                            <Star className="w-3 h-3 text-red-400 fill-red-400" />
-                            {p.links.yelp.count && <span className="text-ink-300 text-[10px]">({p.links.yelp.count} reviews)</span>}
-                          </div>
-                        ) : (
-                          <p className="text-xs font-semibold text-ink">View reviews</p>
-                        )}
-                      </div>
-                      <ExternalLink className="w-3 h-3 text-ink-300 group-hover:text-ink-500 transition-colors flex-shrink-0" />
+                  {p.contact_facebook_url && (
+                    <a
+                      href={`https://facebook.com/${p.contact_facebook_url}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`${p.contact_facebook_url} on Facebook`}
+                      className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-400 flex items-center justify-center hover:opacity-80 transition-opacity"
+                    >
+                      <Facebook className="w-4 h-4 text-white" />
                     </a>
                   )}
                   {p.website_url && (
-                    <a href={p.website_url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-2.5 rounded-xl bg-ink-50 border border-ink-100 hover:border-ink-300 transition-colors group">
-                      <div className="w-8 h-8 rounded-lg bg-ink flex items-center justify-center flex-shrink-0">
-                        <Globe className="w-4 h-4 text-white" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[10px] text-ink-400 leading-none mb-0.5">Website</p>
-                        <p className="text-xs font-semibold text-ink truncate">{p.website_url.replace(/^https?:\/\//, '')}</p>
-                      </div>
-                      <ExternalLink className="w-3 h-3 text-ink-300 group-hover:text-ink-500 transition-colors flex-shrink-0" />
+                    <a
+                      href={/^https?:\/\//.test(p.website_url) ? p.website_url : `https://${p.website_url}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={p.website_url.replace(/^https?:\/\//, '')}
+                      className="w-10 h-10 rounded-xl bg-ink flex items-center justify-center hover:opacity-80 transition-opacity"
+                    >
+                      <Globe className="w-4 h-4 text-white" />
                     </a>
                   )}
                 </div>
@@ -943,10 +962,10 @@ export default function YourProfilePreviewPage() {
               <p className="text-xs font-semibold text-ink mb-2">Improve your profile</p>
               <div className="space-y-2">
                 {[
-                  { label: 'Add portfolio photos', href: '/dashboard/photographer/portfolio' },
-                  { label: 'Link your Google reviews', href: '/dashboard/photographer/edit#links' },
-                  { label: 'Write a longer bio', href: '/dashboard/photographer/edit#bio' },
-                  { label: 'Add packages', href: '/dashboard/photographer/edit#packages' },
+                  { label: 'Add portfolio photos', href: '/dashboard/photographer?tab=portfolio' },
+                  { label: 'Link your Google reviews', href: '/dashboard/photographer?tab=trust' },
+                  { label: 'Write a longer bio', href: '/dashboard/photographer?tab=settings' },
+                  { label: 'Add packages', href: '/dashboard/photographer?tab=packages' },
                 ].map(item => (
                   <Link key={item.label} href={item.href} className="flex items-center gap-2 text-xs text-ink-500 hover:text-ink transition-colors group">
                     <ExternalLink className="w-3.5 h-3.5 text-ink-300 group-hover:text-ink transition-colors" />

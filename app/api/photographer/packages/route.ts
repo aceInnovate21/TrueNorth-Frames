@@ -18,7 +18,7 @@ export async function GET() {
 
   const { data, error } = await db
     .from('packages')
-    .select('id, name, description, billing_type, price, deliverables, is_active, is_popular, sort_order')
+    .select('id, name, description, billing_type, price, deliverables, is_active, is_popular, sort_order, banner_url, specialty')
     .eq('photographer_id', photographerId)
     .order('sort_order', { ascending: true })
 
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { name, description, billing_type, price, deliverables } = body
+  const { name, description, billing_type, price, deliverables, specialty } = body
   if (!name?.trim()) return badRequest('name is required')
   if (price == null || price === '' || isNaN(parseFloat(String(price)))) return badRequest('price is required')
   if (!['hourly', 'package'].includes(billing_type)) return badRequest('billing_type must be hourly or package')
@@ -68,10 +68,11 @@ export async function POST(request: NextRequest) {
       billing_type,
       price: parseFloat(price),
       deliverables: Array.isArray(deliverables) ? deliverables.filter(Boolean) : [],
+      specialty: specialty ?? null,
       is_active: true,
       sort_order: sortOrder,
     })
-    .select('id, name, description, billing_type, price, deliverables, is_active, is_popular, sort_order')
+    .select('id, name, description, billing_type, price, deliverables, is_active, is_popular, sort_order, banner_url, specialty')
     .single()
 
   if (error || !data) {
@@ -91,7 +92,7 @@ export async function PATCH(request: NextRequest) {
   if (!photographerId) return notFound('Photographer profile not found')
 
   const body = await request.json()
-  const { id, name, description, billing_type, price, deliverables, is_active, is_popular } = body
+  const { id, name, description, billing_type, price, deliverables, is_active, is_popular, specialty } = body
   if (!id) return badRequest('id is required')
 
   const updates: Record<string, unknown> = {}
@@ -102,6 +103,7 @@ export async function PATCH(request: NextRequest) {
   if (deliverables !== undefined) updates.deliverables = Array.isArray(deliverables) ? deliverables.filter(Boolean) : []
   if (is_active !== undefined) updates.is_active = is_active
   if (is_popular !== undefined) updates.is_popular = is_popular
+  if (specialty !== undefined) updates.specialty = specialty ?? null
 
   if (Object.keys(updates).length === 0) return badRequest('no fields to update')
 

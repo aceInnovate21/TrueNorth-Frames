@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useState, useRef, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { NotificationCentre } from '@/components/notification-centre'
 import {
   Bell, Camera, CheckCircle2, ChevronRight, Globe, Instagram,
   MapPin, MessageSquare, Star, User, Zap, ArrowRight,
@@ -13,6 +14,7 @@ import {
   ChevronsUp, ChevronsDown,
   Plus, Pencil, Trash2, Paperclip, FileText, Play,
   FolderPlus, FolderOpen, Video, Image as ImageIcon,
+  Facebook, RefreshCw, Link2, UserPlus, Search,
 } from 'lucide-react'
 import { AvailabilityTimeSlots, type WeeklySchedule } from '@/components/availability-time-slots'
 import { ProjectPackages, type ProjectPackage } from '@/components/project-packages'
@@ -66,7 +68,7 @@ async function uploadPortfolioPhoto(file: File, albumId: string): Promise<Portfo
 
 // ─── Booking request types ───────────────────────────────────────────────────
 
-type DashboardTab = 'overview' | 'portfolio' | 'messages' | 'requests' | 'availability' | 'packages' | 'reviews' | 'network' | 'faq' | 'settings'
+type DashboardTab = 'overview' | 'portfolio' | 'messages' | 'requests' | 'availability' | 'packages' | 'reviews' | 'network' | 'faq' | 'settings' | 'trust'
 
 type BookingRequestStatus = 'pending' | 'approved' | 'declined' | 'cancelled' | 'cancellation_pending' | 'completed'
 
@@ -74,11 +76,13 @@ type BookingBillingType = 'hourly' | 'package'
 
 interface BookingRequest {
   id: string
+  clientId: string
   clientName: string
   clientInitials: string
   clientBg: string
   date: string          // display label e.g. "May 24, 2026"
   dateKey: string       // "2026-4-24" — matches availability key
+  isoDate: string       // "2026-05-24" — YYYY-MM-DD for calendar
   timeSlot: string      // "10:00 AM – 12:00 PM"
   note: string
   billingType: BookingBillingType
@@ -86,8 +90,23 @@ interface BookingRequest {
   status: BookingRequestStatus
   photographerNote: string
   submittedAt: string
+  conversationId?: string | null
 }
 
+
+function fmtSubmitted(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const diff = Date.now() - d.getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'Just now'
+  if (mins < 60) return `${mins}m ago`
+  const h = Math.floor(mins / 60)
+  if (h < 24) return `${h}h ago`
+  const days = Math.floor(h / 24)
+  if (days < 7) return days === 1 ? 'Yesterday' : `${days}d ago`
+  return d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined })
+}
 
 // ─── BookingRequestsTab ───────────────────────────────────────────────────────
 
@@ -97,62 +116,117 @@ function BookingRequestsTab({
   setBookedDates,
   setMessages,
   setActiveTab,
+  expandedId: expandedIdProp,
+  setExpandedId: setExpandedIdProp,
 }: {
   requests: BookingRequest[]
   setRequests: React.Dispatch<React.SetStateAction<BookingRequest[]>>
   setBookedDates: React.Dispatch<React.SetStateAction<Record<string, DayStatus>>>
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>
   setActiveTab: React.Dispatch<React.SetStateAction<DashboardTab>>
+  expandedId?: string | null
+  setExpandedId?: React.Dispatch<React.SetStateAction<string | null>>
 }) {
   const [filter, setFilter] = useState<BookingRequestStatus | 'all'>('all')
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [_expandedId, _setExpandedId] = useState<string | null>(null)
+  const expandedId = expandedIdProp !== undefined ? expandedIdProp : _expandedId
+  const setExpandedId = setExpandedIdProp ?? _setExpandedId
   const [noteDraft, setNoteDraft] = useState<Record<string, string>>({})
+  const [clientReviewTarget, setClientReviewTarget] = useState<BookingRequest | null>(null)
+  const [clientReviewedIds, setClientReviewedIds] = useState<Set<string>>(new Set())
+
+  // When a booking is selected from the calendar, clear status filter and scroll to card
+  useEffect(() => {
+    if (!expandedId) return
+    setFilter('all')
+    setTimeout(() => {
+      const el = document.getElementById(`booking-card-${expandedId}`)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 80)
+  }, [expandedId])
 
   const pendingCount = requests.filter(r => r.status === 'pending').length
 
   const visible = filter === 'all' ? requests : requests.filter(r => r.status === filter)
 
+  // Helper: post a template message to the conversation after a status change
+  function sendTemplateMessage(req: BookingRequest, body: string) {
+    if (!req.conversationId) return
+    fetch(`/api/photographer/messages/${req.conversationId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: body }),
+    }).catch(() => {})
+  }
+
   function approve(id: string) {
-    setRequests(prev => prev.map(r => {
-      if (r.id !== id) return r
-      setBookedDates(d => ({ ...d, [r.dateKey]: 'busy' }))
-      const note = noteDraft[id] ?? r.photographerNote
-      const confirmationText = note
-        ? `Hi ${r.clientName.split(' ')[0]}! Your booking for ${r.date} (${r.timeSlot}) is confirmed. ${note}`
-        : `Hi ${r.clientName.split(' ')[0]}! Your booking for ${r.date} (${r.timeSlot}) is confirmed. Looking forward to working with you!`
-      setMessages(msgs => {
-        const exists = msgs.find(m => m.from === r.clientName)
-        if (exists) {
-          return msgs.map(m => m.from === r.clientName
-            ? { ...m, unread: false, preview: confirmationText, thread: [...m.thread, { id: Date.now(), from: 'me' as const, text: confirmationText, time: 'Just now' }] }
-            : m)
-        }
-        return [...msgs, {
-          id: String(Date.now()), from: r.clientName, initials: r.clientInitials, bg: r.clientBg,
-          preview: confirmationText, time: 'Just now', unread: false,
-          thread: [{ id: Date.now() + 1, from: 'me' as const, text: confirmationText, time: 'Just now' }],
-        }]
-      })
-      fetch('/api/photographer/bookings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, status: 'approved', photographer_note: note }),
-      }).catch(() => {})
-      return { ...r, status: 'approved', photographerNote: note }
-    }))
+    const req = requests.find(r => r.id === id)
+    if (!req) return
+    const note = noteDraft[id] ?? req.photographerNote
+    setRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'approved', photographerNote: note } : r))
+    setBookedDates(d => ({ ...d, [req.dateKey]: 'busy' }))
+    fetch('/api/photographer/bookings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status: 'approved', photographer_note: note }),
+    }).then(() => {
+      const tmpl = `✅ Your booking for ${req.date} has been approved! Looking forward to our session.${note ? ' ' + note : ''}`
+      sendTemplateMessage({ ...req, status: 'approved', photographerNote: note }, tmpl)
+    }).catch(() => {})
   }
 
   function reject(id: string) {
-    setRequests(prev => prev.map(r => {
-      if (r.id !== id) return r
-      setBookedDates(d => { const n = { ...d }; delete n[r.dateKey]; return n })
-      fetch('/api/photographer/bookings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, status: 'declined', photographer_note: noteDraft[id] ?? r.photographerNote }),
-      }).catch(() => {})
-      return { ...r, status: 'declined', photographerNote: noteDraft[id] ?? r.photographerNote }
-    }))
+    const req = requests.find(r => r.id === id)
+    if (!req) return
+    const note = noteDraft[id] ?? req.photographerNote
+    setRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'declined', photographerNote: note } : r))
+    setBookedDates(d => { const n = { ...d }; delete n[req.dateKey]; return n })
+    fetch('/api/photographer/bookings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status: 'declined', photographer_note: note }),
+    }).then(() => {
+      const tmpl = `Sorry, I'm unable to take this booking for ${req.date}.${note ? ' ' + note : ''}`
+      sendTemplateMessage({ ...req, status: 'declined', photographerNote: note }, tmpl)
+    }).catch(() => {})
+  }
+
+  function reopen(id: string) {
+    const req = requests.find(r => r.id === id)
+    if (!req) return
+    setRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'pending' } : r))
+    fetch('/api/photographer/bookings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status: 'pending' }),
+    }).then(() => {
+      const tmpl = `I've reconsidered — your booking request for ${req.date} is back under review.`
+      sendTemplateMessage(req, tmpl)
+    }).catch(() => {})
+  }
+
+  function complete(id: string) {
+    const req = requests.find(r => r.id === id)
+    if (!req) return
+    setRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'completed' } : r))
+    fetch('/api/photographer/bookings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status: 'completed' }),
+    }).then(() => {
+      sendTemplateMessage(req, `🎉 Session complete! It was a pleasure working with you.`)
+    }).catch(() => {})
+  }
+
+  function cancelBooking(id: string) {
+    const req = requests.find(r => r.id === id)
+    if (!req) return
+    setRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'cancelled' } : r))
+    fetch('/api/photographer/bookings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status: 'cancelled' }),
+    }).catch(() => {})
   }
 
   function saveNote(id: string) {
@@ -164,18 +238,28 @@ function BookingRequestsTab({
     }).catch(() => {})
   }
 
-  function openMessage(req: BookingRequest) {
-    setMessages(msgs => {
-      const exists = msgs.find(m => m.from === req.clientName)
-      if (!exists) {
-        return [...msgs, {
-          id: String(Date.now()), from: req.clientName, initials: req.clientInitials, bg: req.clientBg,
-          preview: req.note || 'Booking enquiry', time: 'Now', unread: false,
-          thread: req.note ? [{ id: 1, from: 'them' as const, text: req.note, time: req.submittedAt }] : [],
-        }]
-      }
-      return msgs
-    })
+  function openChat(req: BookingRequest) {
+    // If we have a real conversation ID, ensure the message thread is loaded then navigate to messages tab
+    if (req.conversationId) {
+      // Pre-populate the conversation in the messages list if not present
+      setMessages(msgs => {
+        const exists = msgs.find(m => m.id === req.conversationId)
+        if (!exists) {
+          return [...msgs, {
+            id: req.conversationId!,
+            from: req.clientName,
+            initials: req.clientInitials,
+            bg: req.clientBg,
+            preview: req.note || 'Booking enquiry',
+            time: 'Now',
+            unread: false,
+            thread: [],
+            threadLoaded: false,
+          }]
+        }
+        return msgs
+      })
+    }
     setActiveTab('messages')
   }
 
@@ -198,6 +282,7 @@ function BookingRequestsTab({
   }
 
   return (
+    <>
     <div className="space-y-5">
       {/* Summary */}
       <div className="grid grid-cols-4 gap-3">
@@ -249,7 +334,7 @@ function BookingRequestsTab({
         {visible.map(req => {
           const expanded = expandedId === req.id
           return (
-            <div key={req.id} className={`rounded-2xl border overflow-hidden transition-all ${
+            <div key={req.id} id={`booking-card-${req.id}`} className={`rounded-2xl border overflow-hidden transition-all ${
               req.status === 'cancelled' ? 'bg-ink-50/60 border-ink-100 opacity-70' : 'bg-white'
             } ${
               req.status === 'pending'  ? 'border-amber-200' :
@@ -282,7 +367,7 @@ function BookingRequestsTab({
                     </span>
                     <span className="text-ink-300">{req.billingDetail}</span>
                   </div>
-                  <p className="text-xs text-ink-300 mt-0.5">{req.submittedAt}</p>
+                  <p className="text-xs text-ink-300 mt-0.5">{fmtSubmitted(req.submittedAt)}</p>
                 </div>
                 <ChevronRight className={`w-4 h-4 text-ink-300 flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
               </button>
@@ -299,15 +384,15 @@ function BookingRequestsTab({
                   )}
 
                   {/* Cancelled — read-only notice, no actions */}
-                  {req.status === 'cancelled' && (
+                  {(req.status === 'cancelled' || req.status === 'cancellation_pending') && (
                     <div className="flex items-center gap-2 bg-ink-50 border border-ink-100 rounded-xl px-4 py-3">
                       <X className="w-4 h-4 text-ink-400 flex-shrink-0" />
                       <p className="text-xs text-ink-500">This request was cancelled by the client. The time slot has been freed up on your calendar.</p>
                     </div>
                   )}
 
-                  {/* Photographer note textarea — only for non-cancelled */}
-                  {req.status !== 'cancelled' && (
+                  {/* Photographer note textarea — only for pending */}
+                  {req.status === 'pending' && (
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <label className="text-[10px] font-semibold text-ink-400 uppercase tracking-widest">
@@ -325,25 +410,31 @@ function BookingRequestsTab({
                         onChange={e => {
                           if (e.target.value.length <= PLATFORM_CONFIG.max_photographer_response_length)
                             setNoteDraft(d => ({ ...d, [req.id]: e.target.value }))
-                          // hard-stop: ignore input beyond cap
                         }}
                         maxLength={PLATFORM_CONFIG.max_photographer_response_length}
                         placeholder="Add a message for the client — confirm details, ask questions, or explain a rejection…"
                         className="w-full border border-ink-100 rounded-xl px-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink resize-none transition-all"
-                        disabled={req.status !== 'pending'}
                       />
+                      <div className="flex gap-2 mt-2">
+                        <button onClick={() => saveNote(req.id)}
+                          className="text-xs font-medium text-ink border border-ink-100 px-3 py-1.5 rounded-lg hover:bg-ink-50 transition-colors">
+                          Save note
+                        </button>
+                      </div>
                     </div>
                   )}
 
-                  {/* Already responded note */}
-                  {req.status !== 'pending' && req.status !== 'cancelled' && req.photographerNote && (
+                  {/* Already responded note — non-pending, non-cancelled */}
+                  {req.status !== 'pending' && req.status !== 'cancelled' && req.status !== 'cancellation_pending' && req.photographerNote && (
                     <div className="bg-ink-50 rounded-xl px-4 py-3">
                       <p className="text-[10px] font-semibold text-ink-400 uppercase tracking-widest mb-1">Your response</p>
                       <p className="text-sm text-ink-500 leading-relaxed">{req.photographerNote}</p>
                     </div>
                   )}
 
-                  {/* Actions — only for non-cancelled */}
+                  {/* ── Actions by status ── */}
+
+                  {/* pending → Approve + Decline */}
                   {req.status === 'pending' && (
                     <div className="flex gap-2">
                       <button
@@ -360,19 +451,203 @@ function BookingRequestsTab({
                       </button>
                     </div>
                   )}
-                  {req.status === 'approved' || req.status === 'declined' || req.status === 'completed' ? (
-                    <button
-                      onClick={() => openMessage(req)}
-                      className="w-full flex items-center justify-center gap-2 text-sm font-medium border border-ink-100 text-ink-500 py-2.5 rounded-xl hover:bg-ink-50 hover:text-ink transition-colors"
-                    >
-                      <MessageSquare className="w-4 h-4" /> Message {req.clientName.split(' ')[0]}
+
+                  {/* approved → Mark complete + Cancel + Open chat */}
+                  {req.status === 'approved' && (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => complete(req.id)}
+                          className="flex-1 flex items-center justify-center gap-2 text-sm font-semibold bg-blue-600 text-white py-2.5 rounded-xl hover:bg-blue-700 transition-colors"
+                        >
+                          <CheckCircle2 className="w-4 h-4" /> Mark complete
+                        </button>
+                        <button
+                          onClick={() => cancelBooking(req.id)}
+                          className="flex-1 flex items-center justify-center gap-2 text-sm font-semibold border border-ink-200 text-ink-500 py-2.5 rounded-xl hover:bg-ink-50 transition-colors"
+                        >
+                          <X className="w-4 h-4" /> Cancel
+                        </button>
+                      </div>
+                      <button onClick={() => openChat(req)}
+                        className="w-full flex items-center justify-center gap-2 text-sm font-medium border border-ink-100 text-ink-500 py-2.5 rounded-xl hover:bg-ink-50 hover:text-ink transition-colors">
+                        <MessageSquare className="w-4 h-4" /> Open chat →
+                      </button>
+                    </div>
+                  )}
+
+                  {/* declined → Reopen + Open chat */}
+                  {req.status === 'declined' && (
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => reopen(req.id)}
+                        className="w-full flex items-center justify-center gap-2 text-sm font-semibold border border-amber-200 text-amber-700 py-2.5 rounded-xl hover:bg-amber-50 transition-colors"
+                      >
+                        <RefreshCw className="w-4 h-4" /> Reopen
+                      </button>
+                      <button onClick={() => openChat(req)}
+                        className="w-full flex items-center justify-center gap-2 text-sm font-medium border border-ink-100 text-ink-500 py-2.5 rounded-xl hover:bg-ink-50 hover:text-ink transition-colors">
+                        <MessageSquare className="w-4 h-4" /> Open chat →
+                      </button>
+                    </div>
+                  )}
+
+                  {/* completed → Open chat + Review client */}
+                  {req.status === 'completed' && (
+                    <div className="flex gap-2">
+                      <button onClick={() => openChat(req)}
+                        className="flex-1 flex items-center justify-center gap-2 text-sm font-medium border border-ink-100 text-ink-500 py-2.5 rounded-xl hover:bg-ink-50 hover:text-ink transition-colors">
+                        <MessageSquare className="w-4 h-4" /> Open chat
+                      </button>
+                      {!clientReviewedIds.has(req.id) && (
+                        <button onClick={() => setClientReviewTarget(req)}
+                          className="flex-1 flex items-center justify-center gap-2 text-sm font-medium bg-ink-50 text-ink py-2.5 rounded-xl hover:bg-ink-100 transition-colors">
+                          <Star className="w-4 h-4" /> Review client
+                        </button>
+                      )}
+                      {clientReviewedIds.has(req.id) && (
+                        <span className="flex-1 flex items-center justify-center gap-1.5 text-xs text-ink-300 py-2.5">
+                          <Star className="w-3.5 h-3.5 fill-ink-200 text-ink-200" /> Client reviewed
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* cancelled / cancellation_pending → Open chat */}
+                  {(req.status === 'cancelled' || req.status === 'cancellation_pending') && (
+                    <button onClick={() => openChat(req)}
+                      className="w-full flex items-center justify-center gap-2 text-sm font-medium border border-ink-100 text-ink-500 py-2.5 rounded-xl hover:bg-ink-50 hover:text-ink transition-colors">
+                      <MessageSquare className="w-4 h-4" /> Open chat →
                     </button>
-                  ) : null}
+                  )}
                 </div>
               )}
             </div>
           )
         })}
+      </div>
+    </div>
+
+    {clientReviewTarget && (
+      <ClientReviewModal
+        req={clientReviewTarget}
+        onClose={() => setClientReviewTarget(null)}
+        onSuccess={(id) => {
+          setClientReviewedIds(prev => new Set([...prev, id]))
+          setClientReviewTarget(null)
+        }}
+      />
+    )}
+    </>
+  )
+}
+
+function ClientReviewModal({
+  req,
+  onClose,
+  onSuccess,
+}: {
+  req: BookingRequest
+  onClose: () => void
+  onSuccess: (bookingId: string) => void
+}) {
+  const [rating, setRating] = useState(0)
+  const [hover, setHover] = useState(0)
+  const [text, setText] = useState('')
+  const [done, setDone] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  const LABELS = ['', 'Difficult', 'Below avg', 'Good', 'Great', 'Excellent']
+
+  async function submit() {
+    if (!rating) return
+    setSubmitting(true)
+    setError('')
+    try {
+      const res = await fetch('/api/photographer/reviews/client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_id: req.id, rating, body: text.trim() || undefined }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        setError(d.error ?? 'Failed to save review')
+        return
+      }
+      setDone(true)
+      onSuccess(req.id)
+    } catch {
+      setError('Network error — please try again')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden"
+        style={{ boxShadow: '0 24px 64px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.06)' }}
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-ink-50">
+          <div>
+            <p className="font-semibold text-ink text-sm">{done ? 'Review saved' : 'Review this client'}</p>
+            <p className="text-ink-300 text-xs mt-0.5">{req.clientName} · {req.date}</p>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-full bg-ink-50 hover:bg-ink-100 flex items-center justify-center transition-colors">
+            <X className="w-3.5 h-3.5 text-ink-400" />
+          </button>
+        </div>
+
+        {done ? (
+          <div className="flex flex-col items-center text-center px-5 py-8 gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-ink flex items-center justify-center">
+              <CheckCircle2 className="w-5 h-5 text-white" />
+            </div>
+            <p className="font-semibold text-ink text-sm">Saved privately</p>
+            <p className="text-ink-300 text-xs">Only you can see this. It helps you remember clients you work with.</p>
+            <button onClick={onClose} className="mt-1 text-xs font-medium text-ink underline underline-offset-2">Done</button>
+          </div>
+        ) : (
+          <div className="px-5 py-4 space-y-4">
+            <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-2.5">
+              <p className="text-xs text-amber-700">🔒 Private — only visible to you. Never shown to clients or publicly.</p>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-ink mb-3">How was working with them?</p>
+              <div className="flex items-center gap-2">
+                {[1,2,3,4,5].map(i => (
+                  <button key={i} type="button"
+                    onClick={() => setRating(i)}
+                    onMouseEnter={() => setHover(i)}
+                    onMouseLeave={() => setHover(0)}
+                    className="transition-transform hover:scale-110">
+                    <Star className={`w-8 h-8 transition-colors ${i <= (hover || rating) ? 'text-ink fill-ink' : 'text-ink-100 fill-ink-100'}`} />
+                  </button>
+                ))}
+                <span className="text-ink-400 text-sm ml-1 w-16 font-medium">
+                  {(hover || rating) > 0 ? LABELS[hover || rating] : ''}
+                </span>
+              </div>
+            </div>
+
+            <textarea
+              rows={2}
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder="Any notes for your own reference? (optional)"
+              className="w-full border border-ink-100 rounded-xl px-3 py-2.5 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all resize-none"
+            />
+
+            {error && <p className="text-xs text-red-500">{error}</p>}
+
+            <button type="button" disabled={!rating || submitting} onClick={submit}
+              className="w-full bg-ink hover:bg-ink-800 disabled:opacity-40 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
+              {submitting ? 'Saving…' : 'Save private review'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -387,14 +662,15 @@ interface ProfileData {
   rate: string
   rateUnit: string
   specialties: string[]
-  googleUrl: string
-  instagramUrl: string
-  yelpUrl: string
   websiteUrl: string
+  contactInstagram: string
+  contactFacebook: string
   hasPortfolio: boolean
   availabilitySet: boolean
   email: string
   avatarUrl: string
+  coverImageUrl: string
+  trustScore: number
 }
 
 interface Message {
@@ -438,14 +714,13 @@ const EDMONTON_AREAS = [
 
 function computeScore(p: ProfileData) {
   const sections = [
-    { key: 'name', label: 'Display name', done: !!p.displayName, weight: 10, href: '#settings', cta: 'Add your name' },
-    { key: 'bio', label: 'Bio written', done: p.bio.length >= 20, weight: 15, href: '#settings', cta: 'Write your bio' },
-    { key: 'area', label: 'Location set', done: !!p.area, weight: 10, href: '#settings', cta: 'Set your area' },
-    { key: 'rate', label: 'Rate added', done: !!p.rate, weight: 10, href: '#settings', cta: 'Add your rate' },
-    { key: 'specialties', label: 'Specialties chosen', done: p.specialties.length > 0, weight: 15, href: '#settings', cta: 'Pick specialties' },
-    { key: 'google', label: 'Google reviews linked', done: !!p.googleUrl, weight: 15, href: '#settings', cta: 'Connect Google' },
-    { key: 'instagram', label: 'Instagram linked', done: !!p.instagramUrl, weight: 10, href: '#settings', cta: 'Link Instagram' },
-    { key: 'portfolio', label: 'Portfolio photos', done: p.hasPortfolio, weight: 15, href: '/dashboard/photographer/portfolio', cta: 'Upload photos' },
+    { key: 'name',        label: 'Display name',         done: !!p.displayName,              weight: 10, tab: 'settings',   cta: 'Add your name' },
+    { key: 'bio',         label: 'Bio written',           done: p.bio.length >= 20,           weight: 15, tab: 'settings',   cta: 'Write your bio' },
+    { key: 'area',        label: 'Location set',          done: !!p.area,                     weight: 10, tab: 'settings',   cta: 'Set your area' },
+    { key: 'rate',        label: 'Rate added',            done: !!p.rate,                     weight: 10, tab: 'settings',   cta: 'Add your rate' },
+    { key: 'specialties', label: 'Specialties chosen',    done: p.specialties.length > 0,     weight: 15, tab: 'settings',   cta: 'Pick specialties' },
+    { key: 'trust',       label: 'Trust score connected', done: Number(p.trustScore ?? 0) > 0, weight: 25, tab: 'trust',     cta: 'Connect platforms' },
+    { key: 'portfolio',   label: 'Portfolio photos',      done: p.hasPortfolio,               weight: 15, tab: 'portfolio',  cta: 'Upload photos' },
   ]
   const earned = sections.filter(s => s.done).reduce((a, s) => a + s.weight, 0)
   const total = sections.reduce((a, s) => a + s.weight, 0)
@@ -496,6 +771,470 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
 type DayStatus = 'available' | 'busy' | 'tentative' | null
+
+// ─── BookingCalendar — Google Calendar-style month/week view ──────────────────
+
+const HOURS = Array.from({ length: 15 }, (_, i) => i + 7) // 7am–9pm
+
+function fmt12(h: number) {
+  if (h === 0) return '12 AM'
+  if (h < 12) return `${h} AM`
+  if (h === 12) return '12 PM'
+  return `${h - 12} PM`
+}
+
+function parseSlotHour(timeSlot: string): { start: number; end: number } | null {
+  // e.g. "10:00 AM – 12:00 PM" or "2:30 PM – 4:00 PM"
+  const match = timeSlot.match(/(\d+):(\d+)\s*(AM|PM)\s*[–-]\s*(\d+):(\d+)\s*(AM|PM)/i)
+  if (!match) return null
+  let sh = parseInt(match[1]), sm = parseInt(match[2])
+  const sAP = match[3].toUpperCase()
+  let eh = parseInt(match[4]), em = parseInt(match[5])
+  const eAP = match[6].toUpperCase()
+  if (sAP === 'PM' && sh !== 12) sh += 12
+  if (sAP === 'AM' && sh === 12) sh = 0
+  if (eAP === 'PM' && eh !== 12) eh += 12
+  if (eAP === 'AM' && eh === 12) eh = 0
+  return { start: sh + sm / 60, end: eh + em / 60 }
+}
+
+const STATUS_COLOR: Record<BookingRequestStatus, string> = {
+  pending:              'bg-amber-400',
+  approved:             'bg-emerald-500',
+  declined:             'bg-red-400',
+  cancelled:            'bg-ink-300',
+  cancellation_pending: 'bg-orange-400',
+  completed:            'bg-blue-400',
+}
+
+const STATUS_EVENT: Record<BookingRequestStatus, string> = {
+  pending:              'bg-amber-50 border-amber-300 text-amber-800',
+  approved:             'bg-emerald-50 border-emerald-300 text-emerald-800',
+  declined:             'bg-red-50 border-red-200 text-red-700',
+  cancelled:            'bg-ink-50 border-ink-200 text-ink-400',
+  cancellation_pending: 'bg-orange-50 border-orange-300 text-orange-800',
+  completed:            'bg-blue-50 border-blue-200 text-blue-700',
+}
+
+function BookingCalendar({
+  bookings,
+  bookedDates,
+  setBookedDates,
+  onSelectBooking,
+  readOnly = false,
+}: {
+  bookings: BookingRequest[]
+  bookedDates: Record<string, DayStatus>
+  setBookedDates: React.Dispatch<React.SetStateAction<Record<string, DayStatus>>>
+  onSelectBooking: (req: BookingRequest) => void
+  readOnly?: boolean
+}) {
+  const today = new Date()
+  const [calView, setCalView] = useState<'month' | 'week'>('month')
+  const [viewYear, setViewYear] = useState(today.getFullYear())
+  const [viewMonth, setViewMonth] = useState(today.getMonth())
+  const [weekStart, setWeekStart] = useState<Date>(() => {
+    const d = new Date(today)
+    d.setDate(d.getDate() - d.getDay())
+    d.setHours(0, 0, 0, 0)
+    return d
+  })
+  const [activeTool, setActiveTool] = useState<DayStatus>('available')
+  const [hoveredDay, setHoveredDay] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [changedKeys, setChangedKeys] = useState<Set<string>>(new Set())
+
+  // Index bookings by isoDate for fast lookup
+  const bookingsByDate = bookings.reduce<Record<string, BookingRequest[]>>((acc, b) => {
+    if (!b.isoDate) return acc
+    if (!acc[b.isoDate]) acc[b.isoDate] = []
+    acc[b.isoDate].push(b)
+    return acc
+  }, {})
+
+  function isoKey(y: number, m: number, d: number) {
+    return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  }
+  function legacyKey(y: number, m: number, d: number) {
+    return `${y}-${m}-${d}`
+  }
+  function getDayStatus(iso: string): DayStatus {
+    const [y, m, d] = iso.split('-').map(Number)
+    return bookedDates[legacyKey(y, m - 1, d)] ?? null
+  }
+
+  function toggleDay(iso: string) {
+    const [y, m, d] = iso.split('-').map(Number)
+    const lk = legacyKey(y, m - 1, d)
+    setChangedKeys(prev => new Set([...Array.from(prev), lk]))
+    setBookedDates(prev => {
+      const current = prev[lk]
+      const next = current === activeTool ? null : activeTool
+      const updated = { ...prev }
+      if (next === null) delete updated[lk]
+      else updated[lk] = next
+      return updated
+    })
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    const keys = Array.from(changedKeys)
+    await Promise.all(keys.map(lk => {
+      const [y, mi, d] = lk.split('-').map(Number)
+      const isoDate = `${y}-${String(mi + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      const status = bookedDates[lk]
+      if (!status) return fetch(`/api/photographer/availability?date=${isoDate}`, { method: 'DELETE' })
+      return fetch('/api/photographer/availability', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: isoDate, status }),
+      })
+    }))
+    setChangedKeys(new Set())
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  }
+
+  function jumpToWeek(iso: string) {
+    const d = new Date(iso + 'T00:00:00')
+    d.setDate(d.getDate() - d.getDay())
+    d.setHours(0, 0, 0, 0)
+    setWeekStart(d)
+    setCalView('week')
+  }
+
+  const dayBg: Record<NonNullable<DayStatus>, string> = {
+    available: 'bg-emerald-100 border-emerald-200',
+    tentative: 'bg-amber-100 border-amber-200',
+    busy:      'bg-red-100 border-red-200',
+  }
+
+  // ── Month view ────────────────────────────────────────────────────────────
+  function MonthView() {
+    const firstDay = new Date(viewYear, viewMonth, 1).getDay()
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
+
+    function prevMonth() {
+      if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11) }
+      else setViewMonth(m => m - 1)
+    }
+    function nextMonth() {
+      if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0) }
+      else setViewMonth(m => m + 1)
+    }
+
+    return (
+      <div className="space-y-4">
+        {/* Nav */}
+        <div className="flex items-center justify-between">
+          <button onClick={prevMonth} className="p-2 rounded-lg hover:bg-ink-50 transition-colors">
+            <ChevronLeft className="w-4 h-4 text-ink-400" />
+          </button>
+          <p className="font-semibold text-ink">{MONTHS[viewMonth]} {viewYear}</p>
+          <button onClick={nextMonth} className="p-2 rounded-lg hover:bg-ink-50 transition-colors">
+            <ChevronRight className="w-4 h-4 text-ink-400" />
+          </button>
+        </div>
+
+        {/* Day headers */}
+        <div className="grid grid-cols-7">
+          {DAYS.map(d => (
+            <div key={d} className="text-center text-[10px] font-semibold text-ink-300 uppercase tracking-wide py-1">{d}</div>
+          ))}
+        </div>
+
+        {/* Grid */}
+        <div className="grid grid-cols-7 gap-1">
+          {Array.from({ length: firstDay }).map((_, i) => <div key={`e-${i}`} />)}
+          {Array.from({ length: daysInMonth }).map((_, i) => {
+            const day = i + 1
+            const iso = isoKey(viewYear, viewMonth, day)
+            const status = getDayStatus(iso)
+            const dayBookings = bookingsByDate[iso] ?? []
+            const isToday = day === today.getDate() && viewMonth === today.getMonth() && viewYear === today.getFullYear()
+            const isPast = new Date(viewYear, viewMonth, day) < new Date(today.getFullYear(), today.getMonth(), today.getDate())
+            const isHovered = hoveredDay === iso
+
+            return (
+              <div
+                key={day}
+                onMouseEnter={() => setHoveredDay(iso)}
+                onMouseLeave={() => setHoveredDay(null)}
+                className={`min-h-[56px] rounded-xl border text-xs transition-all cursor-pointer flex flex-col p-1 gap-0.5 ${
+                  isPast
+                    ? 'border-transparent bg-transparent opacity-40 cursor-default'
+                    : status
+                    ? `${dayBg[status]} border`
+                    : 'border-ink-100 hover:border-ink-300 hover:bg-ink-50'
+                } ${isToday ? 'ring-2 ring-ink ring-offset-1' : ''}`}
+                onClick={() => {
+                  if (!readOnly && !isPast && isHovered) toggleDay(iso)
+                }}
+              >
+                <div className="flex items-center justify-between px-0.5">
+                  <span className={`font-medium ${isPast ? 'text-ink-200' : 'text-ink-500'}`}>{day}</span>
+                  {dayBookings.length > 0 && (
+                    <div className="flex gap-0.5">
+                      {dayBookings.slice(0, 3).map(b => (
+                        <span key={b.id} className={`w-1.5 h-1.5 rounded-full ${STATUS_COLOR[b.status]}`} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* Show up to 2 booking chips */}
+                {dayBookings.slice(0, 2).map(b => (
+                  <button
+                    key={b.id}
+                    onClick={e => { e.stopPropagation(); onSelectBooking(b) }}
+                    className={`w-full text-left text-[9px] font-semibold px-1 py-0.5 rounded border truncate ${STATUS_EVENT[b.status]}`}
+                  >
+                    {b.clientName.split(' ')[0]} · {b.timeSlot.split('–')[0].trim()}
+                  </button>
+                ))}
+                {dayBookings.length > 2 && (
+                  <button
+                    onClick={e => { e.stopPropagation(); jumpToWeek(iso) }}
+                    className="text-[9px] text-ink-400 hover:text-ink px-1"
+                  >
+                    +{dayBookings.length - 2} more
+                  </button>
+                )}
+                {/* Tap-to-block hint on hover */}
+                {!readOnly && !isPast && isHovered && !status && dayBookings.length === 0 && (
+                  <div className="text-[9px] text-ink-300 px-0.5 italic">tap to block</div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Legend */}
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-1 border-t border-ink-50">
+          <span className="text-[10px] font-semibold text-ink-300 uppercase tracking-wide self-center">Legend:</span>
+          {[
+            { color: 'bg-emerald-400', label: 'Available' },
+            { color: 'bg-amber-400', label: 'Tentative' },
+            { color: 'bg-red-400', label: 'Busy' },
+            { color: 'bg-amber-400 ring-1 ring-amber-500', label: 'Pending booking' },
+            { color: 'bg-emerald-500 ring-1 ring-emerald-600', label: 'Approved' },
+            { color: 'bg-blue-400', label: 'Completed' },
+          ].map(l => (
+            <div key={l.label} className="flex items-center gap-1.5">
+              <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${l.color}`} />
+              <span className="text-xs text-ink-400">{l.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Week view ─────────────────────────────────────────────────────────────
+  function WeekView() {
+    const weekDays = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(weekStart)
+      d.setDate(d.getDate() + i)
+      return d
+    })
+
+    function prevWeek() {
+      setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() - 7); return d })
+    }
+    function nextWeek() {
+      setWeekStart(prev => { const d = new Date(prev); d.setDate(d.getDate() + 7); return d })
+    }
+
+    const SLOT_H = 48 // px per hour
+    const GRID_START = 7 // 7am
+
+    return (
+      <div className="space-y-3">
+        {/* Week nav */}
+        <div className="flex items-center justify-between">
+          <button onClick={prevWeek} className="p-2 rounded-lg hover:bg-ink-50 transition-colors">
+            <ChevronLeft className="w-4 h-4 text-ink-400" />
+          </button>
+          <p className="font-semibold text-ink text-sm">
+            {weekDays[0].toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })} – {weekDays[6].toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })}
+          </p>
+          <button onClick={nextWeek} className="p-2 rounded-lg hover:bg-ink-50 transition-colors">
+            <ChevronRight className="w-4 h-4 text-ink-400" />
+          </button>
+        </div>
+
+        {/* Week grid */}
+        <div className="overflow-x-auto">
+          <div className="min-w-[640px]">
+            {/* Day headers */}
+            <div className="grid grid-cols-[48px_repeat(7,1fr)] border-b border-ink-100 mb-0">
+              <div />
+              {weekDays.map((d, i) => {
+                const iso = d.toISOString().slice(0, 10)
+                const isToday = iso === today.toISOString().slice(0, 10)
+                return (
+                  <div key={i} className={`text-center py-2 px-1 border-l border-ink-50 ${isToday ? 'bg-ink-50' : ''}`}>
+                    <p className="text-[10px] font-semibold text-ink-400 uppercase">{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]}</p>
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center mx-auto mt-0.5 ${isToday ? 'bg-ink text-white' : ''}`}>
+                      <p className={`text-sm font-semibold ${isToday ? 'text-white' : 'text-ink'}`}>{d.getDate()}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Time grid */}
+            <div className="relative" style={{ height: `${HOURS.length * SLOT_H}px` }}>
+              {/* Hour lines + labels */}
+              {HOURS.map((h, hi) => (
+                <div key={h} className="absolute w-full flex items-start" style={{ top: `${hi * SLOT_H}px`, height: `${SLOT_H}px` }}>
+                  <div className="w-12 flex-shrink-0 text-right pr-2">
+                    <span className="text-[10px] text-ink-300 -translate-y-2 block">{fmt12(h)}</span>
+                  </div>
+                  <div className="flex-1 border-t border-ink-100 h-full" />
+                </div>
+              ))}
+
+              {/* Day columns */}
+              <div className="absolute left-12 right-0 top-0 bottom-0 grid grid-cols-7">
+                {weekDays.map((d, di) => {
+                  const iso = d.toISOString().slice(0, 10)
+                  const dayStatus = getDayStatus(iso)
+                  const dayBookings = bookingsByDate[iso] ?? []
+                  const isPast = d < new Date(today.getFullYear(), today.getMonth(), today.getDate())
+
+                  return (
+                    <div
+                      key={di}
+                      className={`relative border-l border-ink-50 h-full ${
+                        dayStatus === 'busy' ? 'bg-red-50/40' :
+                        dayStatus === 'available' ? 'bg-emerald-50/30' :
+                        dayStatus === 'tentative' ? 'bg-amber-50/30' : ''
+                      } ${isPast ? 'opacity-50' : ''}`}
+                    >
+                      {/* Half-hour gridlines */}
+                      {HOURS.map((h, hi) => (
+                        <div key={h} className="absolute w-full border-t border-ink-50/60"
+                          style={{ top: `${hi * SLOT_H + SLOT_H / 2}px` }} />
+                      ))}
+
+                      {/* Booking blocks */}
+                      {dayBookings.map(b => {
+                        const parsed = parseSlotHour(b.timeSlot)
+                        if (!parsed) return null
+                        const top = (parsed.start - GRID_START) * SLOT_H
+                        const height = Math.max((parsed.end - parsed.start) * SLOT_H, 24)
+                        return (
+                          <button
+                            key={b.id}
+                            onClick={() => onSelectBooking(b)}
+                            className={`absolute left-0.5 right-0.5 rounded-lg border text-left px-1.5 py-1 overflow-hidden z-10 ${STATUS_EVENT[b.status]}`}
+                            style={{ top: `${top}px`, height: `${height}px` }}
+                          >
+                            <p className="text-[10px] font-bold leading-tight truncate">{b.clientName.split(' ')[0]}</p>
+                            <p className="text-[9px] leading-tight opacity-70 truncate">{b.timeSlot}</p>
+                          </button>
+                        )
+                      })}
+
+                      {/* Click to toggle availability */}
+                      {!readOnly && !isPast && (
+                        <button
+                          onClick={() => toggleDay(iso)}
+                          className="absolute inset-0 w-full h-full opacity-0 hover:opacity-100 hover:bg-ink-900/5 transition-opacity"
+                          title={`Mark ${d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })} as ${activeTool}`}
+                        />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Current time indicator */}
+              {(() => {
+                const nowH = today.getHours() + today.getMinutes() / 60
+                if (nowH < GRID_START || nowH > GRID_START + HOURS.length) return null
+                const top = (nowH - GRID_START) * SLOT_H
+                return (
+                  <div className="absolute left-12 right-0 z-20 pointer-events-none" style={{ top: `${top}px` }}>
+                    <div className="flex items-center">
+                      <div className="w-2 h-2 rounded-full bg-red-500 -ml-1 flex-shrink-0" />
+                      <div className="flex-1 border-t-2 border-red-400" />
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* View toggle + tool selector + save */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Month/Week toggle */}
+        <div className="flex items-center bg-ink-50 rounded-xl p-1 gap-0.5">
+          {(['month', 'week'] as const).map(v => (
+            <button key={v} onClick={() => {
+              if (v === 'week') {
+                // Jump week view to current month's first day
+                const d = new Date(viewYear, viewMonth, 1)
+                d.setDate(d.getDate() - d.getDay())
+                setWeekStart(d)
+              }
+              setCalView(v)
+            }}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all capitalize ${
+                calView === v ? 'bg-white text-ink shadow-sm' : 'text-ink-400 hover:text-ink'
+              }`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+
+        {/* Tool selector — hidden in read-only mode */}
+        {!readOnly && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-ink-400 mr-1">Mark as:</span>
+            {([
+              { key: 'available' as DayStatus, label: 'Available', dot: 'bg-emerald-500' },
+              { key: 'tentative' as DayStatus, label: 'Tentative', dot: 'bg-amber-400' },
+              { key: 'busy' as DayStatus, label: 'Busy', dot: 'bg-red-400' },
+            ]).map(t => (
+              <button key={String(t.key)} onClick={() => setActiveTool(t.key)}
+                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                  activeTool === t.key ? 'border-ink bg-ink text-white' : 'border-ink-100 text-ink-400 hover:border-ink-300'
+                }`}>
+                <span className={`w-2 h-2 rounded-full ${activeTool === t.key ? 'bg-white' : t.dot}`} />
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Save — hidden in read-only mode */}
+        {!readOnly && changedKeys.size > 0 && (
+          <button onClick={handleSave} disabled={saving}
+            className={`flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-xl transition-all ${
+              saved ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-ink text-white hover:bg-ink-800'
+            }`}>
+            {saving ? <><Spinner /> Saving…</> : saved ? <><CheckCircle2 className="w-4 h-4" /> Saved!</> : <><Save className="w-4 h-4" /> Save changes ({changedKeys.size})</>}
+          </button>
+        )}
+      </div>
+
+      {calView === 'month' ? <MonthView /> : <WeekView />}
+    </div>
+  )
+}
+
+// ─── AvailabilityCalendar (legacy — kept for compatibility) ───────────────────
 
 function AvailabilityCalendar({ bookedDates, setBookedDates }: {
   bookedDates: Record<string, DayStatus>
@@ -723,6 +1462,9 @@ function MessagesTab({ messages, setMessages, groups, setGroups }: {
   const [sending, setSending] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadErr, setUploadErr] = useState<string | null>(null)
+  const [showNewMsg, setShowNewMsg] = useState(false)
+  const [startingDm, setStartingDm] = useState<string | null>(null)
+  const [msgSearch, setMsgSearch] = useState('')
   const [connectedPhotographers, setConnectedPhotographers] = useState<{ id: string; name: string; initials: string; bg: string; area: string; specialties: string[]; status: string; coverAvailable: boolean }[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollPaneRef = useRef<HTMLDivElement>(null)
@@ -885,18 +1627,94 @@ function MessagesTab({ messages, setMessages, groups, setGroups }: {
     fetch(`/api/photographer/groups?id=${groupId}`, { method: 'DELETE' }).catch(() => {})
   }
 
+  async function startDm(connectionId: string) {
+    setStartingDm(connectionId)
+    try {
+      const res = await fetch('/api/photographer/connections/dm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connection_photographer_id: connectionId }),
+      })
+      if (res.ok) {
+        const { group_id } = await res.json()
+        // Refresh groups
+        const grpRes = await fetch('/api/photographer/groups')
+        if (grpRes.ok) {
+          const data = await grpRes.json()
+          if (Array.isArray(data.groups)) {
+            setGroups(data.groups.map((g: any) => ({
+              id: g.id,
+              name: g.name,
+              emoji: g.emoji ?? '👥',
+              memberIds: g.memberIds ?? [],
+              pendingInviteIds: g.pendingInviteIds ?? [],
+              ownerId: g.ownerId ?? '',
+              messages: (g.messages ?? []).map((m: any) => ({
+                id: m.id, senderId: m.senderId, senderName: m.senderName,
+                senderInitials: m.senderInitials, senderBg: m.senderBg,
+                text: m.text, time: m.time, isSystem: m.isSystem ?? false,
+                attachmentUrl: m.attachmentUrl ?? null, attachmentType: m.attachmentType ?? null,
+                attachmentName: m.attachmentName ?? null, attachmentSize: m.attachmentSize ?? null,
+              })) as GroupMessage[],
+              unread: g.unread ?? 0,
+              lastActivityAt: g.lastActivityAt ?? null,
+              isCoverGroup: g.isCoverGroup ?? false,
+              isDm: g.isDm ?? false,
+              dmPeerId: g.dmPeerId ?? null,
+              dmPeerName: g.dmPeerName ?? null,
+              dmPeerInitials: g.dmPeerInitials ?? null,
+              dmPeerBg: g.dmPeerBg ?? null,
+              isRemoved: g.isRemoved ?? false,
+              isLeft: g.isLeft ?? false,
+            })))
+          }
+        }
+        setShowNewMsg(false)
+        openGroup(group_id)
+      }
+    } catch { /* silent */ }
+    finally { setStartingDm(null) }
+  }
+
   const totalUnread = groups.reduce((acc, g) => acc + (g.unread ?? 0), 0)
 
   return (
     <div className="bg-white rounded-2xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)', minHeight: 520 }}>
-      <div className="flex h-[600px]">
+      <div className="flex h-[680px]">
         {/* Thread list */}
         <div className={`${(activeThread || activeGroupId) ? 'hidden sm:flex' : 'flex'} flex-col w-full sm:w-72 border-r border-ink-50 flex-shrink-0`}>
-          <div className="px-4 py-3.5 border-b border-ink-50 flex items-center justify-between">
-            <p className="font-semibold text-ink text-sm">Messages</p>
-            {totalUnread > 0 && (
-              <span className="text-[10px] font-bold bg-ink text-white rounded-full px-1.5 py-0.5">{totalUnread}</span>
-            )}
+          <div className="px-4 py-3.5 border-b border-ink-50 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <p className="font-semibold text-ink text-sm">Messages</p>
+              {totalUnread > 0 && (
+                <span className="text-[10px] font-bold bg-ink text-white rounded-full px-1.5 py-0.5">{totalUnread}</span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowNewMsg(true)}
+              title="Message a connection"
+              className="w-7 h-7 rounded-lg bg-ink hover:bg-ink-800 flex items-center justify-center transition-colors flex-shrink-0">
+              <UserPlus className="w-3.5 h-3.5 text-white" />
+            </button>
+          </div>
+          {/* Search bar */}
+          <div className="px-3 py-2 border-b border-ink-50 flex-shrink-0">
+            <div className="flex items-center gap-2 bg-ink-50 rounded-xl px-3 py-1.5">
+              <Search className="w-3 h-3 text-ink-300 flex-shrink-0" />
+              <input
+                type="text"
+                value={msgSearch}
+                onChange={e => setMsgSearch(e.target.value)}
+                placeholder="Search messages…"
+                className="bg-transparent text-ink text-xs placeholder-ink-300 outline-none flex-1 min-w-0"
+              />
+              {msgSearch && (
+                <button type="button" onClick={() => setMsgSearch('')} className="text-ink-300 hover:text-ink flex-shrink-0">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto divide-y divide-ink-50">
             {(() => {
@@ -905,27 +1723,54 @@ function MessagesTab({ messages, setMessages, groups, setGroups }: {
                 | { kind: 'dm'; id: string; sortKey: string }
                 | { kind: 'group'; id: string; sortKey: string }
 
-              const items: ListItem[] = [
-                ...messages.map(m => ({ kind: 'dm' as const, id: m.id, sortKey: m.time || '0' })),
-                ...groups.map(g => ({ kind: 'group' as const, id: g.id, sortKey: g.lastActivityAt || '0' })),
-              ].sort((a, b) => b.sortKey.localeCompare(a.sortKey))
+              const q = msgSearch.toLowerCase().trim()
+
+              // Section order: Clients (DMs) first, then Connections & Groups — each sorted by recency
+              const clientItems: ListItem[] = messages
+                .filter(m => !q || m.from.toLowerCase().includes(q))
+                .map(m => ({ kind: 'dm' as const, id: m.id, sortKey: m.time || '0' }))
+                .sort((a, b) => b.sortKey.localeCompare(a.sortKey))
+
+              const groupItems: ListItem[] = groups
+                .filter(g => {
+                  if (!q) return true
+                  const name = g.isDm ? (g.dmPeerName ?? g.name) : g.name
+                  return name.toLowerCase().includes(q)
+                })
+                .map(g => ({ kind: 'group' as const, id: g.id, sortKey: g.lastActivityAt || '0' }))
+                .sort((a, b) => b.sortKey.localeCompare(a.sortKey))
+
+              const items: ListItem[] = [...clientItems, ...groupItems]
 
               if (items.length === 0) {
                 return (
                   <div className="flex flex-col items-center justify-center h-full text-center px-6 py-10">
                     <MessageSquare className="w-8 h-8 text-ink-200 mb-2" />
-                    <p className="text-sm text-ink-400 font-medium">No messages yet</p>
-                    <p className="text-xs text-ink-300 mt-1">Client conversations and group chats will appear here</p>
+                    <p className="text-sm text-ink-400 font-medium">{q ? 'No matches found' : 'No messages yet'}</p>
+                    <p className="text-xs text-ink-300 mt-1">{q ? `No conversations matching "${msgSearch}"` : 'Client conversations and group chats will appear here'}</p>
                   </div>
                 )
               }
 
-              return items.map(item => {
+              return items.map((item, idx) => {
+                // Section label: "Clients" before first DM, "Connections & Groups" before first group
+                const prevItem = items[idx - 1]
+                const sectionLabel =
+                  (idx === 0 && item.kind === 'dm') ? 'Clients' :
+                  (item.kind === 'group' && (idx === 0 || prevItem?.kind === 'dm')) ? 'Connections & Groups' :
+                  null
+
                 if (item.kind === 'dm') {
                   const m = messages.find(x => x.id === item.id)!
                   return (
+                    <div key={`dm-${m.id}`}>
+                      {sectionLabel && (
+                        <p className="px-4 pt-3 pb-1 text-[10px] font-semibold text-ink-300 uppercase tracking-wider bg-white sticky top-0 z-10">
+                          {sectionLabel}
+                        </p>
+                      )}
                     <button
-                      key={`dm-${m.id}`}
+                      key={`dm-${m.id}-btn`}
                       onClick={() => openThread(m.id)}
                       className={`w-full flex items-start gap-3 px-4 py-3.5 hover:bg-ink-50 transition-colors text-left ${activeThread === m.id ? 'bg-ink-50' : ''}`}
                     >
@@ -941,6 +1786,7 @@ function MessagesTab({ messages, setMessages, groups, setGroups }: {
                       </div>
                       {m.unread && <span className="w-2 h-2 rounded-full bg-ink flex-shrink-0 mt-1.5" />}
                     </button>
+                    </div>
                   )
                 }
 
@@ -951,26 +1797,38 @@ function MessagesTab({ messages, setMessages, groups, setGroups }: {
                     ? `${lastMsg.senderName}: 📎 Attachment`
                     : `${lastMsg.senderName}: ${lastMsg.text}`
                   : 'No messages yet'
-                const timeStr = g.lastActivityAt
-                  ? new Date(g.lastActivityAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-                  : ''
+                const timeStr = g.lastActivityAt ? fmtSubmitted(g.lastActivityAt) : ''
+                const displayName = g.isDm ? (g.dmPeerName ?? g.name) : g.name
                 return (
+                  <div key={`group-${g.id}`}>
+                    {sectionLabel && (
+                      <p className="px-4 pt-3 pb-1 text-[10px] font-semibold text-ink-300 uppercase tracking-wider bg-white sticky top-0 z-10">
+                        {sectionLabel}
+                      </p>
+                    )}
                   <button
-                    key={`group-${g.id}`}
+                    key={`group-${g.id}-btn`}
                     onClick={() => openGroup(g.id)}
                     className={`w-full flex items-start gap-3 px-4 py-3.5 hover:bg-ink-50 transition-colors text-left ${activeGroupId === g.id ? 'bg-ink-50' : ''}`}
                   >
-                    <div className="w-9 h-9 rounded-full bg-ink-100 flex items-center justify-center text-lg flex-shrink-0">
-                      {g.emoji}
-                    </div>
+                    {g.isDm ? (
+                      <div className={`w-9 h-9 rounded-full ${g.dmPeerBg ?? 'bg-ink-300'} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
+                        {g.dmPeerInitials ?? '?'}
+                      </div>
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-ink-100 flex items-center justify-center text-lg flex-shrink-0">
+                        {g.emoji}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-0.5">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <p className={`text-sm truncate ${g.unread > 0 ? 'font-semibold text-ink' : 'text-ink-500'}`}>{g.name}</p>
-                          {g.isCoverGroup
+                          <p className={`text-sm truncate ${g.unread > 0 ? 'font-semibold text-ink' : 'text-ink-500'}`}>{displayName}</p>
+                          {!g.isDm && (g.isCoverGroup
                             ? <span className="text-[9px] font-bold bg-amber-100 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full flex-shrink-0">Cover</span>
                             : <span className="text-[9px] font-bold bg-ink-100 text-ink-400 border border-ink-200 px-1.5 py-0.5 rounded-full flex-shrink-0">Group</span>
-                          }
+                          )}
+                          {g.isDm && <span className="text-[9px] font-bold bg-sky-50 text-sky-600 border border-sky-200 px-1.5 py-0.5 rounded-full flex-shrink-0">Photographer</span>}
                         </div>
                         <span className="text-[10px] text-ink-300 flex-shrink-0 ml-1">{timeStr}</span>
                       </div>
@@ -978,6 +1836,7 @@ function MessagesTab({ messages, setMessages, groups, setGroups }: {
                     </div>
                     {g.unread > 0 && <span className="w-2 h-2 rounded-full bg-ink flex-shrink-0 mt-1.5" />}
                   </button>
+                  </div>
                 )
               })
             })()}
@@ -1009,6 +1868,17 @@ function MessagesTab({ messages, setMessages, groups, setGroups }: {
                 setGroups(prev => prev.map(g => g.id !== groupId ? g : {
                   ...g, pendingInviteIds: Array.from(new Set([...g.pendingInviteIds, inviteeId]))
                 }))
+              }}
+              onBlock={async (groupId, peerId) => {
+                // Block the peer: calls API which also deletes the DM group
+                await fetch('/api/photographer/connections/block', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ blocked_photographer_id: peerId }),
+                }).catch(() => {})
+                // Remove group from local state and close pane
+                setGroups(prev => prev.filter(g => g.id !== groupId))
+                setActiveGroupId(null)
               }}
             />
           </div>
@@ -1123,14 +1993,60 @@ function MessagesTab({ messages, setMessages, groups, setGroups }: {
           </div>
         ) : (
           <div className="hidden sm:flex flex-1 items-center justify-center">
-            <div className="text-center">
+            <div className="text-center px-6">
               <MessageSquare className="w-10 h-10 text-ink-200 mx-auto mb-3" />
               <p className="text-ink-400 text-sm font-medium">Select a conversation</p>
-              <p className="text-ink-300 text-xs mt-1">Choose a message from the left</p>
+              <p className="text-ink-300 text-xs mt-1 mb-4">Choose a message from the left, or start a new conversation with a connection.</p>
+              <button
+                type="button"
+                onClick={() => setShowNewMsg(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-ink hover:bg-ink-800 text-white text-xs font-semibold rounded-xl transition-colors mx-auto">
+                <UserPlus className="w-3.5 h-3.5" />
+                Message a connection
+              </button>
             </div>
           </div>
         )}
       </div>
+
+      {/* New message modal */}
+      {showNewMsg && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm px-4 pb-4 sm:pb-0">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden"
+            style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.06),0 24px 48px rgba(0,0,0,0.18)' }}>
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-ink-100">
+              <p className="font-semibold text-ink text-sm">New message</p>
+              <button onClick={() => setShowNewMsg(false)}
+                className="w-7 h-7 rounded-lg hover:bg-ink-50 flex items-center justify-center transition-colors">
+                <X className="w-4 h-4 text-ink-400" />
+              </button>
+            </div>
+            <div className="overflow-y-auto max-h-72">
+              {connectedPhotographers.length === 0 ? (
+                <div className="py-10 text-center">
+                  <Users className="w-8 h-8 text-ink-200 mx-auto mb-2" />
+                  <p className="text-xs text-ink-400">No connections yet</p>
+                </div>
+              ) : connectedPhotographers.map(c => (
+                <button key={c.id} type="button" onClick={() => startDm(c.id)}
+                  disabled={startingDm === c.id}
+                  className="w-full flex items-center gap-3 px-4 py-3 border-b border-ink-50 last:border-0 hover:bg-ink-50/60 transition-colors text-left disabled:opacity-60">
+                  <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
+                    {c.initials}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-ink truncate">{c.name}</p>
+                    {c.area && <p className="text-[10px] text-ink-300 truncate">{c.area}</p>}
+                  </div>
+                  {startingDm === c.id
+                    ? <span className="w-4 h-4 border-2 border-ink-300 border-t-ink rounded-full animate-spin flex-shrink-0" />
+                    : <MessageSquare className="w-4 h-4 text-ink-300 flex-shrink-0" />}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1553,14 +2469,17 @@ function ProfileSettingsTab({ profile, setProfile }: {
 }) {
   const [local, setLocal] = useState({ ...profile })
   const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({
-    basics: 'idle', specialties: 'idle', links: 'idle', account: 'idle',
+    basics: 'idle', specialties: 'idle', contacts: 'idle', account: 'idle',
   })
   const [saveErrors, setSaveErrors] = useState<Record<string, string>>({})
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [avatarUploading, setAvatarUploading] = useState(false)
   const [avatarError, setAvatarError] = useState('')
+  const [coverUploading, setCoverUploading] = useState(false)
+  const [coverError, setCoverError] = useState('')
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const coverInputRef = useRef<HTMLInputElement>(null)
 
   // Keep local in sync when parent profile loads from DB
   useEffect(() => {
@@ -1631,6 +2550,57 @@ function ProfileSettingsTab({ profile, setProfile }: {
     }
   }
 
+  async function handleCoverSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      setCoverError('Only JPEG, PNG, or WebP images are allowed')
+      return
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setCoverError('File must be under 8 MB')
+      return
+    }
+    const previewUrl = URL.createObjectURL(file)
+    setLocal(l => ({ ...l, coverImageUrl: previewUrl }))
+    setCoverError('')
+    setCoverUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/photographer/profile/cover', { method: 'POST', body: formData })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setCoverError(err?.error ?? 'Upload failed — please try again')
+        setLocal(l => ({ ...l, coverImageUrl: profile.coverImageUrl }))
+        return
+      }
+      const { cover_image_url } = await res.json()
+      setLocal(l => ({ ...l, coverImageUrl: cover_image_url }))
+      setProfile(prev => ({ ...prev, coverImageUrl: cover_image_url }))
+    } catch {
+      setCoverError('Network error — please try again')
+      setLocal(l => ({ ...l, coverImageUrl: profile.coverImageUrl }))
+    } finally {
+      setCoverUploading(false)
+    }
+  }
+
+  async function removeCover() {
+    setCoverUploading(true)
+    setCoverError('')
+    try {
+      await fetch('/api/photographer/profile/cover', { method: 'DELETE' })
+      setLocal(l => ({ ...l, coverImageUrl: '' }))
+      setProfile(prev => ({ ...prev, coverImageUrl: '' }))
+    } catch {
+      setCoverError('Failed to remove cover photo')
+    } finally {
+      setCoverUploading(false)
+    }
+  }
+
   function touch(f: string) { setTouched(t => ({ ...t, [f]: true })) }
 
   function setSaving(key: string) {
@@ -1668,12 +2638,12 @@ function ProfileSettingsTab({ profile, setProfile }: {
       }
     } else if (key === 'specialties') {
       body = { section: 'specialties', specialties: local.specialties }
-    } else if (key === 'links') {
+    } else if (key === 'contacts') {
       body = {
-        section: 'links',
-        google_url: local.googleUrl.trim(),
-        instagram_url: local.instagramUrl.trim(),
-        yelp_url: local.yelpUrl.trim(),
+        section: 'contacts',
+        website_url: local.websiteUrl,
+        contact_instagram_url: local.contactInstagram,
+        contact_facebook_url: local.contactFacebook,
       }
     } else if (key === 'account') {
       // Account uses a different endpoint
@@ -1822,6 +2792,64 @@ function ProfileSettingsTab({ profile, setProfile }: {
             />
           </div>
 
+          {/* Cover photo */}
+          <div className="pb-4 border-b border-ink-50">
+            <p className="text-sm font-semibold text-ink mb-1">Cover photo</p>
+            <p className="text-xs text-ink-300 mb-3">JPEG, PNG or WebP · max 8 MB · 3:1 wide banner crops best</p>
+            <div
+              className="relative w-full h-28 rounded-xl overflow-hidden bg-ink-50 border border-ink-100 cursor-pointer group"
+              onClick={() => coverInputRef.current?.click()}
+            >
+              {local.coverImageUrl ? (
+                <img src={local.coverImageUrl} alt="Cover" className="w-full h-full object-cover" />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full gap-1.5 text-ink-300 select-none">
+                  <ImageIcon className="w-6 h-6" />
+                  <span className="text-xs">Click to upload cover</span>
+                </div>
+              )}
+              {coverUploading && (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                  <Spinner />
+                </div>
+              )}
+              {!coverUploading && (
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded-lg px-3 py-1.5 text-xs font-medium text-ink flex items-center gap-1.5">
+                    <Camera className="w-3.5 h-3.5" />
+                    {local.coverImageUrl ? 'Change cover' : 'Upload cover'}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-3 mt-2">
+              <button
+                onClick={() => coverInputRef.current?.click()}
+                disabled={coverUploading}
+                className="text-xs font-medium border border-ink-100 text-ink-500 px-3 py-1.5 rounded-lg hover:bg-ink-50 hover:text-ink transition-all disabled:opacity-50"
+              >
+                {coverUploading ? 'Uploading…' : local.coverImageUrl ? 'Change cover' : 'Upload cover'}
+              </button>
+              {local.coverImageUrl && !coverUploading && (
+                <button onClick={removeCover} className="text-xs font-medium text-red-400 hover:text-red-600 transition-colors">
+                  Remove
+                </button>
+              )}
+            </div>
+            {coverError && (
+              <p className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3 flex-shrink-0" />{coverError}
+              </p>
+            )}
+            <input
+              ref={coverInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleCoverSelect}
+            />
+          </div>
+
           {/* Display name */}
           <div>
             <label className="block text-sm font-medium text-ink mb-1.5">Display name</label>
@@ -1899,6 +2927,7 @@ function ProfileSettingsTab({ profile, setProfile }: {
               </select>
             </div>
           </div>
+
         </div>
 
         <div className="flex justify-end mt-5"><SaveBtn section="basics" /></div>
@@ -1938,42 +2967,62 @@ function ProfileSettingsTab({ profile, setProfile }: {
         <div className="flex justify-end"><SaveBtn section="specialties" /></div>
       </div>
 
-      {/* Review links */}
+      {/* Contacts */}
       <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
-        <div className="flex items-center gap-3 mb-5">
+        <div className="flex items-center gap-3 mb-1">
           <div className="w-9 h-9 bg-ink-50 rounded-xl flex items-center justify-center">
-            <Star className="w-4 h-4 text-ink-400" />
+            <Link2 className="w-4 h-4 text-ink-400" />
           </div>
-          <h2 className="font-semibold text-ink">Review links</h2>
+          <h2 className="font-semibold text-ink">Links</h2>
         </div>
-
-        <p className="text-xs text-ink-300 mb-5">Paste links to your existing reviews — we pull in your rating to build your trust score.</p>
+        <p className="text-xs text-ink-300 mb-5 ml-12">Shown as clickable icons on your public profile. Leave blank to hide.</p>
         <div className="space-y-4">
-          {[
-            { key: 'googleUrl', label: 'Google Business / Maps', icon: Globe, placeholder: 'https://maps.google.com/…', hint: 'Go to Google Business → Share → Copy link' },
-            { key: 'instagramUrl', label: 'Instagram profile', icon: Instagram, placeholder: 'https://instagram.com/yourhandle', hint: null },
-            { key: 'yelpUrl', label: 'Yelp business page', icon: Globe, placeholder: 'https://yelp.com/biz/…', hint: null },
-            { key: 'websiteUrl', label: 'Personal website', icon: Globe, placeholder: 'https://yourwebsite.com', hint: null },
-          ].map(field => {
-            const Icon = field.icon
-            const val = local[field.key as keyof typeof local] as string
-            return (
-              <div key={field.key}>
-                <label className="block text-sm font-medium text-ink mb-1.5">
-                  <span className="flex items-center gap-1.5"><Icon className="w-3.5 h-3.5 text-ink-300" />{field.label}</span>
-                </label>
-                <input
-                  type="url" placeholder={field.placeholder} value={val}
-                  onChange={e => setLocal(l => ({ ...l, [field.key]: e.target.value }))}
-                  className="w-full border border-ink-100 rounded-xl px-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
-                />
-                {val && <p className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-600"><CheckCircle2 className="w-3 h-3" /> Connected</p>}
-                {field.hint && !val && <p className="mt-1.5 text-xs text-ink-300">{field.hint}</p>}
-              </div>
-            )
-          })}
+          <div>
+            <label className="block text-sm font-medium text-ink mb-1.5 flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5 text-ink-300" />Website URL
+            </label>
+            <input
+              type="url"
+              value={local.websiteUrl}
+              onChange={e => setLocal(l => ({ ...l, websiteUrl: e.target.value }))}
+              placeholder="https://yourwebsite.com"
+              className="w-full border border-ink-100 rounded-xl px-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-ink mb-1.5 flex items-center gap-1.5">
+              <Instagram className="w-3.5 h-3.5 text-ink-300" />Instagram username
+            </label>
+            <div className="flex items-center border border-ink-100 rounded-xl overflow-hidden focus-within:border-ink focus-within:ring-2 focus-within:ring-ink/10 transition-all">
+              <span className="pl-4 pr-1 text-sm text-ink-300 select-none">@</span>
+              <input
+                type="text"
+                value={local.contactInstagram}
+                onChange={e => setLocal(l => ({ ...l, contactInstagram: e.target.value.replace(/^@/, '').replace(/\s/g, '') }))}
+                placeholder="yourhandle"
+                className="flex-1 px-2 py-3 text-sm text-ink placeholder-ink-200 outline-none bg-transparent"
+              />
+            </div>
+            <p className="mt-1 text-xs text-ink-300">Requires a Business or Creator account. Clients will be linked to instagram.com/yourhandle.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-ink mb-1.5 flex items-center gap-1.5">
+              <Facebook className="w-3.5 h-3.5 text-ink-300" />Facebook Page username
+            </label>
+            <div className="flex items-center border border-ink-100 rounded-xl overflow-hidden focus-within:border-ink focus-within:ring-2 focus-within:ring-ink/10 transition-all">
+              <span className="pl-4 pr-1 text-sm text-ink-300 select-none">@</span>
+              <input
+                type="text"
+                value={local.contactFacebook}
+                onChange={e => setLocal(l => ({ ...l, contactFacebook: e.target.value.replace(/^@/, '').replace(/\s/g, '') }))}
+                placeholder="yourpagename"
+                className="flex-1 px-2 py-3 text-sm text-ink placeholder-ink-200 outline-none bg-transparent"
+              />
+            </div>
+            <p className="mt-1 text-xs text-ink-300">Must be a Facebook Page (not a personal profile). Clients will be linked to facebook.com/yourpagename.</p>
+          </div>
         </div>
-        <div className="flex justify-end mt-5"><SaveBtn section="links" /></div>
+        <div className="flex justify-end mt-5"><SaveBtn section="contacts" /></div>
       </div>
 
       {/* Account settings */}
@@ -2159,12 +3208,597 @@ function DashboardLightbox({ photos, startIdx, onClose }: {
   )
 }
 
+// ─── TrustScoreTab ────────────────────────────────────────────────────────────
+
+const PLATFORM_META = {
+  instagram: {
+    label: 'Instagram',
+    color: 'from-pink-500 to-orange-400',
+    dotColor: 'bg-pink-500',
+    icon: Instagram,
+    scope: 'Followers · Engagement · Posting consistency',
+    authUrl: '/api/oauth/instagram',
+    accountRequirement: 'Business or Creator account required',
+    accountRequirementDetail: 'Personal accounts cannot be connected. Switch to a Professional account in Instagram Settings → Account → Switch to Professional Account.',
+  },
+  facebook: {
+    label: 'Facebook Page',
+    color: 'from-blue-600 to-blue-400',
+    dotColor: 'bg-blue-500',
+    icon: Facebook,
+    scope: 'Page followers · Reviews · Account age',
+    authUrl: '/api/oauth/facebook',
+    accountRequirement: 'Facebook Page required (not personal profile)',
+    accountRequirementDetail: 'You need a Facebook Page for your photography business. Create one at facebook.com/pages/create — it\'s free and separate from your personal profile.',
+  },
+  google: {
+    label: 'Google Business',
+    color: 'from-red-500 to-yellow-400',
+    dotColor: 'bg-red-500',
+    icon: Globe,
+    scope: 'Review rating · Review count · Verified status',
+    authUrl: '/api/oauth/google',
+    accountRequirement: null,
+    accountRequirementDetail: null,
+  },
+} as const
+
+type TrustPlatform = keyof typeof PLATFORM_META
+
+function ScoreArc({ score }: { score: number }) {
+  const size = 140
+  const r = 56
+  const circ = Math.PI * r  // half-circle
+  const dash = (score / 100) * circ
+  const color = score >= 70 ? '#10b981' : score >= 40 ? '#f59e0b' : '#ef4444'
+  const label = score >= 70 ? 'Strong' : score >= 40 ? 'Growing' : 'Building'
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <svg width={size} height={size / 2 + 16} viewBox={`0 0 ${size} ${size / 2 + 16}`}>
+        {/* Track */}
+        <path
+          d={`M ${size * 0.07} ${size / 2} A ${r} ${r} 0 0 1 ${size * 0.93} ${size / 2}`}
+          fill="none" stroke="#f3f4f6" strokeWidth="12" strokeLinecap="round"
+        />
+        {/* Fill */}
+        <path
+          d={`M ${size * 0.07} ${size / 2} A ${r} ${r} 0 0 1 ${size * 0.93} ${size / 2}`}
+          fill="none" stroke={color} strokeWidth="12" strokeLinecap="round"
+          strokeDasharray={`${dash} ${circ}`}
+          style={{ transition: 'stroke-dasharray 0.8s ease' }}
+        />
+        <text x={size / 2} y={size / 2} textAnchor="middle" dominantBaseline="central"
+          className="font-bold" style={{ fontSize: 26, fill: color, fontWeight: 700 }}>
+          {score}
+        </text>
+        <text x={size / 2} y={size / 2 + 16} textAnchor="middle"
+          style={{ fontSize: 11, fill: '#9ca3af' }}>
+          / 100
+        </text>
+      </svg>
+      <span className="text-xs font-semibold px-3 py-1 rounded-full border"
+        style={{ color, borderColor: color, backgroundColor: `${color}10` }}>
+        {label}
+      </span>
+    </div>
+  )
+}
+
+function PillarBar({ label, score, max = 100, color }: { label: string; score: number; max?: number; color: string }) {
+  const pct = Math.round((score / max) * 100)
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between items-center">
+        <span className="text-xs text-ink-500">{label}</span>
+        <span className="text-xs font-semibold text-ink">{score.toFixed(0)}</span>
+      </div>
+      <div className="h-1.5 bg-ink-100 rounded-full overflow-hidden">
+        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: color }} />
+      </div>
+    </div>
+  )
+}
+
+function TrustScoreTab({
+  trustData,
+  loading,
+  syncing,
+  notification,
+  onDismissNotification,
+  onSync,
+  onDisconnect,
+}: {
+  trustData: any
+  loading: boolean
+  syncing: boolean
+  notification: { type: 'success' | 'error'; msg: string } | null
+  onDismissNotification: () => void
+  onSync: () => void
+  onDisconnect: (platform: string) => Promise<void>
+}) {
+  const score: number = trustData?.trust_score ?? 0
+  const breakdown = trustData?.breakdown
+  const connected: Record<string, { username: string; connectedAt: string; isActive: boolean }> = trustData?.connected_platforms ?? {}
+  const signals: Record<string, any> = trustData?.latest_signals ?? {}
+  const syncLog: any[] = trustData?.sync_log ?? []
+
+  return (
+    <div className="space-y-5">
+      {/* Notification */}
+      {notification && (
+        <div className={`flex items-start gap-3 px-4 py-3 rounded-xl border text-sm ${
+          notification.type === 'success'
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+            : 'bg-red-50 border-red-200 text-red-600'
+        }`}>
+          {notification.type === 'success'
+            ? <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            : <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+          <span className="flex-1">{notification.msg}</span>
+          <button onClick={onDismissNotification} className="text-current opacity-60 hover:opacity-100 flex-shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Score card */}
+      <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-ink-50 rounded-xl flex items-center justify-center">
+              <Shield className="w-4 h-4 text-ink-400" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-ink">Trust Score</h2>
+              <p className="text-xs text-ink-300">
+                {trustData?.last_sync_at
+                  ? `Last synced ${new Date(trustData.last_sync_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                  : 'Not yet synced'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onSync}
+            disabled={syncing || loading}
+            className="flex items-center gap-2 text-xs font-semibold px-4 py-2 bg-ink text-white rounded-xl hover:bg-ink-800 disabled:opacity-50 transition-all"
+          >
+            {syncing ? <><Spinner /> Syncing…</> : <><RefreshCw className="w-3.5 h-3.5" /> Sync now</>}
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-8"><Spinner /></div>
+        ) : (
+          <div className="flex flex-col lg:flex-row gap-8 items-center lg:items-start">
+            {/* Arc gauge */}
+            <div className="flex-shrink-0">
+              <ScoreArc score={score} />
+              <p className="text-center text-xs text-ink-300 mt-2">Visible on your public profile</p>
+            </div>
+
+            {/* Pillar breakdown */}
+            {breakdown ? (
+              <div className="flex-1 space-y-3 w-full">
+                <p className="text-xs font-semibold text-ink-400 uppercase tracking-wide mb-3">Score breakdown</p>
+                <PillarBar label="Social proof (Instagram · Facebook)"  score={breakdown.platform}     color="#ec4899" />
+                <PillarBar label="Reviews (Google · Native)"           score={breakdown.reviews}      color="#3b82f6" />
+                <PillarBar label="Activity (consistency · account age)" score={breakdown.activity}     color="#f59e0b" />
+                <PillarBar label="Verification (badges · completeness)" score={breakdown.verification} color="#10b981" />
+                <p className="text-[10px] text-ink-300 pt-1">
+                  Weights: Social 30% · Reviews 35% · Activity 20% · Verification 15%
+                </p>
+              </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-sm text-ink-300 text-center">Connect platforms below and sync to see your breakdown.</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Platform connections */}
+      <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-9 h-9 bg-ink-50 rounded-xl flex items-center justify-center">
+            <Zap className="w-4 h-4 text-ink-400" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-ink">Connected platforms</h2>
+            <p className="text-xs text-ink-300">Each connection adds real signal to your trust score</p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {(Object.keys(PLATFORM_META) as TrustPlatform[]).map(platform => {
+            const meta = PLATFORM_META[platform]
+            const conn = connected[platform]
+            const isConnected = conn?.isActive
+            const sig = signals[platform]
+            const Icon = meta.icon
+
+            return (
+              <div key={platform} className={`rounded-xl border p-4 transition-all ${
+                isConnected ? 'border-emerald-200 bg-emerald-50/30' : 'border-ink-100'
+              }`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${meta.color} flex items-center justify-center flex-shrink-0`}>
+                      <Icon className="w-4 h-4 text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-ink">{meta.label}</p>
+                      </div>
+                      <p className="text-xs text-ink-300 truncate">{meta.scope}</p>
+                      {!isConnected && meta.accountRequirement && (
+                        <p className="text-[10px] text-amber-600 font-medium mt-0.5 flex items-center gap-1" title={meta.accountRequirementDetail ?? undefined}>
+                          <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                          {meta.accountRequirement}
+                        </p>
+                      )}
+                      {isConnected && conn.username && (
+                        <p className="text-xs text-ink-400 mt-0.5">@{conn.username}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {isConnected ? (
+                      <>
+                        {/* Connected pill */}
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Connected
+                        </span>
+                        {/* Reconnect */}
+                        <a
+                          href={meta.authUrl}
+                          title="Reconnect to refresh permissions"
+                          className="text-xs text-ink-400 hover:text-ink border border-ink-100 hover:border-ink-300 px-3 py-1.5 rounded-lg transition-all"
+                        >
+                          Reconnect
+                        </a>
+                        {/* Disconnect */}
+                        <button
+                          onClick={() => onDisconnect(platform)}
+                          title="Disconnect this platform"
+                          className="text-xs text-ink-300 hover:text-red-500 hover:border-red-200 border border-transparent px-2 py-1.5 rounded-lg transition-all"
+                        >
+                          ✕
+                        </button>
+                      </>
+                    ) : (
+                      <a
+                        href={meta.authUrl}
+                        className="text-xs font-semibold text-white px-4 py-1.5 rounded-lg bg-ink hover:bg-ink-800 transition-all"
+                      >
+                        Connect
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* Signal detail when connected */}
+                {isConnected && sig && (
+                  <div className="mt-3 pt-3 border-t border-ink-100 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {sig.follower_count != null && (
+                      <div>
+                        <p className="text-[10px] text-ink-300 uppercase tracking-wide">Followers</p>
+                        <p className="text-sm font-semibold text-ink">{sig.follower_count.toLocaleString()}</p>
+                      </div>
+                    )}
+                    {sig.engagement_rate != null && (
+                      <div>
+                        <p className="text-[10px] text-ink-300 uppercase tracking-wide">Engagement</p>
+                        <p className="text-sm font-semibold text-ink">{(sig.engagement_rate * 100).toFixed(1)}%</p>
+                      </div>
+                    )}
+                    {sig.review_rating != null && (
+                      <div>
+                        <p className="text-[10px] text-ink-300 uppercase tracking-wide">Rating</p>
+                        <p className="text-sm font-semibold text-ink">★ {sig.review_rating.toFixed(1)}</p>
+                      </div>
+                    )}
+                    {sig.review_count != null && (
+                      <div>
+                        <p className="text-[10px] text-ink-300 uppercase tracking-wide">Reviews</p>
+                        <p className="text-sm font-semibold text-ink">{sig.review_count}</p>
+                      </div>
+                    )}
+                    {sig.posting_consistency != null && (
+                      <div>
+                        <p className="text-[10px] text-ink-300 uppercase tracking-wide">Consistency</p>
+                        <p className="text-sm font-semibold text-ink">{Math.round(sig.posting_consistency * 100)}%</p>
+                      </div>
+                    )}
+                    {sig.account_age_days != null && (
+                      <div>
+                        <p className="text-[10px] text-ink-300 uppercase tracking-wide">Account age</p>
+                        <p className="text-sm font-semibold text-ink">{Math.floor(sig.account_age_days / 365)}y {Math.floor((sig.account_age_days % 365) / 30)}m</p>
+                      </div>
+                    )}
+                    {sig.is_verified && (
+                      <div>
+                        <p className="text-[10px] text-ink-300 uppercase tracking-wide">Verified</p>
+                        <p className="text-sm font-semibold text-emerald-600">✓ Yes</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Native reviews summary */}
+      {(trustData?.native_review_count ?? 0) > 0 && (
+        <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+          <div className="flex items-center gap-3">
+            <Star className="w-5 h-5 text-amber-400 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-ink">TrueNorth native reviews</p>
+              <p className="text-xs text-ink-400">
+                {trustData.native_review_count} review{trustData.native_review_count !== 1 ? 's' : ''} · avg {trustData.native_avg_rating?.toFixed(1)} ★
+                <span className="text-ink-300 ml-1">— automatically included in your score</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sync log */}
+      {syncLog.length > 0 && (
+        <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+          <p className="text-xs font-semibold text-ink-400 uppercase tracking-wide mb-3">Recent sync log</p>
+          <div className="space-y-2">
+            {syncLog.slice(0, 8).map((entry, i) => (
+              <div key={i} className="flex items-start gap-3 text-xs">
+                <span className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${
+                  entry.status === 'success' ? 'bg-emerald-500' :
+                  entry.status === 'partial'  ? 'bg-amber-400' : 'bg-red-400'
+                }`} />
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium text-ink capitalize">{entry.platform}</span>
+                  <span className="text-ink-400 ml-2">{entry.status}</span>
+                  {entry.score_after != null && (
+                    <span className="text-ink-300 ml-2">→ score {entry.score_after}</span>
+                  )}
+                  {entry.error_message && (
+                    <p className="text-red-500 truncate mt-0.5">{entry.error_message}</p>
+                  )}
+                </div>
+                <span className="text-ink-300 flex-shrink-0 whitespace-nowrap">
+                  {new Date(entry.synced_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* How it works */}
+      <div className="bg-ink rounded-2xl p-5 relative overflow-hidden">
+        <div className="absolute inset-0 grid-pattern pointer-events-none opacity-40" />
+        <div className="relative z-10">
+          <p className="text-white font-semibold text-sm mb-3">How trust scores work</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[
+              { icon: '📸', title: 'Social proof (30%)', body: 'Instagram followers, engagement rate, posting frequency — real audience, real signal.' },
+              { icon: '⭐', title: 'Reviews (35%)', body: 'Google Business rating and review count, plus reviews earned on TrueNorth.' },
+              { icon: '📅', title: 'Activity (20%)', body: 'Posting consistency across platforms and account age — you show up regularly.' },
+              { icon: '✅', title: 'Verification (15%)', body: 'Verified badges, number of connected platforms, and profile completeness.' },
+            ].map(item => (
+              <div key={item.title} className="bg-white/10 rounded-xl p-3">
+                <p className="text-white text-xs font-semibold mb-1">{item.icon} {item.title}</p>
+                <p className="text-ink-300 text-xs leading-relaxed">{item.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── NotifPanel ──────────────────────────────────────────────────────────────
+
+function NotifPanel({
+  bookingRequests,
+  messages,
+  groups,
+  notifications,
+  setNotifications,
+  onNavigate,
+  onClose,
+}: {
+  bookingRequests: BookingRequest[]
+  messages: Message[]
+  groups: Group[]
+  notifications: { id: string; type: string; title: string; body: string | null; read_at: string | null; created_at: string }[]
+  setNotifications: React.Dispatch<React.SetStateAction<{ id: string; type: string; title: string; body: string | null; read_at: string | null; created_at: string }[]>>
+  onNavigate: (tab: string) => void
+  onClose: () => void
+}) {
+  const pendingBookings = bookingRequests.filter(r => r.status === 'pending')
+  const unreadMessages = messages.filter(m => m.unread)
+  const unreadGroups = groups.filter(g => (g.unread ?? 0) > 0)
+  const unreadSystem = notifications.filter(n => !n.read_at)
+  const totalUnread = pendingBookings.length + unreadMessages.length + unreadGroups.length + unreadSystem.length
+
+  function dismissNotif(id: string) {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read_at: new Date().toISOString() } : n))
+    fetch(`/api/photographer/notifications/${id}`, { method: 'DELETE' }).catch(() => {})
+  }
+
+  function markAllRead() {
+    setNotifications(prev => prev.map(n => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })))
+    fetch('/api/photographer/notifications', { method: 'PATCH' }).catch(() => {})
+  }
+
+  function relativeTime(iso: string) {
+    const diff = Date.now() - new Date(iso).getTime()
+    const m = Math.floor(diff / 60000)
+    if (m < 1) return 'Just now'
+    if (m < 60) return `${m}m ago`
+    const h = Math.floor(m / 60)
+    if (h < 24) return `${h}h ago`
+    return `${Math.floor(h / 24)}d ago`
+  }
+
+  return (
+    <div className="flex flex-col h-full max-h-[100dvh] sm:max-h-[480px]">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-ink-50 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-ink">Notifications</p>
+          {totalUnread > 0 && (
+            <span className="min-w-[18px] h-[18px] bg-red-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center px-1">
+              {totalUnread}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {totalUnread > 0 && (
+            <button onClick={markAllRead} className="text-[10px] text-ink-400 hover:text-ink font-medium transition-colors">
+              Mark all read
+            </button>
+          )}
+          <button onClick={onClose} className="text-ink-300 hover:text-ink p-1 rounded-lg hover:bg-ink-50 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto divide-y divide-ink-50">
+
+        {/* Booking requests section */}
+        {pendingBookings.length > 0 && (
+          <div>
+            <p className="px-4 pt-3 pb-1 text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Bookings</p>
+            {pendingBookings.map(r => (
+              <button key={r.id} onClick={() => onNavigate('requests')}
+                className="w-full px-4 py-3 hover:bg-amber-50 transition-colors text-left flex items-start gap-3">
+                <div className={`w-8 h-8 rounded-lg ${r.clientBg} flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0`}>
+                  {r.clientInitials}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
+                    <p className="text-xs font-semibold text-ink">New booking request</p>
+                  </div>
+                  <p className="text-xs text-ink-500">{r.clientName} · {r.date}</p>
+                  <p className="text-[10px] text-ink-300 mt-0.5">{fmtSubmitted(r.submittedAt)}</p>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-ink-200 flex-shrink-0 mt-0.5" />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Messages section — client DMs + unread groups/DMs */}
+        {(unreadMessages.length > 0 || unreadGroups.length > 0) && (
+          <div>
+            <p className="px-4 pt-3 pb-1 text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Messages</p>
+            {unreadMessages.map(m => (
+              <button key={m.id} onClick={() => onNavigate('messages')}
+                className="w-full px-4 py-3 hover:bg-ink-50 transition-colors text-left flex items-start gap-3">
+                <div className={`w-8 h-8 rounded-lg ${m.bg} flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0`}>
+                  {m.initials}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-ink flex-shrink-0" />
+                    <p className="text-xs font-semibold text-ink">New message</p>
+                  </div>
+                  <p className="text-xs text-ink-500 font-medium">{m.from}</p>
+                  <p className="text-xs text-ink-400 truncate">{m.preview}</p>
+                  <p className="text-[10px] text-ink-300 mt-0.5">{m.time}</p>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-ink-200 flex-shrink-0 mt-0.5" />
+              </button>
+            ))}
+            {unreadGroups.map(g => {
+              const lastMsg = g.messages[g.messages.length - 1]
+              const displayName = g.isDm ? (g.dmPeerName ?? g.name) : g.name
+              const displayInitials = g.isDm ? (g.dmPeerInitials ?? g.name.slice(0, 2).toUpperCase()) : g.emoji
+              const displayBg = g.isDm ? (g.dmPeerBg ?? 'bg-ink-300') : 'bg-violet-600'
+              return (
+                <button key={g.id} onClick={() => onNavigate('messages')}
+                  className="w-full px-4 py-3 hover:bg-ink-50 transition-colors text-left flex items-start gap-3">
+                  <div className={`w-8 h-8 rounded-lg ${g.isDm ? displayBg : 'bg-ink-100'} flex items-center justify-center ${g.isDm ? 'text-white text-[10px] font-bold' : 'text-base'} flex-shrink-0`}>
+                    {displayInitials}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-ink flex-shrink-0" />
+                      <p className="text-xs font-semibold text-ink truncate">{displayName}</p>
+                      {g.unread > 1 && <span className="text-[9px] font-bold bg-ink text-white rounded-full px-1 flex-shrink-0">{g.unread}</span>}
+                    </div>
+                    {lastMsg && <p className="text-xs text-ink-400 truncate">{lastMsg.senderName}: {lastMsg.text}</p>}
+                    <p className="text-[10px] text-ink-300 mt-0.5">{g.lastActivityAt ? relativeTime(g.lastActivityAt) : ''}</p>
+                  </div>
+                  <ChevronRight className="w-3.5 h-3.5 text-ink-200 flex-shrink-0 mt-0.5" />
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* System notifications section */}
+        {unreadSystem.length > 0 && (
+          <div>
+            <p className="px-4 pt-3 pb-1 text-[10px] font-semibold text-ink-300 uppercase tracking-wider">Activity</p>
+            {unreadSystem.map(n => (
+              <div key={n.id} className="px-4 py-3 flex items-start gap-3 hover:bg-ink-50 transition-colors">
+                <div className="w-8 h-8 rounded-lg bg-ink-100 flex items-center justify-center flex-shrink-0">
+                  <Bell className="w-3.5 h-3.5 text-ink-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-ink flex-shrink-0" />
+                    <p className="text-xs font-semibold text-ink truncate">{n.title}</p>
+                  </div>
+                  {n.body && <p className="text-xs text-ink-400 truncate">{n.body}</p>}
+                  <p className="text-[10px] text-ink-300 mt-0.5">{relativeTime(n.created_at)}</p>
+                </div>
+                <button
+                  onClick={() => dismissNotif(n.id)}
+                  className="text-ink-200 hover:text-ink-400 p-0.5 rounded transition-colors flex-shrink-0"
+                  title="Dismiss"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Empty state */}
+        {totalUnread === 0 && (
+          <div className="px-4 py-12 text-center">
+            <div className="w-12 h-12 bg-ink-50 rounded-full flex items-center justify-center mx-auto mb-3">
+              <Bell className="w-5 h-5 text-ink-200" />
+            </div>
+            <p className="text-sm font-medium text-ink-300">You're all caught up!</p>
+            <p className="text-xs text-ink-200 mt-0.5">No new notifications right now.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 function PhotographerDashboardInner() {
   const searchParams = useSearchParams()
   const isFresh = searchParams.get('fresh') === '1'
   const tabParam = searchParams.get('tab') as DashboardTab | null
+  const trustConnected = searchParams.get('trust_connected') as string | null
+  const trustError = searchParams.get('trust_error') as string | null
+  const trustErrorMsg = searchParams.get('msg') as string | null
 
   const [profile, setProfile] = useState<ProfileData>({
     displayName: '',
@@ -2173,20 +3807,21 @@ function PhotographerDashboardInner() {
     rate: '',
     rateUnit: 'hr',
     specialties: [],
-    googleUrl: '',
-    instagramUrl: '',
-    yelpUrl: '',
     websiteUrl: '',
+    contactInstagram: '',
+    contactFacebook: '',
     hasPortfolio: false,
     availabilitySet: false,
     email: '',
     avatarUrl: '',
+    coverImageUrl: '',
+    trustScore: 0,
   })
 
   // Load real profile from DB on mount
   useEffect(() => {
     fetch('/api/photographer/profile')
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(data => {
         setProfile(prev => ({
           ...prev,
@@ -2196,11 +3831,12 @@ function PhotographerDashboardInner() {
           rate: data.rate_amount ?? '',
           rateUnit: data.rate_unit ?? 'hr',
           specialties: data.specialties ?? [],
-          googleUrl: data.google_url ?? '',
-          instagramUrl: data.instagram_url ?? '',
-          yelpUrl: data.yelp_url ?? '',
           websiteUrl: data.website_url ?? '',
+          contactInstagram: data.contact_instagram_url ?? '',
+          contactFacebook: data.contact_facebook_url ?? '',
           avatarUrl: data.avatar_url ?? '',
+          coverImageUrl: data.cover_image_url ?? '',
+          trustScore: 0,
         }))
       })
       .catch(() => {/* keep empty defaults */})
@@ -2214,6 +3850,7 @@ function PhotographerDashboardInner() {
   })
   const [packages, setPackages] = useState<ProjectPackage[]>([])
   const [bookingRequests, setBookingRequests] = useState<BookingRequest[]>([])
+  const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null)
 
   // Load packages from DB
   useEffect(() => {
@@ -2229,6 +3866,8 @@ function PhotographerDashboardInner() {
           billing_type: p.billing_type,
           includes: p.deliverables ?? [],
           popular: p.is_popular ?? false,
+          banner_url: p.banner_url ?? null,
+          specialty: p.specialty ?? null,
         })))
       })
       .catch(() => {})
@@ -2292,6 +3931,14 @@ function PhotographerDashboardInner() {
         }
 
         // Booking requests — map API shape to dashboard BookingRequest shape
+        // Build clientId → conversationId map from conversations
+        const clientConvMap: Record<string, string> = {}
+        if (Array.isArray(msgData)) {
+          for (const c of msgData) {
+            if (c.clientId && c.id) clientConvMap[c.clientId] = c.id
+          }
+        }
+
         if (Array.isArray(bookingData) && bookingData.length > 0) {
           setBookingRequests(bookingData.map((b: any) => {
             const d = new Date(b.date)
@@ -2302,11 +3949,13 @@ function PhotographerDashboardInner() {
             const code = (b.clientId ?? '').split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0)
             return {
               id: b.id,
+              clientId: b.clientId ?? '',
               clientName: b.clientName,
               clientInitials: b.clientInitials,
               clientBg: palette[code % palette.length],
               date: displayDate,
               dateKey,
+              isoDate: b.date,
               timeSlot: b.timeSlot,
               note: b.description,
               billingType: b.billingType,
@@ -2314,6 +3963,7 @@ function PhotographerDashboardInner() {
               status: b.status,
               photographerNote: b.photographerNote,
               submittedAt: b.submittedAt,
+              conversationId: clientConvMap[b.clientId] ?? null,
             }
           }))
         }
@@ -2329,7 +3979,7 @@ function PhotographerDashboardInner() {
               initials: c.clientInitials,
               bg: palette[code % palette.length],
               preview: c.lastMessage,
-              time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' }) : '',
+              time: c.lastMessageAt ? fmtSubmitted(c.lastMessageAt) : '',
               unread: c.unread > 0,
               thread: [],
               threadLoaded: false,
@@ -2368,6 +4018,11 @@ function PhotographerDashboardInner() {
             unread: g.unread ?? 0,
             lastActivityAt: g.lastActivityAt ?? null,
             isCoverGroup: g.isCoverGroup ?? false,
+            isDm: g.isDm ?? false,
+            dmPeerId: g.dmPeerId ?? null,
+            dmPeerName: g.dmPeerName ?? null,
+            dmPeerInitials: g.dmPeerInitials ?? null,
+            dmPeerBg: g.dmPeerBg ?? null,
             isRemoved: g.isRemoved ?? false,
             isLeft: g.isLeft ?? false,
           })))
@@ -2376,7 +4031,6 @@ function PhotographerDashboardInner() {
       .catch(() => {})
   }, [])
 
-  const [available, setAvailable] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [welcomeDismissed, setWelcomeDismissed] = useState(false)
 
@@ -2624,13 +4278,59 @@ function PhotographerDashboardInner() {
     if (res.ok) setStandaloneVideos(prev => prev.filter(v => v.id !== videoId))
   }
 
-  const validTabs: DashboardTab[] = ['overview','portfolio','messages','requests','availability','packages','reviews','network','faq','settings']
-  const [activeTab, setActiveTab] = useState<DashboardTab>(
-    tabParam && validTabs.includes(tabParam) ? tabParam : 'overview'
+  const validTabs: DashboardTab[] = ['overview','portfolio','messages','requests','availability','packages','reviews','network','faq','settings','trust']
+  const [activeTab, setActiveTab] = useState<DashboardTab>(() => {
+    if (trustConnected || trustError) return 'trust'
+    return tabParam && validTabs.includes(tabParam) ? tabParam : 'overview'
+  })
+
+  // Trust score data
+  const [trustData, setTrustData] = useState<any>(null)
+  const [trustLoading, setTrustLoading] = useState(false)
+  const [trustSyncing, setTrustSyncing] = useState(false)
+  const [trustNotification, setTrustNotification] = useState<{ type: 'success' | 'error'; msg: string } | null>(
+    trustConnected
+      ? { type: 'success', msg: `${trustConnected.charAt(0).toUpperCase() + trustConnected.slice(1)} connected! Syncing your trust score…` }
+      : trustError
+      ? { type: 'error', msg: `Could not connect ${trustError}${trustErrorMsg ? ': ' + trustErrorMsg : ''}` }
+      : null
   )
 
+  // Load trust data when tab is active
   useEffect(() => {
-    if (activeTab !== 'portfolio' || portfolioLoaded) return
+    if (activeTab !== 'trust') return
+    setTrustLoading(true)
+    fetch('/api/photographer/trust')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setTrustData(d))
+      .catch(() => {})
+      .finally(() => setTrustLoading(false))
+  }, [activeTab])
+
+  // After a platform is connected via OAuth, auto-trigger a sync then reload full trust data
+  useEffect(() => {
+    if (!trustConnected) return
+    setTrustSyncing(true)
+    fetch('/api/photographer/trust', { method: 'POST' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.trust_score !== undefined) {
+          setTrustNotification({ type: 'success', msg: `Connected! New trust score: ${d.trust_score}` })
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        setTrustSyncing(false)
+        // Reload full trust data so connected_platforms + signals update
+        fetch('/api/photographer/trust')
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d) setTrustData(d) })
+          .catch(() => {})
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const loadPortfolio = () => {
     setPortfolioLoading(true)
     fetch('/api/photographer/albums')
       .then(r => r.json())
@@ -2640,15 +4340,29 @@ function PhotographerDashboardInner() {
           setStandalonePhotos(data.standalone_photos ?? [])
           setStandaloneVideos(data.standalone_videos ?? [])
         } else {
-          // backwards compat: old array response
           setPortfolioAlbums(Array.isArray(data) ? data : [])
         }
       })
       .catch(() => {})
       .finally(() => { setPortfolioLoading(false); setPortfolioLoaded(true) })
-  }, [activeTab, portfolioLoaded])
+  }
 
-  const { sections, pct } = computeScore(profile)
+  // Load portfolio on mount so hasPortfolio reflects reality from the start
+  useEffect(() => { loadPortfolio() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reload when switching to portfolio tab (if already loaded once, still refresh)
+  useEffect(() => {
+    if (activeTab !== 'portfolio') return
+    loadPortfolio()
+  }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const hasPortfolio =
+    totalPortfolioPhotos(portfolioAlbums) > 0 ||
+    totalPortfolioVideos(portfolioAlbums) > 0 ||
+    standalonePhotos.length > 0 ||
+    standaloneVideos.length > 0
+
+  const { sections, pct } = computeScore({ ...profile, hasPortfolio })
   const incomplete = sections.filter(s => !s.done)
   const unreadCount = messages.filter(m => m.unread).length
   const groupUnreadCount = groups.reduce((acc, g) => acc + (g.unread ?? 0), 0)
@@ -2663,12 +4377,13 @@ function PhotographerDashboardInner() {
     { key: 'overview', label: 'Overview' },
     { key: 'portfolio', label: 'Portfolio' },
     { key: 'messages', label: totalUnreadMessages > 0 ? `Messages (${totalUnreadMessages})` : 'Messages' },
-    { key: 'requests', label: pendingBookings > 0 ? `Requests (${pendingBookings})` : 'Requests' },
+    { key: 'requests', label: pendingBookings > 0 ? `Booking Requests (${pendingBookings})` : 'Booking Requests' },
     { key: 'availability', label: 'Availability' },
     { key: 'packages', label: 'Packages' },
     { key: 'reviews', label: 'Reviews' },
     { key: 'network', label: 'Network' },
     { key: 'faq', label: 'FAQ' },
+    { key: 'trust', label: 'Trust Score' },
     { key: 'settings', label: 'Settings' },
   ] as const
 
@@ -2684,17 +4399,6 @@ function PhotographerDashboardInner() {
             </Link>
 
             <div className="flex items-center gap-1.5">
-              {/* Availability toggle */}
-              <button
-                onClick={() => setAvailable(v => !v)}
-                className={`hidden sm:flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg border transition-all ${
-                  available ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-ink-100 text-ink-400 hover:border-ink-200'
-                }`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${available ? 'bg-emerald-500' : 'bg-ink-300'}`} />
-                {available ? 'Available today' : 'Set status'}
-              </button>
-
               {/* View public profile */}
               <Link
                 href="/photographers/your-profile"
@@ -2703,103 +4407,13 @@ function PhotographerDashboardInner() {
                 <Eye className="w-3.5 h-3.5" /> View profile
               </Link>
 
-              {/* Notifications */}
-              <div className="relative">
-                <button onClick={() => setNotifOpen(v => !v)} className="relative p-2 rounded-lg hover:bg-ink-50 transition-colors">
-                  <Bell className="w-4 h-4 text-ink-400" />
-                  {(totalUnreadMessages + pendingBookings + notifications.filter(n => !n.read_at).length) > 0 && (
-                    <span className="absolute top-1 right-1 min-w-[14px] h-3.5 bg-red-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center px-0.5">
-                      {totalUnreadMessages + pendingBookings + notifications.filter(n => !n.read_at).length}
-                    </span>
-                  )}
-                </button>
-                {notifOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl border border-ink-100 z-50 overflow-hidden"
-                    style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.06), 0 8px 32px rgba(0,0,0,0.12)' }}>
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-ink-50">
-                      <p className="text-sm font-semibold text-ink">Notifications</p>
-                      <button onClick={() => setNotifOpen(false)} className="text-ink-300 hover:text-ink"><X className="w-4 h-4" /></button>
-                    </div>
-                    <div className="divide-y divide-ink-50 max-h-96 overflow-y-auto">
-                      {/* Pending booking requests */}
-                      {bookingRequests.filter(r => r.status === 'pending').map(r => (
-                        <button key={r.id} onClick={() => { setActiveTab('requests'); setNotifOpen(false) }}
-                          className="w-full px-4 py-3 hover:bg-amber-50 transition-colors text-left">
-                          <div className="flex items-start gap-2.5">
-                            <div className={`w-8 h-8 rounded-lg ${r.clientBg} flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0`}>
-                              {r.clientInitials}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 mb-0.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
-                                <p className="text-xs font-semibold text-ink">New booking request</p>
-                              </div>
-                              <p className="text-xs text-ink-500 font-medium">{r.clientName} · {r.date}</p>
-                              <p className="text-xs text-ink-400 truncate">{r.timeSlot}</p>
-                              <p className="text-[10px] text-ink-300 mt-0.5">{r.submittedAt}</p>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                      {/* Unread messages */}
-                      {messages.filter(m => m.unread).map(m => (
-                        <button key={m.id} onClick={() => { setActiveTab('messages'); setNotifOpen(false) }}
-                          className="w-full px-4 py-3 hover:bg-ink-50 transition-colors text-left">
-                          <div className="flex items-start gap-2.5">
-                            <div className={`w-8 h-8 rounded-lg ${m.bg} flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0`}>
-                              {m.initials}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 mb-0.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-ink flex-shrink-0" />
-                                <p className="text-xs font-semibold text-ink">New message</p>
-                              </div>
-                              <p className="text-xs text-ink-500 font-medium">{m.from}</p>
-                              <p className="text-xs text-ink-400 truncate">{m.preview}</p>
-                              <p className="text-[10px] text-ink-300 mt-0.5">{m.time}</p>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                      {/* System notifications */}
-                      {notifications.filter(n => !n.read_at).map(n => (
-                        <div key={n.id} className="w-full px-4 py-3 bg-ink-50/50">
-                          <div className="flex items-start gap-2.5">
-                            <div className="w-8 h-8 rounded-lg bg-ink-100 flex items-center justify-center flex-shrink-0">
-                              <Bell className="w-3.5 h-3.5 text-ink-400" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 mb-0.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-ink flex-shrink-0" />
-                                <p className="text-xs font-semibold text-ink truncate">{n.title}</p>
-                              </div>
-                              {n.body && <p className="text-xs text-ink-400 truncate">{n.body}</p>}
-                              <p className="text-[10px] text-ink-300 mt-0.5">{new Date(n.created_at).toLocaleDateString()}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                      {(totalUnreadMessages + pendingBookings + notifications.filter(n => !n.read_at).length) === 0 && (
-                        <div className="px-4 py-8 text-center">
-                          <Bell className="w-8 h-8 text-ink-200 mx-auto mb-2" />
-                          <p className="text-xs text-ink-300">You're all caught up!</p>
-                        </div>
-                      )}
-                    </div>
-                    <div className="px-4 py-3 border-t border-ink-50 text-center">
-                      <button
-                        className="text-xs text-ink-400 hover:text-ink font-medium transition-colors"
-                        onClick={() => {
-                          setNotifications(prev => prev.map(n => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })))
-                          fetch('/api/photographer/notifications', { method: 'PATCH' }).catch(() => {})
-                        }}
-                      >
-                        Mark all as read
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Notifications bell */}
+              <NotificationCentre
+                apiEndpoint="/api/photographer/notifications"
+                markReadEndpoint="/api/photographer/notifications"
+                role="photographer"
+                pollIntervalMs={30000}
+              />
 
               {/* Avatar */}
               {profile.avatarUrl ? (
@@ -2815,6 +4429,7 @@ function PhotographerDashboardInner() {
           </div>
         </div>
       </nav>
+
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
@@ -2842,12 +4457,12 @@ function PhotographerDashboardInner() {
           <div className="lg:col-span-2 space-y-6">
 
             {/* Tab bar — scrollable on mobile */}
-            <div className="flex gap-1 bg-white rounded-xl p-1 border border-ink-100 overflow-x-auto" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+            <div className="flex gap-1 bg-white rounded-xl p-1 border border-ink-100 overflow-x-auto scrollbar-hide" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
               {tabs.map(tab => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`flex-1 whitespace-nowrap text-sm font-medium py-2 px-3 rounded-lg transition-all ${
+                  className={`flex-none whitespace-nowrap text-sm font-medium py-2 px-3 rounded-lg transition-all ${
                     activeTab === tab.key ? 'bg-ink text-white' : 'text-ink-400 hover:text-ink'
                   }`}
                 >
@@ -2907,12 +4522,10 @@ function PhotographerDashboardInner() {
                         <span className={`text-xs flex-1 ${s.done ? 'text-ink-300 line-through' : 'text-ink-500'}`}>{s.label}</span>
                         {!s.done && (
                           <button
-                            onClick={() => s.href.startsWith('#') ? setActiveTab('settings') : undefined}
+                            onClick={() => setActiveTab(s.tab as DashboardTab)}
                             className="text-[10px] text-ink font-medium hover:underline"
                           >
-                            {s.href.startsWith('/') ? (
-                              <Link href={s.href}>Add →</Link>
-                            ) : 'Add →'}
+                            Add →
                           </button>
                         )}
                       </div>
@@ -2920,86 +4533,73 @@ function PhotographerDashboardInner() {
                   </div>
                 </div>
 
-                {/* Recent messages preview */}
-                <div className="bg-white rounded-2xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
-                  <div className="flex items-center justify-between px-5 py-4 border-b border-ink-50">
-                    <p className="font-semibold text-ink text-sm">Recent messages</p>
-                    <button onClick={() => setActiveTab('messages')} className="text-xs text-ink-400 hover:text-ink flex items-center gap-1 transition-colors">
-                      View all <ChevronRight className="w-3 h-3" />
-                    </button>
-                  </div>
-                  <div className="divide-y divide-ink-50">
-                    {messages.slice(0, 3).map(m => (
-                      <button key={m.id} onClick={() => setActiveTab('messages')}
-                        className="w-full flex items-start gap-3 px-5 py-3.5 hover:bg-ink-50 transition-colors text-left">
-                        <div className={`w-9 h-9 rounded-full ${m.bg} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>{m.initials}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-0.5">
-                            <p className={`text-sm ${m.unread ? 'font-semibold text-ink' : 'text-ink-500'}`}>{m.from}</p>
-                            <span className="text-[10px] text-ink-300">{m.time}</span>
-                          </div>
-                          <p className="text-xs text-ink-400 truncate">{m.preview}</p>
-                        </div>
-                        {m.unread && <span className="w-2 h-2 bg-ink rounded-full mt-1.5 flex-shrink-0" />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
             )}
 
             {/* ── Messages tab ─────────────────────────────────────── */}
             {activeTab === 'messages' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-ink-300">Showing recent conversations. For the full experience use the dedicated messaging view.</p>
-                  <Link href="/messages/photographer"
-                    className="flex items-center gap-1.5 text-xs font-semibold text-ink border border-ink-100 px-3 py-1.5 rounded-lg hover:bg-ink-50 transition-colors flex-shrink-0">
-                    <ExternalLink className="w-3 h-3" /> Open full view
-                  </Link>
-                </div>
-                <MessagesTab messages={messages} setMessages={setMessages} groups={groups} setGroups={setGroups} />
-              </div>
+              <MessagesTab messages={messages} setMessages={setMessages} groups={groups} setGroups={setGroups} />
             )}
 
             {/* ── Booking requests tab ──────────────────────────────── */}
             {activeTab === 'requests' && (
-              <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-9 h-9 bg-ink-50 rounded-xl flex items-center justify-center">
-                    <Inbox className="w-4 h-4 text-ink-400" />
-                  </div>
-                  <div>
-                    <h2 className="font-semibold text-ink">Booking requests</h2>
-                    <p className="text-xs text-ink-300">Approve or reject client requests — pending slots show as tentative on your calendar</p>
-                  </div>
-                </div>
-                <BookingRequestsTab
-                  requests={bookingRequests}
-                  setRequests={setBookingRequests}
-                  setBookedDates={setBookedDates}
-                  setMessages={setMessages}
-                  setActiveTab={setActiveTab}
-                />
-              </div>
-            )}
-
-            {/* ── Availability tab ──────────────────────────────────── */}
-            {activeTab === 'availability' && (
               <div className="space-y-5">
-                {/* Day-level calendar */}
+                {/* Schedule overview — who's booked on what day/time */}
                 <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
                   <div className="flex items-center gap-3 mb-6">
                     <div className="w-9 h-9 bg-ink-50 rounded-xl flex items-center justify-center">
                       <Calendar className="w-4 h-4 text-ink-400" />
                     </div>
                     <div>
-                      <h2 className="font-semibold text-ink">Day availability</h2>
-                      <p className="text-xs text-ink-300">Mark days as available, tentative, or busy</p>
+                      <h2 className="font-semibold text-ink">Schedule overview</h2>
+                      <p className="text-xs text-ink-300">See all bookings on the calendar — click any event to jump to the request</p>
                     </div>
                   </div>
-                  <AvailabilityCalendar bookedDates={bookedDates} setBookedDates={setBookedDates} />
+                  <BookingCalendar
+                    bookings={bookingRequests}
+                    bookedDates={bookedDates}
+                    setBookedDates={setBookedDates}
+                    onSelectBooking={(req) => {
+                      setExpandedRequestId(req.id)
+                    }}
+                    readOnly
+                  />
                 </div>
+
+                {/* Request list */}
+                <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-9 h-9 bg-ink-50 rounded-xl flex items-center justify-center">
+                      <Inbox className="w-4 h-4 text-ink-400" />
+                    </div>
+                    <div>
+                      <h2 className="font-semibold text-ink">Booking requests</h2>
+                      <p className="text-xs text-ink-300">Approve or reject client requests — pending slots show as tentative on your calendar</p>
+                    </div>
+                  </div>
+                  <BookingRequestsTab
+                    requests={bookingRequests}
+                    setRequests={setBookingRequests}
+                    setBookedDates={setBookedDates}
+                    setMessages={setMessages}
+                    setActiveTab={setActiveTab}
+                    expandedId={expandedRequestId}
+                    setExpandedId={setExpandedRequestId}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* ── Availability tab ──────────────────────────────────── */}
+            {activeTab === 'availability' && (
+              <div className="space-y-5">
+                {/* Booking calendar — Google Calendar-style month/week view */}
+                <BookingCalendar
+                  bookings={bookingRequests}
+                  bookedDates={bookedDates}
+                  setBookedDates={setBookedDates}
+                  onSelectBooking={(req) => { setActiveTab('requests') }}
+                />
 
                 {/* Time-slot scheduler */}
                 <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
@@ -3051,7 +4651,7 @@ function PhotographerDashboardInner() {
                     const res = await fetch('/api/photographer/packages', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ name: pkg.name, description: pkg.description, billing_type: pkg.billing_type, price: pkg.price || 0, deliverables: pkg.includes }),
+                      body: JSON.stringify({ name: pkg.name, description: pkg.description, billing_type: pkg.billing_type, price: pkg.price || 0, deliverables: pkg.includes, specialty: pkg.specialty ?? null }),
                     })
                     if (!res.ok) return null
                     const data = await res.json()
@@ -3061,7 +4661,7 @@ function PhotographerDashboardInner() {
                     fetch('/api/photographer/packages', {
                       method: 'PATCH',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ id: pkg.id, name: pkg.name, description: pkg.description, billing_type: pkg.billing_type, price: pkg.price || 0, deliverables: pkg.includes, is_popular: pkg.popular }),
+                      body: JSON.stringify({ id: pkg.id, name: pkg.name, description: pkg.description, billing_type: pkg.billing_type, price: pkg.price || 0, deliverables: pkg.includes, is_popular: pkg.popular, specialty: pkg.specialty ?? null }),
                     }).catch(() => {})
                   }}
                   onPersistDelete={(id) => {
@@ -3625,6 +5225,37 @@ function PhotographerDashboardInner() {
             {activeTab === 'settings' && (
               <ProfileSettingsTab profile={profile} setProfile={setProfile} />
             )}
+
+            {/* ── Trust Score tab ──────────────────────────────────────── */}
+            {activeTab === 'trust' && (
+              <TrustScoreTab
+                trustData={trustData}
+                loading={trustLoading}
+                syncing={trustSyncing}
+                notification={trustNotification}
+                onDismissNotification={() => setTrustNotification(null)}
+                onSync={() => {
+                  setTrustSyncing(true)
+                  fetch('/api/photographer/trust', { method: 'POST' })
+                    .then(r => r.ok ? r.json() : null)
+                    .then(d => {
+                      if (d?.trust_score !== undefined) {
+                        setTrustNotification({ type: 'success', msg: `Trust score updated to ${d.trust_score}` })
+                        // Reload breakdown
+                        return fetch('/api/photographer/trust').then(r => r.ok ? r.json() : null)
+                      }
+                    })
+                    .then(d => { if (d) setTrustData(d) })
+                    .catch(() => setTrustNotification({ type: 'error', msg: 'Sync failed — try again' }))
+                    .finally(() => setTrustSyncing(false))
+                }}
+                onDisconnect={async (platform: string) => {
+                  await fetch(`/api/oauth/${platform}`, { method: 'DELETE' })
+                  const d = await fetch('/api/photographer/trust').then(r => r.ok ? r.json() : null)
+                  if (d) setTrustData(d)
+                }}
+              />
+            )}
           </div>
 
           {/* ── Sidebar ──────────────────────────────────────────────── */}
@@ -3677,12 +5308,17 @@ function PhotographerDashboardInner() {
                       {s.done && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />}
                     </div>
                     <span className={`text-xs flex-1 ${s.done ? 'text-ink-300 line-through' : 'text-ink-500'}`}>{s.label}</span>
+                    {!s.done && (
+                      <button onClick={() => setActiveTab(s.tab as DashboardTab)} className="text-[10px] text-ink font-medium hover:underline flex-shrink-0">
+                        Add →
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
               {incomplete.length > 0 && (
                 <button
-                  onClick={() => setActiveTab('settings')}
+                  onClick={() => setActiveTab(incomplete[0].tab as DashboardTab)}
                   className="w-full bg-ink hover:bg-ink-800 text-white text-sm font-semibold py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
                 >
                   Complete profile <ArrowRight className="w-3.5 h-3.5" />
@@ -3735,10 +5371,10 @@ function PhotographerDashboardInner() {
                   <AlertCircle className="w-5 h-5 text-ink-300 mb-3" />
                   <p className="text-white font-semibold text-sm mb-2">{incomplete[0].cta}</p>
                   <p className="text-ink-400 text-xs leading-relaxed mb-3">
-                    Profiles with a Google review link get 2× more trust from clients.
+                    Profiles with a connected trust score get 3× more enquiries from clients.
                   </p>
                   <button
-                    onClick={() => setActiveTab('settings')}
+                    onClick={() => setActiveTab(incomplete[0].tab as DashboardTab)}
                     className="inline-flex items-center gap-1.5 text-xs font-semibold text-white hover:text-ink-200 transition-colors"
                   >
                     Do it now <ArrowRight className="w-3.5 h-3.5" />

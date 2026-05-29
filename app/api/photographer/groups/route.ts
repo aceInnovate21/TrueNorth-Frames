@@ -68,7 +68,7 @@ export async function GET() {
   if (groupIds.length > 0) {
     const { data: groupRows, error: grpErr } = await db
       .from('connection_groups')
-      .select('id, name, emoji, owner_id, member_count, is_cover_group')
+      .select('id, name, emoji, owner_id, member_count, is_cover_group, is_dm')
       .in('id', groupIds)
 
     if (grpErr) return serverError('Failed to load groups')
@@ -185,6 +185,13 @@ export async function GET() {
       const lastMsg = msgs[msgs.length - 1]
       const lastActivityAt = lastMsg?.created_at ?? null
 
+      // For DM groups, expose the peer's identity so the UI can show their name/avatar
+      const isDm = g.is_dm ?? false
+      const dmPeerId = isDm ? (memberIds.find((id: string) => id !== me.id) ?? null) : null
+      const dmPeerName = dmPeerId ? (profileNameMap[dmPeerId] ?? null) : null
+      const dmPeerInitials = dmPeerName ? initials(dmPeerName) : null
+      const dmPeerBg = dmPeerId ? avatarBg(dmPeerId) : null
+
       return {
         id: g.id,
         name: g.name,
@@ -196,6 +203,11 @@ export async function GET() {
         unread,
         lastActivityAt,
         isCoverGroup: g.is_cover_group ?? false,
+        isDm,
+        dmPeerId,
+        dmPeerName,
+        dmPeerInitials,
+        dmPeerBg,
         isRemoved: removedGroupIds.has(g.id),
         isLeft: leftGroupIds.has(g.id),
       }

@@ -2,15 +2,25 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowRight, Star, Eye, EyeOff, AlertCircle, User, Camera } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 type Role = 'client' | 'photographer'
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  )
+}
+
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectTo = searchParams.get('redirect') ?? null
   const [role, setRole] = useState<Role | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -81,7 +91,12 @@ export default function LoginPage() {
       return
     }
 
-    router.push(role === 'photographer' ? '/dashboard/photographer' : '/dashboard/client')
+    // If there's a redirect param (e.g., from booking flow), go there instead
+    if (redirectTo) {
+      router.push(redirectTo)
+    } else {
+      router.push(role === 'photographer' ? '/dashboard/photographer' : '/dashboard/client')
+    }
   }
 
   const roleErr  = touched.role ? validate().role : undefined

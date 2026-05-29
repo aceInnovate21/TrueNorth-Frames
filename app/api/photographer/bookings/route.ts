@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, serverError } from '@/lib/api-helpers'
+import { notify } from '@/lib/notify'
 
 export async function GET() {
   const { adminDb, user } = await getServerSession()
@@ -92,7 +93,7 @@ export async function PATCH(request: NextRequest) {
   const { id, status, photographer_note } = body
   if (!id || !status) return NextResponse.json({ error: 'id and status are required' }, { status: 400 })
 
-  const allowed = ['approved', 'declined', 'completed']
+  const allowed = ['approved', 'declined', 'completed', 'pending', 'cancelled']
   if (!allowed.includes(status)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
   }
@@ -121,6 +122,39 @@ export async function PATCH(request: NextRequest) {
     .eq('photographer_id', profile.id)
 
   if (error) return serverError('Failed to update booking')
+
+  // Notify client about the status change
+  const { data: booking } = await db
+    .from('booking_requests')
+    .select('client_id, requested_date')
+    .eq('id', id)
+    .single()
+
+  if (booking?.client_id) {
+    const { data: clientUser } = await db
+      .from('users')
+      .select('id')
+      .eq('id', booking.client_id)
+      .single()
+
+    if (clientUser) {
+      const dateLabel = booking.requested_date
+        ? new Date(booking.requested_date).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })
+        : 'your session'
+
+      const msgMap: Record<string, { title: string; body: string; type: any }> = {
+        approved:  { type: 'booking_approved',   title: 'Booking approved!',    body: `Your booking for ${dateLabel} has been confirmed.` },
+        declined:  { type: 'booking_declined',   title: 'Booking declined',     body: `Your booking request for ${dateLabel} was declined.` },
+        completed: { type: 'booking_completed',  title: 'Session completed',    body: `Your session on ${dateLabel} has been marked complete.` },
+        cancelled: { type: 'booking_cancelled',  title: 'Booking cancelled',    body: `Your booking for ${dateLabel} has been cancelled.` },
+      }
+
+      const n = msgMap[status]
+      if (n) {
+        await notify({ db, userId: clientUser.id, type: n.type, title: n.title, body: n.body, entityType: 'booking_request', entityId: id })
+      }
+    }
+  }
 
   return NextResponse.json({ success: true })
 }

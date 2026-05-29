@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, serverError } from '@/lib/api-helpers'
+import { notify } from '@/lib/notify'
 
 // Deterministic avatar colour from photographer id
 const BG_PALETTE = [
@@ -211,6 +212,31 @@ export async function POST(request: NextRequest) {
       console.error('[connections connect] error:', error)
       return serverError('Failed to send connection request')
     }
+
+    // Notify the addressee photographer
+    const { data: addresseeProfile } = await db
+      .from('photographer_profiles')
+      .select('user_id, display_name')
+      .eq('id', addressee_id)
+      .single()
+    const { data: myProfile } = await db
+      .from('photographer_profiles')
+      .select('display_name')
+      .eq('id', me.id)
+      .single()
+
+    if (addresseeProfile?.user_id) {
+      await notify({
+        db,
+        userId: addresseeProfile.user_id,
+        type: 'connection_request',
+        title: 'New connection request',
+        body: `${myProfile?.display_name ?? 'A photographer'} wants to connect with you.`,
+        entityType: 'photographer_profile',
+        entityId: me.id,
+      })
+    }
+
     return NextResponse.json({ success: true })
   }
 
@@ -223,6 +249,33 @@ export async function POST(request: NextRequest) {
       .eq('addressee_id', me.id)
       .eq('status', 'pending')
     if (error) return serverError('Failed to update connection')
+
+    // Notify the original requester when accepted
+    if (action === 'accept') {
+      const { data: requesterProfile } = await db
+        .from('photographer_profiles')
+        .select('user_id, display_name')
+        .eq('id', addressee_id)
+        .single()
+      const { data: myProfile } = await db
+        .from('photographer_profiles')
+        .select('display_name')
+        .eq('id', me.id)
+        .single()
+
+      if (requesterProfile?.user_id) {
+        await notify({
+          db,
+          userId: requesterProfile.user_id,
+          type: 'connection_accepted',
+          title: 'Connection accepted',
+          body: `${myProfile?.display_name ?? 'A photographer'} accepted your connection request.`,
+          entityType: 'photographer_profile',
+          entityId: me.id,
+        })
+      }
+    }
+
     return NextResponse.json({ success: true })
   }
 

@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const {
     first_name, last_name, display_name, bio, location, rate,
-    specialties = [], google_url, instagram_url, yelp_url, website_url,
+    specialties = [], website_url,
   } = body
 
   if (!display_name?.trim()) return badRequest('display_name is required')
@@ -88,25 +88,6 @@ export async function POST(request: NextRequest) {
     await db
       .from('photographer_specialties')
       .upsert(rows, { onConflict: 'photographer_id,specialty' })
-  }
-
-  // Insert external platform links
-  const platformLinks = [
-    { platform: 'google', url: google_url },
-    { platform: 'instagram', url: instagram_url },
-    { platform: 'yelp', url: yelp_url },
-  ].filter(l => l.url?.trim())
-
-  if (platformLinks.length > 0) {
-    const rows = platformLinks.map(l => ({
-      photographer_id: photographerId,
-      platform: l.platform,
-      profile_url: l.url.trim(),
-      is_verified: false,
-    }))
-    await db
-      .from('external_platform_links')
-      .upsert(rows, { onConflict: 'photographer_id,platform' })
   }
 
   // Save website to photographer_profiles

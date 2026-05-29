@@ -9,7 +9,7 @@ export const runtime = 'nodejs'
 // Body: multipart/form-data  { file, conversation_id }
 // Returns: { url, type, name, size }
 export async function POST(request: NextRequest) {
-  const { user } = await getServerSession()
+  const { adminDb, user } = await getServerSession()
   if (!user) return unauthorized()
 
   const formData = await request.formData()
@@ -18,6 +18,25 @@ export async function POST(request: NextRequest) {
 
   if (!file) return badRequest('file is required')
   if (!conversationId) return badRequest('conversation_id is required')
+
+  // Verify the conversation belongs to this photographer
+  const db = adminDb as any
+  const { data: profile } = await db
+    .from('photographer_profiles')
+    .select('id')
+    .eq('user_id', user.id)
+    .single()
+
+  if (!profile) return NextResponse.json({ error: 'Photographer profile not found' }, { status: 403 })
+
+  const { data: conv } = await db
+    .from('conversations')
+    .select('id')
+    .eq('id', conversationId)
+    .eq('photographer_id', profile.id)
+    .single()
+
+  if (!conv) return NextResponse.json({ error: 'Conversation not found' }, { status: 403 })
 
   const mimeType = file.type
   const attachType = detectType(mimeType)

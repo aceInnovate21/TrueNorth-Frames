@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, serverError } from '@/lib/api-helpers'
+import { notify } from '@/lib/notify'
 
 export async function GET() {
   const { adminDb, user } = await getServerSession()
@@ -22,6 +23,10 @@ export async function GET() {
       client_id,
       rating,
       body,
+      communication_rating,
+      quality_rating,
+      value_rating,
+      punctuality_rating,
       public_reply,
       replied_at,
       flag_status,
@@ -57,6 +62,10 @@ export async function GET() {
     privateNote: r.private_note ?? '',
     flag: r.flag_status === 'none' ? 'none' : r.flag_status === 'flag_resolved' ? 'flag_resolved' : 'flagged',
     flagReason: r.flag_reason ?? '',
+    communicationRating: r.communication_rating ?? null,
+    qualityRating: r.quality_rating ?? null,
+    valueRating: r.value_rating ?? null,
+    punctualityRating: r.punctuality_rating ?? null,
   }))
 
   return NextResponse.json(result)
@@ -114,6 +123,33 @@ export async function PATCH(request: NextRequest) {
     .eq('photographer_id', profile.id)
 
   if (error) return serverError('Failed to update review')
+
+  // When photographer publishes a reply, notify the client who wrote the review
+  if (action === 'reply' && public_reply?.trim()) {
+    const { data: review } = await db
+      .from('reviews')
+      .select('client_id')
+      .eq('id', id)
+      .single()
+
+    const { data: photographerProfile } = await db
+      .from('photographer_profiles')
+      .select('display_name')
+      .eq('id', profile.id)
+      .single()
+
+    if (review?.client_id) {
+      await notify({
+        db,
+        userId: review.client_id,
+        type: 'review_reply',
+        title: 'Your review got a reply',
+        body: `${photographerProfile?.display_name ?? 'The photographer'} replied to your review.`,
+        entityType: 'review',
+        entityId: id,
+      })
+    }
+  }
 
   return NextResponse.json({ success: true })
 }
