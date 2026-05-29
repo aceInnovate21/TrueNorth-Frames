@@ -3,7 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const PROTECTED_PREFIXES = ['/dashboard', '/messages']
+const PROTECTED_PREFIXES = ['/dashboard', '/messages', '/admin']
+const ADMIN_PUBLIC = ['/admin/login']
 
 const ROLE_ROUTES: Record<string, string> = {
   '/dashboard/photographer': 'photographer',
@@ -52,11 +53,30 @@ export async function middleware(request: NextRequest) {
   // Refresh session — must call getUser() to validate
   const { data: { user } } = await supabase.auth.getUser()
 
-  const isProtected = PROTECTED_PREFIXES.some(p => pathname.startsWith(p))
-  const isAuthPage = pathname === '/login' || pathname === '/signup'
+  const isAdminPublic = ADMIN_PUBLIC.some(p => pathname.startsWith(p))
+  const isAdminRoute  = pathname.startsWith('/admin') && !isAdminPublic
+  const isProtected   = PROTECTED_PREFIXES.some(p => pathname.startsWith(p)) && !isAdminPublic
+  const isAuthPage    = pathname === '/login' || pathname === '/signup'
 
-  // Unauthenticated → redirect to login
-  if (isProtected && !user) {
+  // Unauthenticated on admin route → /admin/login
+  if (isAdminRoute && !user) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/admin/login'
+    return NextResponse.redirect(url)
+  }
+
+  // Authenticated on /admin/login → /admin
+  if (isAdminPublic && user) {
+    const role = await getUserRole(user.id)
+    if (role === 'admin') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/admin'
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // Unauthenticated non-admin protected route → /login
+  if (isProtected && !isAdminRoute && !user) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.searchParams.set('redirect', pathname)
