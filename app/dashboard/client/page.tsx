@@ -444,10 +444,12 @@ function DeleteAccountModal({ onClose }: { onClose: () => void }) {
   const router = useRouter()
   const [confirm, setConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState(false)
 
   async function handleDelete() {
     if (confirm !== 'DELETE') return
     setDeleting(true)
+    setDeleteError(false)
     try {
       const res = await fetch('/api/account/delete', { method: 'POST' })
       if (!res.ok) throw new Error('Delete failed')
@@ -455,7 +457,7 @@ function DeleteAccountModal({ onClose }: { onClose: () => void }) {
       router.push('/login?deleted=1')
     } catch {
       setDeleting(false)
-      alert('Something went wrong. Please try again or contact support.')
+      setDeleteError(true)
     }
   }
 
@@ -471,10 +473,16 @@ function DeleteAccountModal({ onClose }: { onClose: () => void }) {
         </div>
         <div className="px-5 py-4 space-y-3">
           <p className="text-sm text-ink-600 leading-relaxed">This will permanently delete your account, all saved photographers, and your booking history. <strong>This cannot be undone.</strong></p>
+          {deleteError && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
+              <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+              <p className="text-xs text-red-700">Something went wrong. Please try again or contact support@truenorthframes.ca.</p>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-ink-500 mb-1.5">Type <span className="font-bold text-red-600">DELETE</span> to confirm</label>
             <input
-              type="text" value={confirm} onChange={e => setConfirm(e.target.value)}
+              type="text" value={confirm} onChange={e => { setConfirm(e.target.value); setDeleteError(false) }}
               placeholder="DELETE"
               className="w-full border border-red-200 rounded-xl px-4 py-2.5 text-sm text-ink outline-none focus:border-red-400 transition-all"
             />

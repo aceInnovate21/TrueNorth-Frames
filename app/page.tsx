@@ -33,50 +33,25 @@ const SPECIALTIES = [
   { name: 'Newborn', icon: Baby, count: 9, href: '/photographers?specialty=newborn' },
 ]
 
-const PHOTOGRAPHERS = [
-  {
-    name: 'Sarah Chen',
-    initials: 'SC',
-    specialty: ['Wedding', 'Portrait'],
-    rating: 4.9,
-    reviews: 47,
-    rate: '$200',
-    rateType: 'session',
-    location: 'Oliver, Edmonton',
-    gradient: 'from-slate-700 to-slate-900',
-    status: 'online' as const,
-    sources: ['Google', 'Yelp', 'Instagram'],
-    slug: 'sarah-chen',
-  },
-  {
-    name: 'Marcus Wright',
-    initials: 'MW',
-    specialty: ['Corporate', 'Events'],
-    rating: 4.7,
-    reviews: 31,
-    rate: '$150',
-    rateType: 'hr',
-    location: 'Downtown, Edmonton',
-    gradient: 'from-zinc-700 to-zinc-900',
-    status: 'recent' as const,
-    sources: ['Google', 'Instagram'],
-    slug: 'marcus-wright',
-  },
-  {
-    name: 'Priya Patel',
-    initials: 'PP',
-    specialty: ['Newborn', 'Family'],
-    rating: 4.8,
-    reviews: 62,
-    rate: '$175',
-    rateType: 'session',
-    location: 'Glenora, Edmonton',
-    gradient: 'from-neutral-700 to-neutral-900',
-    status: 'online' as const,
-    sources: ['Google', 'Yelp'],
-    slug: 'priya-patel',
-  },
+const CARD_GRADIENTS = [
+  'from-slate-700 to-slate-900',
+  'from-zinc-700 to-zinc-900',
+  'from-neutral-700 to-neutral-900',
 ]
+
+type FeaturedPhotographer = {
+  name: string
+  initials: string
+  specialty: string[]
+  rating: number
+  reviews: number
+  rate: string
+  location: string
+  slug: string
+  gradient: string
+  avatarUrl: string | null
+  trustScore: number
+}
 
 // Hero photo stack — Unsplash free images
 const HERO_PHOTOS = [
@@ -221,7 +196,7 @@ function HeroPhotoStack() {
 
 // ─── Featured Photographer Card ───────────────────────────────────────────
 
-function PhotographerCard({ p, index }: { p: (typeof PHOTOGRAPHERS)[0]; index: number }) {
+function PhotographerCard({ p, index }: { p: FeaturedPhotographer; index: number }) {
   return (
     <Link
       href={`/photographers/${p.slug}`}
@@ -235,18 +210,21 @@ function PhotographerCard({ p, index }: { p: (typeof PHOTOGRAPHERS)[0]; index: n
         style={{ boxShadow: '0 2px 4px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.07), 0 0 0 1px rgba(0,0,0,0.05)' }}
       >
         <div className={`h-48 bg-gradient-to-br ${p.gradient} relative overflow-hidden`}>
+          {p.avatarUrl && (
+            <Image src={p.avatarUrl} alt={p.name} fill className="object-cover opacity-60" sizes="400px" />
+          )}
           <div className="absolute top-3 left-3">
             <div className="flex items-center gap-1.5 bg-white/15 backdrop-blur-sm rounded-full px-2.5 py-1">
-              <div className={`w-1.5 h-1.5 rounded-full ${p.status === 'online' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-              <span className="text-white text-[10px] font-medium">
-                {p.status === 'online' ? 'Available' : 'Active'}
-              </span>
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span className="text-white text-[10px] font-medium">Active</span>
             </div>
           </div>
-          <div className="absolute top-3 right-3 bg-white/15 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1">
-            <Star className="w-2.5 h-2.5 text-white fill-white" />
-            <span className="text-white text-[10px] font-bold">{p.rating}</span>
-          </div>
+          {p.rating > 0 && (
+            <div className="absolute top-3 right-3 bg-white/15 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1">
+              <Star className="w-2.5 h-2.5 text-white fill-white" />
+              <span className="text-white text-[10px] font-bold">{p.rating.toFixed(1)}</span>
+            </div>
+          )}
           <div className="absolute bottom-3 left-3 w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center text-white font-bold text-xs">
             {p.initials}
           </div>
@@ -258,16 +236,17 @@ function PhotographerCard({ p, index }: { p: (typeof PHOTOGRAPHERS)[0]; index: n
               <p className="font-semibold text-ink text-sm">{p.name}</p>
               <div className="flex items-center gap-1 mt-0.5">
                 <MapPin className="w-2.5 h-2.5 text-ink-300" />
-                <p className="text-ink-300 text-[11px]">{p.location}</p>
+                <p className="text-ink-300 text-[11px]">{p.location || 'Edmonton, AB'}</p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="font-bold text-ink text-sm">{p.rate}</p>
-              <p className="text-ink-300 text-[10px]">/{p.rateType}</p>
-            </div>
+            {p.rate && (
+              <div className="text-right">
+                <p className="font-bold text-ink text-sm">{p.rate}</p>
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap gap-1 mb-3">
-            {p.specialty.map((s) => (
+            {p.specialty.slice(0, 3).map((s) => (
               <span key={s} className="bg-ink-50 text-ink-500 text-[10px] font-medium px-2 py-0.5 rounded-full">{s}</span>
             ))}
           </div>
@@ -276,7 +255,7 @@ function PhotographerCard({ p, index }: { p: (typeof PHOTOGRAPHERS)[0]; index: n
               {[1,2,3,4,5].map((i) => (
                 <div key={i} className={`w-1.5 h-1.5 rounded-full ${i <= Math.round(p.rating) ? 'bg-ink-700' : 'bg-ink-100'}`} />
               ))}
-              <span className="text-ink-300 text-[10px] ml-1">{p.reviews} reviews</span>
+              {p.reviews > 0 && <span className="text-ink-300 text-[10px] ml-1">{p.reviews} reviews</span>}
             </div>
             <span className="text-ink text-[10px] font-semibold flex items-center gap-0.5">
               View profile <ChevronRight className="w-2.5 h-2.5" />
@@ -285,6 +264,30 @@ function PhotographerCard({ p, index }: { p: (typeof PHOTOGRAPHERS)[0]; index: n
         </div>
       </div>
     </Link>
+  )
+}
+
+function PhotographerCardSkeleton({ index }: { index: number }) {
+  return (
+    <div
+      className="bg-white rounded-2xl overflow-hidden animate-pulse"
+      style={{
+        transform: `perspective(1000px) rotateY(${index === 0 ? '3deg' : index === 2 ? '-3deg' : '0deg'}) rotateX(1.5deg)`,
+        boxShadow: '0 2px 4px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.07), 0 0 0 1px rgba(0,0,0,0.05)',
+      }}
+    >
+      <div className="h-48 bg-ink-100" />
+      <div className="p-4 space-y-3">
+        <div className="h-3.5 bg-ink-100 rounded w-2/3" />
+        <div className="h-2.5 bg-ink-50 rounded w-1/2" />
+        <div className="flex gap-1">
+          <div className="h-5 bg-ink-50 rounded-full w-16" />
+          <div className="h-5 bg-ink-50 rounded-full w-14" />
+        </div>
+        <div className="h-px bg-ink-50" />
+        <div className="h-2.5 bg-ink-50 rounded w-3/4" />
+      </div>
+    </div>
   )
 }
 
@@ -348,14 +351,13 @@ function TrustCard() {
 // ─── Search suggestions data ───────────────────────────────────────────────
 
 const SEARCH_SUGGESTIONS = [
-  { type: 'photographer' as const, name: 'Sarah Chen', sub: 'Wedding · Portrait · Oliver, Edmonton', slug: 'sarah-chen', initials: 'SC' },
-  { type: 'photographer' as const, name: 'Marcus Wright', sub: 'Corporate · Events · Downtown, Edmonton', slug: 'marcus-wright', initials: 'MW' },
-  { type: 'photographer' as const, name: 'Priya Patel', sub: 'Newborn · Family · Glenora, Edmonton', slug: 'priya-patel', initials: 'PP' },
-  { type: 'specialty' as const, name: 'Wedding photographers', sub: '12 in Edmonton', slug: '?specialty=wedding', initials: '' },
-  { type: 'specialty' as const, name: 'Portrait photographers', sub: '18 in Edmonton', slug: '?specialty=portrait', initials: '' },
-  { type: 'specialty' as const, name: 'Corporate photographers', sub: '14 in Edmonton', slug: '?specialty=corporate', initials: '' },
-  { type: 'specialty' as const, name: 'Newborn photographers', sub: '9 in Edmonton', slug: '?specialty=newborn', initials: '' },
-  { type: 'specialty' as const, name: 'Events photographers', sub: '11 in Edmonton', slug: '?specialty=events', initials: '' },
+  { type: 'specialty' as const, name: 'Wedding photographers', sub: 'in Edmonton', slug: '?specialty=wedding', initials: '' },
+  { type: 'specialty' as const, name: 'Portrait photographers', sub: 'in Edmonton', slug: '?specialty=portrait', initials: '' },
+  { type: 'specialty' as const, name: 'Corporate photographers', sub: 'in Edmonton', slug: '?specialty=corporate', initials: '' },
+  { type: 'specialty' as const, name: 'Newborn photographers', sub: 'in Edmonton', slug: '?specialty=newborn', initials: '' },
+  { type: 'specialty' as const, name: 'Events photographers', sub: 'in Edmonton', slug: '?specialty=events', initials: '' },
+  { type: 'specialty' as const, name: 'Real estate photographers', sub: 'in Edmonton', slug: '?specialty=real-estate', initials: '' },
+  { type: 'specialty' as const, name: 'Family photographers', sub: 'in Edmonton', slug: '?specialty=family', initials: '' },
 ]
 
 export default function HomePage() {
@@ -363,6 +365,8 @@ export default function HomePage() {
   const [specialty, setSpecialty] = useState('')
   const [showSuggestions, setShowSuggestions] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
+  const [featured, setFeatured] = useState<FeaturedPhotographer[]>([])
+  const [featuredLoading, setFeaturedLoading] = useState(true)
 
   const suggestions = query.trim().length > 0
     ? SEARCH_SUGGESTIONS.filter((s) =>
@@ -379,6 +383,33 @@ export default function HomePage() {
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/photographers?sort=trust&page=1')
+      .then((r) => r.json())
+      .then((data) => {
+        const rows = (data.photographers ?? data ?? []).slice(0, 3)
+        setFeatured(rows.map((p: any, i: number) => {
+          const fullName: string = p.display_name ?? p.name ?? 'Photographer'
+          const initials = fullName.split(' ').filter(Boolean).map((w: string) => w[0].toUpperCase()).slice(0, 2).join('')
+          return {
+            name:       fullName,
+            initials,
+            specialty:  p.specialties ?? [],
+            rating:     Number(p.native_avg_rating ?? p.trust_score ?? 0),
+            reviews:    Number(p.native_review_count ?? 0),
+            rate:       p.rate_display ?? '',
+            location:   p.location ?? '',
+            slug:       p.username ?? p.id,
+            gradient:   CARD_GRADIENTS[i % CARD_GRADIENTS.length],
+            avatarUrl:  p.avatar_url ?? null,
+            trustScore: Number(p.trust_score ?? 0),
+          }
+        }))
+      })
+      .catch(() => {})
+      .finally(() => setFeaturedLoading(false))
   }, [])
 
   return (
@@ -435,15 +466,11 @@ export default function HomePage() {
               {suggestions.map((s, i) => (
                 <Link
                   key={i}
-                  href={s.type === 'photographer' ? `/photographers/${s.slug}` : `/photographers${s.slug}`}
+                  href={`/photographers${s.slug}`}
                   className="flex items-center gap-3 px-4 py-3 hover:bg-ink-50 transition-colors border-b border-ink-50 last:border-0"
                   onClick={() => { setShowSuggestions(false); setQuery('') }}
                 >
-                  {s.type === 'photographer' ? (
-                    <div className="w-8 h-8 rounded-lg bg-ink flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
-                      {s.initials}
-                    </div>
-                  ) : (
+                  {(
                     <div className="w-8 h-8 rounded-lg bg-ink-50 flex items-center justify-center flex-shrink-0">
                       <Camera className="w-4 h-4 text-ink-400" />
                     </div>
@@ -610,9 +637,19 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start" style={{ perspective: '1200px' }}>
-            {PHOTOGRAPHERS.map((p, i) => (
-              <PhotographerCard key={p.slug} p={p} index={i} />
-            ))}
+            {featuredLoading
+              ? [0, 1, 2].map((i) => <PhotographerCardSkeleton key={i} index={i} />)
+              : featured.length > 0
+                ? featured.map((p, i) => <PhotographerCard key={p.slug} p={p} index={i} />)
+                : (
+                  <div className="col-span-3 text-center py-16">
+                    <p className="text-ink-300 text-sm">Photographers are joining soon — check back shortly.</p>
+                    <Link href="/photographers" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-ink hover:text-ink-600 transition-colors">
+                      Browse all <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  </div>
+                )
+            }
           </div>
 
           <div className="mt-10 text-center sm:hidden">

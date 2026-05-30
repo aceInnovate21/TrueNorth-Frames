@@ -1,6 +1,7 @@
 {
-  "/admin/conversations/page": "app/admin/conversations/page.js",
-  "/dashboard/photographer/page": "app/dashboard/photographer/page.js",
   "/admin/analytics/page": "app/admin/analytics/page.js",
+  "/page": "app/page.js",
+  "/for-photographers/page": "app/for-photographers/page.js",
+  "/how-it-works/page": "app/how-it-works/page.js",
   "/photographers/[username]/page": "app/photographers/[username]/page.js"
 }

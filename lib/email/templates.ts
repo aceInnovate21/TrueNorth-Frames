@@ -20,6 +20,8 @@ export type EmailTemplateId =
   | 'photographer_suspended'    // → photographer: your account was suspended
   | 'review_removed'            // → photographer: a review was removed by admin
   | 'review_dismissed'          // → photographer: a review flag was dismissed (review stays)
+  | 'booking_reminder_client'   // → client: session tomorrow reminder
+  | 'booking_reminder_photographer' // → photographer: session tomorrow reminder
 
 export type EmailPayload = Record<string, string | number | undefined | null>
 
@@ -489,6 +491,53 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
             </td>
           </tr>
         </table>
+      `,
+    }),
+  }),
+
+  // ── Booking reminder → client ───────────────────────────────────────────────
+  booking_reminder_client: (p) => ({
+    subject: `Reminder: your session with ${p.photographerName} is tomorrow`,
+    html: base({
+      preheader: `Just a heads-up — your photography session is tomorrow.`,
+      body: `
+        ${h1('Session Tomorrow! 📸')}
+        ${subtitle(`Your booking with ${p.photographerName} is confirmed for tomorrow.`)}
+        ${divider()}
+        ${infoBox([
+          { label: 'Photographer', value: String(p.photographerName) },
+          { label: 'Date',         value: String(p.date) },
+          { label: 'Time',         value: String(p.timeSlot) },
+          { label: 'Location',     value: String(p.location ?? 'TBD — check with your photographer') },
+          { label: 'Session type', value: String(p.sessionType) },
+        ])}
+        ${p_(`Have any last-minute questions? Message your photographer directly from your dashboard.`)}
+        ${cta('View Booking', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/client`)}
+        ${divider()}
+        ${p_(`After your session, you'll be able to leave a review. It takes less than a minute and makes a big difference for independent photographers.`)}
+      `,
+    }),
+  }),
+
+  // ── Booking reminder → photographer ────────────────────────────────────────
+  booking_reminder_photographer: (p) => ({
+    subject: `Reminder: session with ${p.clientName} is tomorrow`,
+    html: base({
+      preheader: `You have a photography session booked for tomorrow.`,
+      body: `
+        ${h1('Session Tomorrow')}
+        ${subtitle(`Just a reminder about your booking for tomorrow.`)}
+        ${divider()}
+        ${infoBox([
+          { label: 'Client',       value: String(p.clientName) },
+          { label: 'Date',         value: String(p.date) },
+          { label: 'Time',         value: String(p.timeSlot) },
+          { label: 'Location',     value: String(p.location ?? 'TBD') },
+          { label: 'Session type', value: String(p.sessionType) },
+        ])}
+        ${p.clientNote ? p_(`<strong>Client note:</strong> "${p.clientNote}"`) : ''}
+        ${p_(`Need to reach your client? You can message them directly from your dashboard.`)}
+        ${cta('View Booking', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer`)}
       `,
     }),
   }),
