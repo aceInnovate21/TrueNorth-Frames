@@ -930,7 +930,7 @@ export default function ClientDashboard() {
             ) : (
               <>
                 <h1 className="font-serif text-2xl sm:text-3xl font-bold text-ink">
-                  Welcome back, {firstName}.
+                  Welcome back{firstName ? `, ${firstName}` : ''}.
                 </h1>
                 <p className="text-ink-300 text-sm mt-1">Here's what's happening with your photographer search.</p>
               </>
