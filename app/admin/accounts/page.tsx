@@ -7,6 +7,7 @@ import {
   Search, CheckCircle2, XCircle, Shield,
   ChevronLeft, ChevronRight, Loader2, ArrowLeft,
 } from 'lucide-react'
+import { AdminNav } from '@/components/admin-nav'
 
 interface User {
   id: string
@@ -40,13 +41,6 @@ function relTime(iso: string) {
   return new Date(iso).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })
 }
 
-const NAV = [
-  { href: '/admin',              label: 'Dashboard'    },
-  { href: '/admin/accounts',     label: 'Accounts'     },
-  { href: '/admin/support',      label: 'Support'      },
-  { href: '/admin/trust-health', label: 'Trust health' },
-  { href: '/admin/analytics',    label: 'Analytics'    },
-]
 
 function AccountsInner() {
   const router = useRouter()
@@ -86,28 +80,7 @@ function AccountsInner() {
 
   return (
     <div className="min-h-screen bg-ink-50">
-      <header className="bg-white border-b border-ink-100 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/admin" className="p-1.5 rounded-lg hover:bg-ink-50 transition-colors text-ink-400">
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-            <span className="font-serif font-bold text-ink text-lg">TrueNorth</span>
-            <span className="text-ink-200">/</span>
-            <span className="text-sm text-ink-500">Admin</span>
-            <span className="text-ink-200">/</span>
-            <span className="text-sm font-semibold text-ink">Accounts</span>
-          </div>
-          <nav className="hidden md:flex items-center gap-1">
-            {NAV.map(n => (
-              <Link key={n.href} href={n.href}
-                className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${
-                  n.href === '/admin/accounts' ? 'bg-ink text-white' : 'text-ink-400 hover:text-ink hover:bg-ink-50'
-                }`}>{n.label}</Link>
-            ))}
-          </nav>
-        </div>
-      </header>
+      <AdminNav />
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">

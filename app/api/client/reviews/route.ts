@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, notFound, serverError } from '@/lib/api-helpers'
+import { queueEmail } from '@/lib/email/client'
 
 // GET /api/client/reviews — fetch all reviews submitted by this client
 export async function GET() {
@@ -101,6 +102,40 @@ export async function POST(request: NextRequest) {
     console.error('[reviews POST] insert error:', insertError)
     return serverError('Failed to submit review')
   }
+
+  // Email photographer — fire and forget
+  try {
+    const { data: photProfile } = await db
+      .from('photographer_profiles')
+      .select('user_id, display_name')
+      .eq('id', booking.photographer_id)
+      .single()
+
+    if (photProfile?.user_id) {
+      const { data: photUser } = await db
+        .from('users').select('email').eq('id', photProfile.user_id).single()
+      const { data: clientUser } = await db
+        .from('users').select('full_name').eq('id', user.id).single()
+      const { data: bookingRow } = await db
+        .from('booking_requests').select('requested_date').eq('id', booking_id).single()
+
+      if (photUser?.email) {
+        const dateLabel = bookingRow?.requested_date
+          ? new Date(bookingRow.requested_date).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })
+          : 'your session'
+        await queueEmail({
+          to: photUser.email,
+          templateId: 'review_received',
+          payload: {
+            clientName: clientUser?.full_name ?? 'A client',
+            rating,
+            reviewBody: reviewBody?.trim() ?? null,
+            date: dateLabel,
+          },
+        })
+      }
+    }
+  } catch { /* best-effort */ }
 
   return NextResponse.json({ success: true })
 }

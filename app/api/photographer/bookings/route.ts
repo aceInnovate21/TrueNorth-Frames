@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, serverError } from '@/lib/api-helpers'
 import { notify } from '@/lib/notify'
+import { queueEmail } from '@/lib/email/client'
 
 export async function GET() {
   const { adminDb, user } = await getServerSession()
@@ -123,17 +124,17 @@ export async function PATCH(request: NextRequest) {
 
   if (error) return serverError('Failed to update booking')
 
-  // Notify client about the status change
+  // Notify + email client about the status change
   const { data: booking } = await db
     .from('booking_requests')
-    .select('client_id, requested_date')
+    .select('client_id, requested_date, occasion, location_note')
     .eq('id', id)
     .single()
 
   if (booking?.client_id) {
     const { data: clientUser } = await db
       .from('users')
-      .select('id')
+      .select('id, email, full_name')
       .eq('id', booking.client_id)
       .single()
 
@@ -152,6 +153,47 @@ export async function PATCH(request: NextRequest) {
       const n = msgMap[status]
       if (n) {
         await notify({ db, userId: clientUser.id, type: n.type, title: n.title, body: n.body, entityType: 'booking_request', entityId: id })
+      }
+
+      // Photographer display name for email
+      const { data: photProfile } = await db
+        .from('photographer_profiles')
+        .select('display_name')
+        .eq('id', profile.id)
+        .single()
+      const photographerName: string = photProfile?.display_name ?? 'Your photographer'
+
+      if (clientUser.email) {
+        if (status === 'approved') {
+          await queueEmail({
+            to: clientUser.email,
+            templateId: 'booking_confirmed',
+            payload: {
+              photographerName,
+              sessionType: booking.occasion,
+              date: dateLabel,
+              location: booking.location_note ?? null,
+              photographerNote: photographer_note?.trim() ?? null,
+            },
+          })
+        } else if (status === 'declined') {
+          await queueEmail({
+            to: clientUser.email,
+            templateId: 'booking_declined',
+            payload: {
+              photographerName,
+              sessionType: booking.occasion,
+              date: dateLabel,
+              photographerNote: photographer_note?.trim() ?? null,
+            },
+          })
+        } else if (status === 'completed') {
+          await queueEmail({
+            to: clientUser.email,
+            templateId: 'booking_completed',
+            payload: { photographerName, date: dateLabel },
+          })
+        }
       }
     }
   }

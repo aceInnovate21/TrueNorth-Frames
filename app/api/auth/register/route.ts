@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { badRequest, serverError } from '@/lib/api-helpers'
+import { queueEmail } from '@/lib/email/client'
 
 // Called right after supabase.auth.signUp() on the client.
 // Accepts either access_token (if email confirmation is off) or user_id directly.
@@ -46,6 +47,14 @@ export async function POST(request: NextRequest) {
     if (error.code === '23505') return NextResponse.json({ success: true }) // already exists
     return serverError(`Failed to create user record: ${error.message}`)
   }
+
+  // Welcome email — fire and forget
+  const firstName = full_name.trim().split(' ')[0]
+  await queueEmail({
+    to: email,
+    templateId: role === 'photographer' ? 'welcome_photographer' : 'welcome_client',
+    payload: { firstName, email },
+  })
 
   return NextResponse.json({ success: true })
 }

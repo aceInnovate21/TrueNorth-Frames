@@ -7,7 +7,7 @@ import {
   ArrowLeft, Star, MapPin, Shield, Camera, CheckCircle2,
   Globe, Instagram, ExternalLink, Award, Calendar, DollarSign,
   ChevronDown, Package, Eye, X, ChevronLeft, ChevronRight, Layers,
-  Facebook, Users, TrendingUp, BadgeCheck,
+  Facebook, BadgeCheck,
 } from 'lucide-react'
 
 // ─── Portfolio lightbox + masonry grid ────────────────────────────────────────
@@ -1161,183 +1161,118 @@ export default function ProfilePage({ params }: { params: { username: string } }
                   </div>
                 </div>
 
-                {/* Social proof metrics — shown when photographer has OAuth-connected platforms */}
-                {connectedPlatforms.length > 0 && (
-                  <div className="bg-white rounded-2xl p-5 border border-ink-50"
-                    style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-ink text-sm">Social proof</h3>
-                      {Number(p.trust_score) > 0 && (
-                        <div className="flex items-center gap-1.5 bg-ink rounded-full px-2.5 py-1">
-                          <Shield className="w-3 h-3 text-white" />
-                          <span className="text-white text-xs font-bold">{Number(p.trust_score).toFixed(1)}</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="space-y-2.5">
-                      {connectedPlatforms.map(([platform, info]) => {
-                        // Build metrics to show for this platform
-                        const metrics: { label: string; value: string; icon: React.ElementType }[] = []
-
-                        if (platform === 'instagram') {
-                          if (info.follower_count != null) metrics.push({ label: 'Followers', value: fmtNum(info.follower_count), icon: Users })
-                          if (info.engagement_rate != null) metrics.push({ label: 'Engagement', value: `${(info.engagement_rate * 100).toFixed(1)}%`, icon: TrendingUp })
-                          if (info.posting_consistency != null) metrics.push({ label: 'Consistency', value: `${Math.round(info.posting_consistency * 100)}%`, icon: CheckCircle2 })
-                        } else if (platform === 'facebook') {
-                          if (info.follower_count != null) metrics.push({ label: 'Page likes', value: fmtNum(info.follower_count), icon: Users })
-                          if (info.rating != null) metrics.push({ label: 'Rating', value: `${Number(info.rating).toFixed(1)} ★`, icon: Star })
-                          if (info.count != null && info.count > 0) metrics.push({ label: 'Reviews', value: fmtNum(info.count), icon: CheckCircle2 })
-                        } else if (platform === 'google') {
-                          if (info.rating != null) metrics.push({ label: 'Rating', value: `${Number(info.rating).toFixed(1)} ★`, icon: Star })
-                          if (info.count != null && info.count > 0) metrics.push({ label: 'Reviews', value: fmtNum(info.count), icon: CheckCircle2 })
-                        }
-
-                        // Platform visual config
-                        const cfg: Record<string, { label: string; gradient: string; iconBg: string; border: string; Icon: React.ElementType }> = {
-                          instagram: { label: 'Instagram', gradient: 'from-pink-50 to-purple-50', iconBg: 'bg-gradient-to-br from-pink-500 to-purple-600', border: 'border-pink-100 hover:border-pink-300', Icon: Instagram },
-                          facebook:  { label: 'Facebook',  gradient: 'from-blue-50 to-sky-50',    iconBg: 'bg-gradient-to-br from-blue-600 to-blue-400',   border: 'border-blue-100 hover:border-blue-300',   Icon: Facebook  },
-                          google:    { label: 'Google',    gradient: 'from-slate-50 to-white',     iconBg: 'bg-white border border-blue-100',               border: 'border-slate-100 hover:border-slate-300', Icon: Globe     },
-                        }
-                        const c = cfg[platform] ?? cfg.google
-
-                        const PlatformIcon = c.Icon
-                        const hasLink = !!info.url
-
-                        const cardInner = (
-                          <div className={`rounded-xl border p-3 transition-all bg-gradient-to-r ${c.gradient} ${c.border} ${hasLink ? 'cursor-pointer hover:shadow-sm' : ''} group`}>
-                            <div className="flex items-center gap-2.5 mb-2.5">
-                              <div className={`w-7 h-7 rounded-lg ${c.iconBg} flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform`}>
-                                {platform === 'google'
-                                  ? <span className="text-sm font-black text-blue-500 leading-none">G</span>
-                                  : <PlatformIcon className="w-3.5 h-3.5 text-white" />}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1">
-                                  <p className="text-xs font-semibold text-ink">{c.label}</p>
-                                  {info.is_verified && <BadgeCheck className="w-3 h-3 text-blue-500 flex-shrink-0" />}
-                                </div>
-                                {info.username && (
-                                  <p className="text-[10px] text-ink-400 truncate">@{info.username}</p>
-                                )}
-                              </div>
-                              {hasLink && <ExternalLink className="w-3 h-3 text-ink-200 group-hover:text-ink-400 flex-shrink-0 transition-colors" />}
-                            </div>
-                            {metrics.length > 0 && (
-                              <div className="grid grid-cols-3 gap-1.5">
-                                {metrics.map(m => {
-                                  const MIcon = m.icon
-                                  return (
-                                    <div key={m.label} className="bg-white/70 rounded-lg px-1.5 py-1.5 text-center">
-                                      <MIcon className="w-3 h-3 text-ink-300 mx-auto mb-0.5" />
-                                      <p className="text-[10px] font-bold text-ink leading-none">{m.value}</p>
-                                      <p className="text-[9px] text-ink-300 mt-0.5 leading-none">{m.label}</p>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        )
-
-                        return hasLink ? (
-                          <a key={platform} href={info.url} target="_blank" rel="noopener noreferrer">
-                            {cardInner}
-                          </a>
-                        ) : (
-                          <div key={platform}>{cardInner}</div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Review links — Google / Yelp (non-OAuth) */}
+                {/* Trust card — shown when GBP entry exists in external_platform_links */}
                 {(() => {
-                  const hasGoogle = links?.google?.url && !links?.google?.is_oauth_connected
-                  const hasYelp   = links?.yelp?.url
-                  if (!hasGoogle && !hasYelp) return null
+                  const trustScore = Number(p.trust_score)
+                  const gbp = links?.google
+                  // Show card if GBP is linked OR if score > 0 (covers old scores pre-resync)
+                  const hasGbp = !!gbp || trustScore > 0
+                  if (!hasGbp) return null
+
+                  const gbpRating   = gbp?.rating != null ? Number(gbp.rating) : null
+                  const gbpCount    = gbp?.count != null ? Number(gbp.count) : null
+                  const gbpVerified = !!gbp?.is_verified
+                  const gbpUrl      = gbp?.url || null
+                  const gbpUsername = gbp?.username || null
+
+                  // Score colour — works for both 0–100 old scores and 75–100 new scores
+                  const scoreColor = trustScore >= 90 ? '#10b981' : trustScore >= 75 ? '#3b82f6' : trustScore > 0 ? '#f59e0b' : '#9ca3af'
+
                   return (
                     <div className="bg-white rounded-2xl p-5 border border-ink-50"
                       style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                      <p className="text-xs font-semibold text-ink mb-3 uppercase tracking-wide">Reviews</p>
-                      <div className="space-y-2">
-                        {hasGoogle && (
-                          <a href={links.google.url} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-3 p-2.5 rounded-xl bg-blue-50 border border-blue-100 hover:border-blue-300 hover:shadow-sm transition-all group">
-                            <div className="w-8 h-8 rounded-lg bg-white border border-blue-100 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-                              <span className="text-sm font-black text-blue-500 leading-none">G</span>
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[10px] text-ink-400 leading-none mb-0.5">Google Reviews</p>
-                              {links.google.rating != null ? (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs font-bold text-ink">{Number(links.google.rating).toFixed(1)}</span>
-                                  <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                                  {links.google.count && <span className="text-ink-300 text-[10px]">({links.google.count})</span>}
-                                </div>
-                              ) : <p className="text-xs font-semibold text-ink">View reviews</p>}
-                            </div>
-                            <ExternalLink className="w-3 h-3 text-ink-200 group-hover:text-ink-400 transition-colors flex-shrink-0" />
-                          </a>
-                        )}
-                        {hasYelp && (
-                          <a href={links.yelp.url} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-3 p-2.5 rounded-xl bg-red-50 border border-red-100 hover:border-red-300 hover:shadow-sm transition-all group">
-                            <div className="w-8 h-8 rounded-lg bg-red-500 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-                              <span className="text-xs font-black text-white">★</span>
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[10px] text-ink-400 leading-none mb-0.5">Yelp</p>
-                              {links.yelp.rating != null ? (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs font-bold text-ink">{Number(links.yelp.rating).toFixed(1)}</span>
-                                  <Star className="w-3 h-3 text-red-400 fill-red-400" />
-                                  {links.yelp.count && <span className="text-ink-300 text-[10px]">({links.yelp.count})</span>}
-                                </div>
-                              ) : <p className="text-xs font-semibold text-ink">View reviews</p>}
-                            </div>
-                            <ExternalLink className="w-3 h-3 text-ink-200 group-hover:text-ink-400 transition-colors flex-shrink-0" />
-                          </a>
-                        )}
+
+                      {/* Header row */}
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <Shield className="w-4 h-4 text-ink-400" />
+                          <h3 className="font-semibold text-ink text-sm">Trust score</h3>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border"
+                          style={{ backgroundColor: `${scoreColor}10`, borderColor: `${scoreColor}40` }}>
+                          <Shield className="w-3 h-3" style={{ color: scoreColor }} />
+                          <span className="text-xs font-bold" style={{ color: scoreColor }}>{trustScore.toFixed(1)}</span>
+                          <span className="text-[10px] text-ink-300">/100</span>
+                        </div>
                       </div>
+
+                      {/* Verified badge */}
+                      {gbpVerified && (
+                        <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-xl">
+                          <BadgeCheck className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                          <div>
+                            <p className="text-xs font-semibold text-emerald-700">Verified on Google</p>
+                            <p className="text-[10px] text-emerald-600">Active Google Business Profile confirmed</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* GBP rating + review count */}
+                      {(gbpRating != null || gbpCount != null) && (
+                        <div className="mb-4">
+                          {gbpUrl ? (
+                            <a href={gbpUrl} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-slate-50 to-white border border-slate-100 hover:border-slate-300 hover:shadow-sm transition-all group">
+                              <div className="w-8 h-8 rounded-lg bg-white border border-blue-100 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+                                <span className="text-sm font-black text-blue-500 leading-none">G</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1 mb-0.5">
+                                  <p className="text-[10px] text-ink-400">Google Business</p>
+                                  {gbpUsername && <p className="text-[10px] text-ink-300 truncate">· {gbpUsername}</p>}
+                                </div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {gbpRating != null && (
+                                    <div className="flex items-center gap-0.5">
+                                      {[1,2,3,4,5].map(i => (
+                                        <Star key={i} className={`w-3 h-3 ${i <= Math.round(gbpRating) ? 'text-amber-400 fill-amber-400' : 'text-ink-100 fill-ink-100'}`} />
+                                      ))}
+                                      <span className="text-xs font-bold text-ink ml-1">{gbpRating.toFixed(1)}</span>
+                                    </div>
+                                  )}
+                                  {gbpCount != null && gbpCount > 0 && (
+                                    <span className="text-[10px] text-ink-300">{gbpCount} review{gbpCount !== 1 ? 's' : ''}</span>
+                                  )}
+                                  {gbpCount === 0 && (
+                                    <span className="text-[10px] text-ink-300">No reviews yet</span>
+                                  )}
+                                </div>
+                              </div>
+                              <ExternalLink className="w-3 h-3 text-ink-200 group-hover:text-ink-400 flex-shrink-0 transition-colors" />
+                            </a>
+                          ) : (
+                            <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-slate-50 to-white border border-slate-100">
+                              <div className="w-8 h-8 rounded-lg bg-white border border-blue-100 flex items-center justify-center flex-shrink-0">
+                                <span className="text-sm font-black text-blue-500 leading-none">G</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[10px] text-ink-400 mb-0.5">Google Business</p>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {gbpRating != null && (
+                                    <div className="flex items-center gap-0.5">
+                                      {[1,2,3,4,5].map(i => (
+                                        <Star key={i} className={`w-3 h-3 ${i <= Math.round(gbpRating) ? 'text-amber-400 fill-amber-400' : 'text-ink-100 fill-ink-100'}`} />
+                                      ))}
+                                      <span className="text-xs font-bold text-ink ml-1">{gbpRating.toFixed(1)}</span>
+                                    </div>
+                                  )}
+                                  {gbpCount != null && gbpCount > 0 && (
+                                    <span className="text-[10px] text-ink-300">{gbpCount} review{gbpCount !== 1 ? 's' : ''}</span>
+                                  )}
+                                  {gbpCount === 0 && (
+                                    <span className="text-[10px] text-ink-300">No reviews yet</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <p className="text-[10px] text-ink-300">Score built from verified Google Business Profile data</p>
                     </div>
                   )
                 })()}
-
-                {/* Trust score breakdown — only for manually-linked platforms without OAuth metrics */}
-                {trustSources.length > 0 && connectedPlatforms.length === 0 && (
-                  <div className="bg-white rounded-2xl p-5 border border-ink-50"
-                    style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-ink text-sm">Trust score</h3>
-                      <div className="flex items-center gap-1.5 bg-ink rounded-full px-2.5 py-1">
-                        <Shield className="w-3 h-3 text-white" />
-                        <span className="text-white text-xs font-bold">{Number(p.trust_score).toFixed(1)}</span>
-                      </div>
-                    </div>
-                    <div className="space-y-3.5">
-                      {trustSources.map(s => (
-                        <div key={s.name}>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-ink-500 text-xs">{s.name}</span>
-                              <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-ink-200 hover:text-ink transition-colors">
-                                <ExternalLink className="w-2.5 h-2.5" />
-                              </a>
-                            </div>
-                            <div className="text-right">
-                              <span className="text-ink font-semibold text-xs">{s.score}</span>
-                              <span className="text-ink-300 text-[10px] ml-1">({s.count})</span>
-                            </div>
-                          </div>
-                          <div className="h-1.5 bg-ink-50 rounded-full overflow-hidden">
-                            <div className="h-full bg-gradient-to-r from-ink-600 to-ink rounded-full transition-all" style={{ width: `${s.bar}%` }} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 {/* Links — contact socials as icons */}
                 {(p.contact_instagram_url || p.contact_facebook_url || p.website_url) && (

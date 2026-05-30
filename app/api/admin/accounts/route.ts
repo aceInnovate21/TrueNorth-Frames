@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
+import { queueEmail } from '@/lib/email/client'
 
 // GET /api/admin/accounts?role=client|photographer&q=search&page=1
 export async function GET(request: NextRequest) {
@@ -68,11 +69,43 @@ export async function PATCH(request: NextRequest) {
       .update({ profile_status: 'approved', approved_at: new Date().toISOString() })
       .eq('user_id', user_id)
     if (error) return serverError('Failed to approve photographer')
+
+    // Email photographer
+    try {
+      const { data: photProfile } = await db
+        .from('photographer_profiles').select('display_name, username').eq('user_id', user_id).single()
+      const { data: photUser } = await db
+        .from('users').select('email, full_name').eq('id', user_id).single()
+      if (photUser?.email) {
+        const firstName = (photUser.full_name ?? 'there').split(' ')[0]
+        await queueEmail({
+          to: photUser.email,
+          templateId: 'photographer_approved',
+          payload: { firstName, username: photProfile?.username ?? '' },
+        })
+      }
+    } catch { /* best-effort */ }
+
   } else if (action === 'suspend') {
     const { error } = await db.from('users')
       .update({ account_status: 'suspended' })
       .eq('id', user_id)
     if (error) return serverError('Failed to suspend account')
+
+    // Email photographer/user about suspension
+    try {
+      const { data: targetUser } = await db
+        .from('users').select('email, full_name, role').eq('id', user_id).single()
+      if (targetUser?.email && targetUser.role === 'photographer') {
+        const firstName = (targetUser.full_name ?? 'there').split(' ')[0]
+        await queueEmail({
+          to: targetUser.email,
+          templateId: 'photographer_suspended',
+          payload: { firstName, email: targetUser.email, reason: null },
+        })
+      }
+    } catch { /* best-effort */ }
+
   } else if (action === 'unsuspend') {
     const { error } = await db.from('users')
       .update({ account_status: 'active' })

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, serverError } from '@/lib/api-helpers'
 import { notify } from '@/lib/notify'
+import { queueEmail } from '@/lib/email/client'
 
 export async function GET() {
   const { adminDb, user } = await getServerSession()
@@ -124,19 +125,34 @@ export async function PATCH(request: NextRequest) {
 
   if (error) return serverError('Failed to update review')
 
-  // When photographer publishes a reply, notify the client who wrote the review
+  // When photographer flags a review, create a support ticket so admin sees it
+  if (action === 'flag') {
+    const reason = flag_reason?.trim() || ''
+    await db.from('support_tickets').insert({
+      submitted_by: user.id,
+      review_id:    id,
+      category:     'fake_review',
+      subject:      'Flagged review — photographer dispute',
+      description:  reason || 'Photographer flagged a review for admin moderation.',
+      status:       'open',
+    })
+  }
+
+  // When photographer publishes a reply, notify + email the client who wrote the review
   if (action === 'reply' && public_reply?.trim()) {
     const { data: review } = await db
       .from('reviews')
-      .select('client_id')
+      .select('client_id, body, booking_id')
       .eq('id', id)
       .single()
 
     const { data: photographerProfile } = await db
       .from('photographer_profiles')
-      .select('display_name')
+      .select('display_name, username')
       .eq('id', profile.id)
       .single()
+    const photographerName: string = photographerProfile?.display_name ?? 'The photographer'
+    const photographerUsername: string = photographerProfile?.username ?? ''
 
     if (review?.client_id) {
       await notify({
@@ -144,10 +160,26 @@ export async function PATCH(request: NextRequest) {
         userId: review.client_id,
         type: 'review_reply',
         title: 'Your review got a reply',
-        body: `${photographerProfile?.display_name ?? 'The photographer'} replied to your review.`,
+        body: `${photographerName} replied to your review.`,
         entityType: 'review',
         entityId: id,
       })
+
+      // Email client
+      const { data: clientUser } = await db
+        .from('users').select('email').eq('id', review.client_id).single()
+      if (clientUser?.email) {
+        await queueEmail({
+          to: clientUser.email,
+          templateId: 'review_reply',
+          payload: {
+            photographerName,
+            photographerUsername,
+            reviewBody: review.body ?? '(no written review)',
+            replyBody: public_reply.trim(),
+          },
+        })
+      }
     }
   }
 

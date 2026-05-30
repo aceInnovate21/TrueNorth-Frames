@@ -9,6 +9,7 @@ import {
   RefreshCw, Zap, LogOut, Loader2, BookOpen, Star,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { AdminNav } from '@/components/admin-nav'
 
 interface Stats {
   totalClients: number
@@ -89,38 +90,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-ink-50">
-      {/* Top nav */}
-      <header className="bg-white border-b border-ink-100 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="font-serif font-bold text-ink text-lg">TrueNorth</Link>
-            <span className="text-ink-200 text-lg">/</span>
-            <span className="text-sm font-semibold text-ink-500">Admin</span>
-          </div>
-          <nav className="hidden md:flex items-center gap-1">
-            {[
-              { href: '/admin',             label: 'Dashboard'    },
-              { href: '/admin/accounts',    label: 'Accounts'     },
-              { href: '/admin/support',     label: 'Support'      },
-              { href: '/admin/trust-health',label: 'Trust health' },
-              { href: '/admin/analytics',   label: 'Analytics'    },
-            ].map(n => (
-              <Link key={n.href} href={n.href}
-                className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${
-                  n.href === '/admin' ? 'bg-ink text-white' : 'text-ink-400 hover:text-ink hover:bg-ink-50'
-                }`}
-              >{n.label}</Link>
-            ))}
-          </nav>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-ink-400 hidden sm:block">{adminName}</span>
-            <button onClick={signOut}
-              className="flex items-center gap-1.5 text-xs text-ink-400 hover:text-red-500 transition-colors">
-              <LogOut className="w-3.5 h-3.5" /> Sign out
-            </button>
-          </div>
-        </div>
-      </header>
+      <AdminNav openCount={stats?.pendingApprovals} />
 
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
 import { notify } from '@/lib/notify'
+import { queueEmail } from '@/lib/email/client'
 
 // GET /api/client/bookings
 export async function GET() {
@@ -161,7 +162,7 @@ export async function POST(request: NextRequest) {
         // Get client name for notification body
         const { data: clientUser } = await db
           .from('users')
-          .select('full_name')
+          .select('full_name, email')
           .eq('id', user.id)
           .single()
         const clientName: string = clientUser?.full_name ?? 'A client'
@@ -177,6 +178,37 @@ export async function POST(request: NextRequest) {
           entityType: 'booking_request',
           entityId: data.id,
         })
+
+        // Email photographer
+        const { data: photUser } = await db
+          .from('users').select('email, full_name').eq('id', photProfile.user_id).single()
+        if (photUser?.email) {
+          // New conversation → send "client messaged you" email
+          if (!existingConv) {
+            await queueEmail({
+              to: photUser.email,
+              templateId: 'new_conversation',
+              payload: {
+                clientName,
+                messagePreview: description?.trim()
+                  ? description.trim().slice(0, 200)
+                  : `Booking request for ${occasion.trim()} on ${dateLabel}`,
+              },
+            })
+          }
+          // Also send booking request email regardless
+          await queueEmail({
+            to: photUser.email,
+            templateId: 'booking_received',
+            payload: {
+              clientName,
+              sessionType: occasion.trim(),
+              date: dateLabel,
+              location: location_note?.trim() ?? null,
+              notes: description?.trim() ?? null,
+            },
+          })
+        }
       }
     }
   } catch (e) {

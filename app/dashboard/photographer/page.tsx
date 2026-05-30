@@ -2053,15 +2053,46 @@ function MessagesTab({ messages, setMessages, groups, setGroups }: {
 
 // ─── Support widget ───────────────────────────────────────────────────────────
 
-function PhotographerSupportWidget() {
-  const [category, setCategory] = useState('')
-  const [message, setMessage] = useState('')
-  const [sent, setSent] = useState(false)
+// Topic → support_ticket category enum mapping
+const PHOTOGRAPHER_SUPPORT_TOPICS: { label: string; category: string; subject: string }[] = [
+  { label: 'Profile / visibility issue', category: 'account_issue',   subject: 'Profile or visibility issue' },
+  { label: 'Trust score question',       category: 'account_issue',   subject: 'Trust score question' },
+  { label: 'Client behaviour concern',   category: 'spam_report',     subject: 'Client behaviour concern' },
+  { label: 'Inappropriate content',      category: 'inappropriate_content', subject: 'Inappropriate content report' },
+  { label: 'Account / login issue',      category: 'account_issue',   subject: 'Account or login issue' },
+  { label: 'Billing / payout question',  category: 'billing_dispute', subject: 'Billing or payout question' },
+  { label: 'Something else',             category: 'other',           subject: 'General enquiry' },
+]
 
-  function submit() {
-    if (!message.trim()) return
-    setSent(true)
-    setTimeout(() => { setSent(false); setMessage(''); setCategory('') }, 2500)
+function PhotographerSupportWidget() {
+  const [topicIdx, setTopicIdx] = useState('')
+  const [message, setMessage]   = useState('')
+  const [sending, setSending]   = useState(false)
+  const [sent, setSent]         = useState(false)
+  const [error, setError]       = useState('')
+
+  async function submit() {
+    const topic = PHOTOGRAPHER_SUPPORT_TOPICS[Number(topicIdx)]
+    if (!topic || !message.trim()) return
+    setSending(true)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/support', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category:    topic.category,
+          subject:     topic.subject,
+          description: message.trim(),
+        }),
+      })
+      if (!res.ok) throw new Error()
+      setSent(true)
+    } catch {
+      setError('Failed to send — please try again.')
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -2086,17 +2117,13 @@ function PhotographerSupportWidget() {
         <div className="space-y-3">
           <div>
             <label className="block text-sm font-medium text-ink mb-1.5">Topic</label>
-            <select value={category} onChange={e => setCategory(e.target.value)}
+            <select value={topicIdx} onChange={e => setTopicIdx(e.target.value)}
               className="w-full border border-ink-100 rounded-xl px-4 py-2.5 text-sm text-ink bg-white outline-none focus:border-ink transition-all"
             >
               <option value="">Select a topic…</option>
-              <option value="profile">Profile / visibility issue</option>
-              <option value="trust">Trust score question</option>
-              <option value="client">Client behaviour concern</option>
-              <option value="account">Account / login</option>
-              <option value="payout">Payout question</option>
-              <option value="bug">Bug report</option>
-              <option value="other">Something else</option>
+              {PHOTOGRAPHER_SUPPORT_TOPICS.map((t, i) => (
+                <option key={i} value={i}>{t.label}</option>
+              ))}
             </select>
           </div>
           <div>
@@ -2108,10 +2135,14 @@ function PhotographerSupportWidget() {
               className="w-full border border-ink-100 rounded-xl px-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all resize-none"
             />
           </div>
-          <button onClick={submit} disabled={!message.trim()}
+          {error && <p className="text-xs text-red-500">{error}</p>}
+          <button onClick={submit} disabled={sending || !topicIdx || !message.trim()}
             className="flex items-center gap-2 text-sm font-semibold bg-ink text-white px-4 py-2.5 rounded-xl hover:bg-ink-800 disabled:opacity-40 transition-all"
           >
-            <Send className="w-3.5 h-3.5" /> Send to support
+            {sending
+              ? <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Sending…</>
+              : <><Send className="w-3.5 h-3.5" /> Send to support</>
+            }
           </button>
         </div>
       )}
@@ -3071,10 +3102,18 @@ function DangerZone() {
   const [confirmText, setConfirmText] = useState('')
   const [deleting, setDeleting] = useState(false)
 
-  function handleDelete() {
+  async function handleDelete() {
     if (confirmText !== 'DELETE') return
     setDeleting(true)
-    setTimeout(() => { router.push('/login') }, 1500)
+    try {
+      const res = await fetch('/api/account/delete', { method: 'POST' })
+      if (!res.ok) throw new Error('Delete failed')
+      await supabase.auth.signOut()
+      router.push('/login?deleted=1')
+    } catch {
+      setDeleting(false)
+      alert('Something went wrong. Please try again or contact support.')
+    }
   }
 
   return (
@@ -3210,91 +3249,54 @@ function DashboardLightbox({ photos, startIdx, onClose }: {
 
 // ─── TrustScoreTab ────────────────────────────────────────────────────────────
 
-const PLATFORM_META = {
-  instagram: {
-    label: 'Instagram',
-    color: 'from-pink-500 to-orange-400',
-    dotColor: 'bg-pink-500',
-    icon: Instagram,
-    scope: 'Followers · Engagement · Posting consistency',
-    authUrl: '/api/oauth/instagram',
-    accountRequirement: 'Business or Creator account required',
-    accountRequirementDetail: 'Personal accounts cannot be connected. Switch to a Professional account in Instagram Settings → Account → Switch to Professional Account.',
-  },
-  facebook: {
-    label: 'Facebook Page',
-    color: 'from-blue-600 to-blue-400',
-    dotColor: 'bg-blue-500',
-    icon: Facebook,
-    scope: 'Page followers · Reviews · Account age',
-    authUrl: '/api/oauth/facebook',
-    accountRequirement: 'Facebook Page required (not personal profile)',
-    accountRequirementDetail: 'You need a Facebook Page for your photography business. Create one at facebook.com/pages/create — it\'s free and separate from your personal profile.',
-  },
-  google: {
-    label: 'Google Business',
-    color: 'from-red-500 to-yellow-400',
-    dotColor: 'bg-red-500',
-    icon: Globe,
-    scope: 'Review rating · Review count · Verified status',
-    authUrl: '/api/oauth/google',
-    accountRequirement: null,
-    accountRequirementDetail: null,
-  },
-} as const
-
-type TrustPlatform = keyof typeof PLATFORM_META
-
+// Score arc scaled for 75–100 range (0 = not connected, shown separately)
 function ScoreArc({ score }: { score: number }) {
-  const size = 140
-  const r = 56
-  const circ = Math.PI * r  // half-circle
-  const dash = (score / 100) * circ
-  const color = score >= 70 ? '#10b981' : score >= 40 ? '#f59e0b' : '#ef4444'
-  const label = score >= 70 ? 'Strong' : score >= 40 ? 'Growing' : 'Building'
+  const size  = 140
+  const r     = 56
+  const circ  = Math.PI * r
+  // Map 75–100 → 0–1 fill fraction; 0 = no GBP
+  const frac  = score > 0 ? Math.max(0, Math.min((score - 75) / 25, 1)) : 0
+  const dash  = frac * circ
+  const color = score >= 90 ? '#10b981' : score >= 80 ? '#3b82f6' : score > 0 ? '#f59e0b' : '#d1d5db'
+  const label = score >= 90 ? 'Excellent' : score >= 80 ? 'Strong' : score > 0 ? 'Good' : 'Not set up'
   return (
     <div className="flex flex-col items-center gap-1">
       <svg width={size} height={size / 2 + 16} viewBox={`0 0 ${size} ${size / 2 + 16}`}>
-        {/* Track */}
-        <path
-          d={`M ${size * 0.07} ${size / 2} A ${r} ${r} 0 0 1 ${size * 0.93} ${size / 2}`}
-          fill="none" stroke="#f3f4f6" strokeWidth="12" strokeLinecap="round"
-        />
-        {/* Fill */}
-        <path
-          d={`M ${size * 0.07} ${size / 2} A ${r} ${r} 0 0 1 ${size * 0.93} ${size / 2}`}
+        <path d={`M ${size * 0.07} ${size / 2} A ${r} ${r} 0 0 1 ${size * 0.93} ${size / 2}`}
+          fill="none" stroke="#f3f4f6" strokeWidth="12" strokeLinecap="round" />
+        <path d={`M ${size * 0.07} ${size / 2} A ${r} ${r} 0 0 1 ${size * 0.93} ${size / 2}`}
           fill="none" stroke={color} strokeWidth="12" strokeLinecap="round"
           strokeDasharray={`${dash} ${circ}`}
-          style={{ transition: 'stroke-dasharray 0.8s ease' }}
-        />
+          style={{ transition: 'stroke-dasharray 0.8s ease' }} />
         <text x={size / 2} y={size / 2} textAnchor="middle" dominantBaseline="central"
-          className="font-bold" style={{ fontSize: 26, fill: color, fontWeight: 700 }}>
-          {score}
+          style={{ fontSize: 26, fill: color, fontWeight: 700 }}>
+          {score > 0 ? score.toFixed(1) : '—'}
         </text>
         <text x={size / 2} y={size / 2 + 16} textAnchor="middle"
           style={{ fontSize: 11, fill: '#9ca3af' }}>
-          / 100
+          {score > 0 ? '/ 100' : 'connect GBP'}
         </text>
       </svg>
       <span className="text-xs font-semibold px-3 py-1 rounded-full border"
-        style={{ color, borderColor: color, backgroundColor: `${color}10` }}>
+        style={{ color, borderColor: color, backgroundColor: `${color}15` }}>
         {label}
       </span>
     </div>
   )
 }
 
-function PillarBar({ label, score, max = 100, color }: { label: string; score: number; max?: number; color: string }) {
-  const pct = Math.round((score / max) * 100)
+function PillarBar({ label, score, color, note }: { label: string; score: number; color: string; note?: string }) {
+  const pct = Math.round(score)
   return (
     <div className="space-y-1">
       <div className="flex justify-between items-center">
         <span className="text-xs text-ink-500">{label}</span>
-        <span className="text-xs font-semibold text-ink">{score.toFixed(0)}</span>
+        <span className="text-xs font-semibold text-ink">{score.toFixed(0)}<span className="text-ink-300 font-normal">/100</span></span>
       </div>
       <div className="h-1.5 bg-ink-100 rounded-full overflow-hidden">
         <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: color }} />
       </div>
+      {note && <p className="text-[10px] text-ink-300">{note}</p>}
     </div>
   )
 }
@@ -3316,11 +3318,13 @@ function TrustScoreTab({
   onSync: () => void
   onDisconnect: (platform: string) => Promise<void>
 }) {
-  const score: number = trustData?.trust_score ?? 0
-  const breakdown = trustData?.breakdown
+  const score: number    = trustData?.trust_score ?? 0
+  const breakdown        = trustData?.breakdown
   const connected: Record<string, { username: string; connectedAt: string; isActive: boolean }> = trustData?.connected_platforms ?? {}
   const signals: Record<string, any> = trustData?.latest_signals ?? {}
-  const syncLog: any[] = trustData?.sync_log ?? []
+  const syncLog: any[]   = trustData?.sync_log ?? []
+  const gbpConnected     = !!connected.google?.isActive
+  const gbpSig           = signals.google
 
   return (
     <div className="space-y-5">
@@ -3357,17 +3361,34 @@ function TrustScoreTab({
               </p>
             </div>
           </div>
-          <button
-            onClick={onSync}
-            disabled={syncing || loading}
-            className="flex items-center gap-2 text-xs font-semibold px-4 py-2 bg-ink text-white rounded-xl hover:bg-ink-800 disabled:opacity-50 transition-all"
-          >
+          <button onClick={onSync} disabled={syncing || loading}
+            className="flex items-center gap-2 text-xs font-semibold px-4 py-2 bg-ink text-white rounded-xl hover:bg-ink-800 disabled:opacity-50 transition-all">
             {syncing ? <><Spinner /> Syncing…</> : <><RefreshCw className="w-3.5 h-3.5" /> Sync now</>}
           </button>
         </div>
 
         {loading ? (
           <div className="flex justify-center py-8"><Spinner /></div>
+        ) : !gbpConnected && score === 0 ? (
+          /* No GBP connected yet */
+          <div className="flex flex-col items-center py-6 gap-3 text-center">
+            <div className="w-14 h-14 bg-ink-50 rounded-2xl flex items-center justify-center">
+              <Globe className="w-7 h-7 text-ink-300" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-ink">Connect Google Business to get your score</p>
+              <p className="text-xs text-ink-300 mt-1 max-w-xs mx-auto">
+                Your trust score starts at 75 the moment you connect your Google Business Profile, then grows with your reviews and account age.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="text-xs text-ink-400 font-medium">75</div>
+              <div className="flex-1 w-40 h-1.5 bg-ink-100 rounded-full overflow-hidden">
+                <div className="h-full w-0 rounded-full bg-ink-200" />
+              </div>
+              <div className="text-xs text-ink-400 font-medium">100</div>
+            </div>
+          </div>
         ) : (
           <div className="flex flex-col lg:flex-row gap-8 items-center lg:items-start">
             {/* Arc gauge */}
@@ -3380,214 +3401,197 @@ function TrustScoreTab({
             {breakdown ? (
               <div className="flex-1 space-y-3 w-full">
                 <p className="text-xs font-semibold text-ink-400 uppercase tracking-wide mb-3">Score breakdown</p>
-                <PillarBar label="Social proof (Instagram · Facebook)"  score={breakdown.platform}     color="#ec4899" />
-                <PillarBar label="Reviews (Google · Native)"           score={breakdown.reviews}      color="#3b82f6" />
-                <PillarBar label="Activity (consistency · account age)" score={breakdown.activity}     color="#f59e0b" />
-                <PillarBar label="Verification (badges · completeness)" score={breakdown.verification} color="#10b981" />
-                <p className="text-[10px] text-ink-300 pt-1">
-                  Weights: Social 30% · Reviews 35% · Activity 20% · Verification 15%
+                {/* Base score bar */}
+                <div className="flex items-center gap-3 py-2 px-3 bg-ink-50 rounded-xl">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                  <span className="text-xs text-ink-600 flex-1">Google Business Profile connected</span>
+                  <span className="text-xs font-bold text-emerald-600">+75 baseline</span>
+                </div>
+                <PillarBar
+                  label="Reviews (rating + count)"
+                  score={breakdown.reviews ?? 0}
+                  color="#3b82f6"
+                  note="Google star rating (55%) · Review count (45%) — up to +12.5 pts"
+                />
+                <PillarBar
+                  label="Account age"
+                  score={breakdown.activity ?? 0}
+                  color="#f59e0b"
+                  note="GBP account age up to 5 years — up to +3 pts"
+                />
+                <PillarBar
+                  label="Verification (completeness + GBP verified)"
+                  score={breakdown.verification ?? 0}
+                  color="#10b981"
+                  note="Profile completeness (45%) · Google verified status (55%) — up to +9.5 pts"
+                />
+                <p className="text-[10px] text-ink-300 pt-1 border-t border-ink-50">
+                  Score range: 75 (GBP connected) → 100 (all signals maxed)
                 </p>
               </div>
             ) : (
               <div className="flex-1 flex items-center justify-center">
-                <p className="text-sm text-ink-300 text-center">Connect platforms below and sync to see your breakdown.</p>
+                <p className="text-sm text-ink-300 text-center">Sync to see your score breakdown.</p>
               </div>
             )}
           </div>
         )}
       </div>
 
-      {/* Platform connections */}
+      {/* Google Business Profile connection */}
       <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 mb-5">
           <div className="w-9 h-9 bg-ink-50 rounded-xl flex items-center justify-center">
-            <Zap className="w-4 h-4 text-ink-400" />
+            <Globe className="w-4 h-4 text-ink-400" />
           </div>
           <div>
-            <h2 className="font-semibold text-ink">Connected platforms</h2>
-            <p className="text-xs text-ink-300">Each connection adds real signal to your trust score</p>
+            <h2 className="font-semibold text-ink">Google Business Profile</h2>
+            <p className="text-xs text-ink-300">Your sole trust signal — review rating, count, verified status &amp; account age</p>
           </div>
         </div>
 
-        <div className="space-y-3">
-          {(Object.keys(PLATFORM_META) as TrustPlatform[]).map(platform => {
-            const meta = PLATFORM_META[platform]
-            const conn = connected[platform]
-            const isConnected = conn?.isActive
-            const sig = signals[platform]
-            const Icon = meta.icon
-
-            return (
-              <div key={platform} className={`rounded-xl border p-4 transition-all ${
-                isConnected ? 'border-emerald-200 bg-emerald-50/30' : 'border-ink-100'
-              }`}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${meta.color} flex items-center justify-center flex-shrink-0`}>
-                      <Icon className="w-4 h-4 text-white" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-ink">{meta.label}</p>
-                      </div>
-                      <p className="text-xs text-ink-300 truncate">{meta.scope}</p>
-                      {!isConnected && meta.accountRequirement && (
-                        <p className="text-[10px] text-amber-600 font-medium mt-0.5 flex items-center gap-1" title={meta.accountRequirementDetail ?? undefined}>
-                          <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                          {meta.accountRequirement}
-                        </p>
-                      )}
-                      {isConnected && conn.username && (
-                        <p className="text-xs text-ink-400 mt-0.5">@{conn.username}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {isConnected ? (
-                      <>
-                        {/* Connected pill */}
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          Connected
-                        </span>
-                        {/* Reconnect */}
-                        <a
-                          href={meta.authUrl}
-                          title="Reconnect to refresh permissions"
-                          className="text-xs text-ink-400 hover:text-ink border border-ink-100 hover:border-ink-300 px-3 py-1.5 rounded-lg transition-all"
-                        >
-                          Reconnect
-                        </a>
-                        {/* Disconnect */}
-                        <button
-                          onClick={() => onDisconnect(platform)}
-                          title="Disconnect this platform"
-                          className="text-xs text-ink-300 hover:text-red-500 hover:border-red-200 border border-transparent px-2 py-1.5 rounded-lg transition-all"
-                        >
-                          ✕
-                        </button>
-                      </>
-                    ) : (
-                      <a
-                        href={meta.authUrl}
-                        className="text-xs font-semibold text-white px-4 py-1.5 rounded-lg bg-ink hover:bg-ink-800 transition-all"
-                      >
-                        Connect
-                      </a>
-                    )}
-                  </div>
-                </div>
-
-                {/* Signal detail when connected */}
-                {isConnected && sig && (
-                  <div className="mt-3 pt-3 border-t border-ink-100 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {sig.follower_count != null && (
-                      <div>
-                        <p className="text-[10px] text-ink-300 uppercase tracking-wide">Followers</p>
-                        <p className="text-sm font-semibold text-ink">{sig.follower_count.toLocaleString()}</p>
-                      </div>
-                    )}
-                    {sig.engagement_rate != null && (
-                      <div>
-                        <p className="text-[10px] text-ink-300 uppercase tracking-wide">Engagement</p>
-                        <p className="text-sm font-semibold text-ink">{(sig.engagement_rate * 100).toFixed(1)}%</p>
-                      </div>
-                    )}
-                    {sig.review_rating != null && (
-                      <div>
-                        <p className="text-[10px] text-ink-300 uppercase tracking-wide">Rating</p>
-                        <p className="text-sm font-semibold text-ink">★ {sig.review_rating.toFixed(1)}</p>
-                      </div>
-                    )}
-                    {sig.review_count != null && (
-                      <div>
-                        <p className="text-[10px] text-ink-300 uppercase tracking-wide">Reviews</p>
-                        <p className="text-sm font-semibold text-ink">{sig.review_count}</p>
-                      </div>
-                    )}
-                    {sig.posting_consistency != null && (
-                      <div>
-                        <p className="text-[10px] text-ink-300 uppercase tracking-wide">Consistency</p>
-                        <p className="text-sm font-semibold text-ink">{Math.round(sig.posting_consistency * 100)}%</p>
-                      </div>
-                    )}
-                    {sig.account_age_days != null && (
-                      <div>
-                        <p className="text-[10px] text-ink-300 uppercase tracking-wide">Account age</p>
-                        <p className="text-sm font-semibold text-ink">{Math.floor(sig.account_age_days / 365)}y {Math.floor((sig.account_age_days % 365) / 30)}m</p>
-                      </div>
-                    )}
-                    {sig.is_verified && (
-                      <div>
-                        <p className="text-[10px] text-ink-300 uppercase tracking-wide">Verified</p>
-                        <p className="text-sm font-semibold text-emerald-600">✓ Yes</p>
-                      </div>
-                    )}
-                  </div>
+        <div className={`rounded-xl border p-4 transition-all ${gbpConnected ? 'border-emerald-200 bg-emerald-50/30' : 'border-ink-100'}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-white border border-blue-100 flex items-center justify-center flex-shrink-0">
+                <span className="text-sm font-black text-blue-500 leading-none">G</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-ink">Google Business</p>
+                <p className="text-xs text-ink-300">Review rating · Review count · Verified status · Account age</p>
+                {gbpConnected && connected.google?.username && (
+                  <p className="text-xs text-ink-400 mt-0.5">{connected.google.username}</p>
                 )}
               </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Native reviews summary */}
-      {(trustData?.native_review_count ?? 0) > 0 && (
-        <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
-          <div className="flex items-center gap-3">
-            <Star className="w-5 h-5 text-amber-400 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-ink">TrueNorth native reviews</p>
-              <p className="text-xs text-ink-400">
-                {trustData.native_review_count} review{trustData.native_review_count !== 1 ? 's' : ''} · avg {trustData.native_avg_rating?.toFixed(1)} ★
-                <span className="text-ink-300 ml-1">— automatically included in your score</span>
-              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {gbpConnected ? (
+                <>
+                  <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Connected
+                  </span>
+                  <a href="/api/oauth/google"
+                    className="text-xs text-ink-400 hover:text-ink border border-ink-100 hover:border-ink-300 px-3 py-1.5 rounded-lg transition-all">
+                    Reconnect
+                  </a>
+                  <button onClick={() => onDisconnect('google')}
+                    className="text-xs text-ink-300 hover:text-red-500 border border-transparent hover:border-red-200 px-2 py-1.5 rounded-lg transition-all">
+                    ✕
+                  </button>
+                </>
+              ) : (
+                <a href="/api/oauth/google"
+                  className="text-xs font-semibold text-white px-4 py-1.5 rounded-lg bg-ink hover:bg-ink-800 transition-all">
+                  Connect
+                </a>
+              )}
             </div>
           </div>
+
+          {/* GBP signal detail */}
+          {gbpConnected && gbpSig && (
+            <div className="mt-3 pt-3 border-t border-ink-100 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {gbpSig.review_rating != null && (
+                <div>
+                  <p className="text-[10px] text-ink-300 uppercase tracking-wide">Rating</p>
+                  <p className="text-sm font-semibold text-ink">★ {Number(gbpSig.review_rating).toFixed(1)}</p>
+                </div>
+              )}
+              {gbpSig.review_count != null && (
+                <div>
+                  <p className="text-[10px] text-ink-300 uppercase tracking-wide">Reviews</p>
+                  <p className="text-sm font-semibold text-ink">{gbpSig.review_count}</p>
+                </div>
+              )}
+              {gbpSig.account_age_days != null && (
+                <div>
+                  <p className="text-[10px] text-ink-300 uppercase tracking-wide">Account age</p>
+                  <p className="text-sm font-semibold text-ink">
+                    {Math.floor(gbpSig.account_age_days / 365)}y {Math.floor((gbpSig.account_age_days % 365) / 30)}m
+                  </p>
+                </div>
+              )}
+              {gbpSig.is_verified != null && (
+                <div>
+                  <p className="text-[10px] text-ink-300 uppercase tracking-wide">Verified</p>
+                  <p className={`text-sm font-semibold ${gbpSig.is_verified ? 'text-emerald-600' : 'text-ink-400'}`}>
+                    {gbpSig.is_verified ? '✓ Verified' : 'Not verified'}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      )}
+
+        {!gbpConnected && (
+          <div className="mt-4 p-4 bg-amber-50 border border-amber-100 rounded-xl">
+            <p className="text-xs font-semibold text-amber-800 mb-1">Why connect Google Business?</p>
+            <ul className="text-xs text-amber-700 space-y-1 list-disc list-inside">
+              <li>Instantly unlocks a trust score of 75+ visible to all clients</li>
+              <li>Your star rating and review count appear on your public profile</li>
+              <li>Earns a "Verified on Google" badge</li>
+            </ul>
+          </div>
+        )}
+      </div>
 
       {/* Sync log */}
-      {syncLog.length > 0 && (
-        <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
-          <p className="text-xs font-semibold text-ink-400 uppercase tracking-wide mb-3">Recent sync log</p>
-          <div className="space-y-2">
-            {syncLog.slice(0, 8).map((entry, i) => (
-              <div key={i} className="flex items-start gap-3 text-xs">
-                <span className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${
-                  entry.status === 'success' ? 'bg-emerald-500' :
-                  entry.status === 'partial'  ? 'bg-amber-400' : 'bg-red-400'
-                }`} />
+      {syncLog.length > 0 && (() => {
+        const googleLogs = syncLog.filter((e: any) => e.platform === 'google')
+        const lastLog = googleLogs[0]
+        const lastFailed = lastLog?.status === 'failed' && lastLog?.error_message
+        return (
+          <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+            <p className="text-xs font-semibold text-ink-400 uppercase tracking-wide mb-3">Recent sync log</p>
+
+            {/* Prominent error banner for last failed sync */}
+            {lastFailed && (
+              <div className="flex items-start gap-3 mb-4 p-3.5 bg-red-50 border border-red-200 rounded-xl">
+                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <span className="font-medium text-ink capitalize">{entry.platform}</span>
-                  <span className="text-ink-400 ml-2">{entry.status}</span>
-                  {entry.score_after != null && (
-                    <span className="text-ink-300 ml-2">→ score {entry.score_after}</span>
-                  )}
-                  {entry.error_message && (
-                    <p className="text-red-500 truncate mt-0.5">{entry.error_message}</p>
-                  )}
+                  <p className="text-xs font-semibold text-red-700 mb-0.5">Last sync failed</p>
+                  <p className="text-xs text-red-600 leading-relaxed">{lastLog.error_message}</p>
                 </div>
-                <span className="text-ink-300 flex-shrink-0 whitespace-nowrap">
-                  {new Date(entry.synced_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                </span>
               </div>
-            ))}
+            )}
+
+            <div className="space-y-2">
+              {googleLogs.slice(0, 8).map((entry: any, i: number) => (
+                <div key={i} className="flex items-start gap-3 text-xs">
+                  <span className={`w-2 h-2 rounded-full mt-1 flex-shrink-0 ${
+                    entry.status === 'success' ? 'bg-emerald-500' :
+                    entry.status === 'partial'  ? 'bg-amber-400' : 'bg-red-400'
+                  }`} />
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium text-ink">Google Business</span>
+                    <span className="text-ink-400 ml-2 capitalize">{entry.status}</span>
+                    {entry.score_after != null && entry.status === 'success' && (
+                      <span className="text-ink-300 ml-2">→ score {entry.score_after}</span>
+                    )}
+                    {entry.error_message && (
+                      <p className="text-red-500 mt-0.5 leading-relaxed">{entry.error_message}</p>
+                    )}
+                  </div>
+                  <span className="text-ink-300 flex-shrink-0 whitespace-nowrap">
+                    {new Date(entry.synced_at).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* How it works */}
       <div className="bg-ink rounded-2xl p-5 relative overflow-hidden">
         <div className="absolute inset-0 grid-pattern pointer-events-none opacity-40" />
         <div className="relative z-10">
-          <p className="text-white font-semibold text-sm mb-3">How trust scores work</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <p className="text-white font-semibold text-sm mb-3">How your trust score is built</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
-              { icon: '📸', title: 'Social proof (30%)', body: 'Instagram followers, engagement rate, posting frequency — real audience, real signal.' },
-              { icon: '⭐', title: 'Reviews (35%)', body: 'Google Business rating and review count, plus reviews earned on TrueNorth.' },
-              { icon: '📅', title: 'Activity (20%)', body: 'Posting consistency across platforms and account age — you show up regularly.' },
-              { icon: '✅', title: 'Verification (15%)', body: 'Verified badges, number of connected platforms, and profile completeness.' },
+              { icon: '🔗', title: 'Connect GBP → 75', body: 'Connecting your Google Business Profile immediately unlocks a baseline score of 75 shown on your public profile.' },
+              { icon: '⭐', title: 'Reviews → up to +12.5', body: 'Your Google star rating and total review count push your score toward 87.5. More great reviews = higher score.' },
+              { icon: '✅', title: 'Verified + complete → up to +12.5', body: 'A verified GBP and a complete TrueNorth profile add up to 12.5 more points, reaching 100.' },
             ].map(item => (
               <div key={item.title} className="bg-white/10 rounded-xl p-3">
                 <p className="text-white text-xs font-semibold mb-1">{item.icon} {item.title}</p>

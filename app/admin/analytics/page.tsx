@@ -1,410 +1,604 @@
 'use client'
 
-import { useState } from 'react'
-import Link from 'next/link'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { AdminNav } from '@/components/admin-nav'
 import {
-  Users, Camera, MessageSquare, Star, TrendingUp, TrendingDown,
-  Heart, Clock, MapPin, Zap, BarChart3, ArrowRight, Eye,
-  Calendar, ChevronDown, Filter,
+  TrendingUp, TrendingDown, Users, Camera, MessageSquare,
+  RefreshCw, Loader2, Shield, BookOpen, Download,
+  CheckCircle2, MapPin, Target, Clock,
 } from 'lucide-react'
 
-// ─── Seed data ────────────────────────────────────────────────────────────────
+// ─── Phase 2 targets ──────────────────────────────────────────────────────────
+// Adjust these to match your actual Phase 2 milestone goals
+const TARGETS = {
+  photographers:  50,    // photographer signups needed
+  clients:        200,   // client signups needed
+  conversations:  100,   // conversations (platform-validated demand)
+  bookings:       20,    // confirmed bookings (feature expansion readiness)
+}
 
-const WEEKLY = [
-  { label: 'Apr 14', newClients: 12, newPhotographers: 3, messages: 88,  bookings: 4,  saves: 19 },
-  { label: 'Apr 21', newClients: 19, newPhotographers: 4, messages: 112, bookings: 6,  saves: 31 },
-  { label: 'Apr 28', newClients: 24, newPhotographers: 6, messages: 143, bookings: 9,  saves: 42 },
-  { label: 'May 5',  newClients: 31, newPhotographers: 8, messages: 201, bookings: 14, saves: 58 },
-  { label: 'May 12', newClients: 38, newPhotographers: 9, messages: 178, bookings: 11, saves: 63 },
-  { label: 'May 17', newClients: 45, newPhotographers: 12,messages: 267, bookings: 18, saves: 79 },
-]
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-const TOP_PHOTOGRAPHERS = [
-  { name: 'Sarah Chen',   initials: 'SC', bg: 'bg-rose-500',    specialty: 'Wedding',    messages: 42, saves: 28, trustScore: 4.8, area: 'Strathcona' },
-  { name: 'Aisha Patel',  initials: 'AP', bg: 'bg-violet-500',  specialty: 'Wedding',    messages: 55, saves: 31, trustScore: 4.6, area: 'Downtown'   },
-  { name: 'Marcus Wright',initials: 'MW', bg: 'bg-slate-600',   specialty: 'Portrait',   messages: 31, saves: 21, trustScore: 4.5, area: 'Oliver'     },
-  { name: 'Sofia Reyes',  initials: 'SR', bg: 'bg-rose-400',    specialty: 'Newborn',    messages: 18, saves: 14, trustScore: 4.2, area: 'Windermere' },
-  { name: 'Priya Patel',  initials: 'PP', bg: 'bg-violet-600',  specialty: 'Event',      messages: 24, saves: 12, trustScore: 4.0, area: 'Downtown'   },
-]
+interface AnalyticsData {
+  platformSince:           string | null
+  totalClients:            number
+  totalPhotographers:      number
+  pendingApprovals:        number
+  totalBookings:           number
+  completedBookings:       number
+  totalMessages:           number
+  totalConversations:      number
+  totalReviews:            number
+  totalSaves:              number
+  avgTrustScore:           string | null
+  fullyOnboarded:          number
+  newClientsThisWeek:      number
+  newPhotographersThisWeek: number
+  newMessagesThisWeek:     number
+  newBookingsThisWeek:     number
+  clientDelta:             number | null
+  photographerDelta:       number | null
+  messageDelta:            number | null
+  bookingDelta:            number | null
+  specialtyDist:           { label: string; supply: number }[]
+  areaMetrics:             { area: string; photographers: number; clients: number }[]
+  topPhotographers:        { id: string; displayName: string; location: string; trustScore: number; completeness: number; specialties: string[]; conversations: number; profileStatus: string }[]
+  topClients:              { id: string; fullName: string; createdAt: string; messagesSent: number; saves: number }[]
+  completeness:            { hasDisplayName: number; hasBio: number; hasLocation: number; hasRate: number; hasAvatar: number; hasCover: number; hasPortfolio: number; hasGoogleLinked: number; total: number }
+}
 
-const TOP_CLIENTS = [
-  { name: 'Luca Romano',  initials: 'LR', bg: 'bg-orange-500',  messagesent: 22, photographers: 3, joined: 'Apr 28' },
-  { name: 'Alex Kim',     initials: 'AK', bg: 'bg-blue-500',    messagesent: 14, photographers: 2, joined: 'Apr 14' },
-  { name: 'Dana Torres',  initials: 'DT', bg: 'bg-teal-500',    messagesent: 8,  photographers: 2, joined: 'May 1'  },
-  { name: 'Ryan Foster',  initials: 'RF', bg: 'bg-indigo-500',  messagesent: 3,  photographers: 1, joined: 'May 10' },
-]
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const SPECIALTY_DEMAND = [
-  { label: 'Wedding',     inquiries: 38, supply: 18 },
-  { label: 'Portrait',    inquiries: 29, supply: 14 },
-  { label: 'Corporate',   inquiries: 22, supply: 9  },
-  { label: 'Newborn',     inquiries: 18, supply: 7  },
-  { label: 'Real Estate', inquiries: 12, supply: 5  },
-  { label: 'Event',       inquiries: 9,  supply: 4  },
-]
+function pct(n: number, d: number) {
+  if (!d) return 0
+  return Math.round((n / d) * 100)
+}
 
-const AREA_ACTIVITY = [
-  { label: 'Downtown',   clients: 14, photographers: 4 },
-  { label: 'Strathcona', clients: 11, photographers: 3 },
-  { label: 'Oliver',     clients: 9,  photographers: 2 },
-  { label: 'Windermere', clients: 6,  photographers: 2 },
-  { label: 'Glenora',    clients: 5,  photographers: 1 },
-]
-
-// ─── Mini bar chart ───────────────────────────────────────────────────────────
-
-type WeeklyKey = 'newClients' | 'newPhotographers' | 'messages' | 'bookings' | 'saves'
-
-function Sparkline({ data, field, color }: { data: typeof WEEKLY; field: WeeklyKey; color: string }) {
-  const max = Math.max(...data.map(d => d[field]))
+function Delta({ v }: { v: number | null }) {
+  if (v === null) return <span className="text-[10px] text-ink-300">First week</span>
+  const up = v >= 0
   return (
-    <div className="flex items-end gap-1 h-16">
-      {data.map(d => (
-        <div key={d.label} className="flex-1 flex flex-col items-center gap-1">
-          <div className={`w-full rounded-t-sm ${color}`} style={{ height: `${Math.max(4, (d[field] / max) * 58)}px` }} />
-          <span className="text-[8px] text-ink-200 whitespace-nowrap">{d.label.replace('Apr ', 'A').replace('May ', 'M')}</span>
+    <span className={`flex items-center gap-0.5 text-[10px] font-semibold ${up ? 'text-emerald-600' : 'text-red-500'}`}>
+      {up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+      {up ? '+' : ''}{v}% vs last week
+    </span>
+  )
+}
+
+const AVATAR_COLORS = [
+  'bg-blue-500','bg-violet-600','bg-teal-500','bg-slate-600',
+  'bg-orange-500','bg-rose-400','bg-emerald-600','bg-amber-500',
+]
+function avatarColor(id: string) {
+  let n = 0; for (const c of id) n = (n * 31 + c.charCodeAt(0)) & 0xffff
+  return AVATAR_COLORS[n % AVATAR_COLORS.length]
+}
+function initials(name: string) {
+  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+}
+
+function sinceLabel(iso: string | null) {
+  if (!iso) return ''
+  return new Date(iso).toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' })
+}
+
+// ─── Progress bar toward Phase 2 target ──────────────────────────────────────
+
+function TargetBar({ label, value, target, color }: { label: string; value: number; target: number; color: string }) {
+  const p = Math.min(pct(value, target), 100)
+  const done = value >= target
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-2">
+          {done
+            ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+            : <Target className="w-3.5 h-3.5 text-ink-300 flex-shrink-0" />
+          }
+          <span className="text-sm font-medium text-ink">{label}</span>
         </div>
-      ))}
+        <span className={`text-sm font-bold ${done ? 'text-emerald-600' : 'text-ink'}`}>
+          {value.toLocaleString()} <span className="text-xs font-normal text-ink-300">/ {target}</span>
+        </span>
+      </div>
+      <div className="h-3 bg-ink-100 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${done ? 'bg-emerald-500' : color}`}
+          style={{ width: `${p}%` }}
+        />
+      </div>
+      <div className="flex items-center justify-between mt-1">
+        <span className={`text-[10px] font-semibold ${done ? 'text-emerald-600' : 'text-ink-400'}`}>
+          {done ? '✓ Target reached' : `${p}% of target`}
+        </span>
+        {!done && (
+          <span className="text-[10px] text-ink-300">{target - value} to go</span>
+        )}
+      </div>
     </div>
   )
 }
 
-// ─── Stat card ────────────────────────────────────────────────────────────────
+// ─── CSV download ─────────────────────────────────────────────────────────────
 
-function KPI({ label, value, sub, delta, chart, chartField, chartColor }: {
-  label: string
-  value: string
-  sub?: string
-  delta?: number
-  chart?: boolean
-  chartField?: WeeklyKey
-  chartColor?: string
-}) {
-  const up = delta !== undefined && delta >= 0
-  return (
-    <div className="bg-white rounded-2xl p-5 border border-ink-100">
-      <p className="text-xs text-ink-300 font-medium mb-1">{label}</p>
-      <p className="text-3xl font-bold text-ink">{value}</p>
-      {sub && <p className="text-xs text-ink-400 mt-0.5">{sub}</p>}
-      {delta !== undefined && (
-        <div className={`flex items-center gap-1 mt-1.5 text-xs font-medium ${up ? 'text-emerald-600' : 'text-red-500'}`}>
-          {up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-          {Math.abs(delta)}% vs last week
-        </div>
-      )}
-      {chart && chartField && chartColor && (
-        <div className="mt-3">
-          <Sparkline data={WEEKLY} field={chartField} color={chartColor} />
-        </div>
-      )}
-    </div>
-  )
+function buildCSV(d: AnalyticsData, sinceDate: string): string {
+  const rows: string[][] = []
+  rows.push(['TrueNorth Frames — Platform Analytics'])
+  rows.push([`Since ${sinceDate}`, `Generated ${new Date().toLocaleDateString('en-CA')}`])
+  rows.push([])
+
+  rows.push(['GROWTH'])
+  rows.push(['Metric', 'Value', 'New this week'])
+  rows.push(['Total clients',        String(d.totalClients),       String(d.newClientsThisWeek)])
+  rows.push(['Total photographers',  String(d.totalPhotographers), String(d.newPhotographersThisWeek)])
+  rows.push(['Messages sent',        String(d.totalMessages),      String(d.newMessagesThisWeek)])
+  rows.push(['Bookings',             String(d.totalBookings),      String(d.newBookingsThisWeek)])
+  rows.push(['Completed bookings',   String(d.completedBookings),  ''])
+  rows.push([])
+
+  rows.push(['MARKETPLACE HEALTH'])
+  rows.push(['Metric', 'Value'])
+  rows.push(['Conversations started',  String(d.totalConversations)])
+  rows.push(['Client → message rate',  `${pct(d.totalConversations, d.totalClients)}%`])
+  rows.push(['Conv → booking rate',    `${pct(d.totalBookings, d.totalConversations)}%`])
+  rows.push(['Booking completion rate',`${pct(d.completedBookings, d.totalBookings)}%`])
+  rows.push(['Reviews collected',      String(d.totalReviews)])
+  rows.push(['Saves (bookmarks)',       String(d.totalSaves)])
+  rows.push([])
+
+  rows.push(['PHASE 2 READINESS'])
+  rows.push(['Target', 'Goal', 'Current', 'Progress'])
+  rows.push(['Photographers', String(TARGETS.photographers), String(d.totalPhotographers), `${pct(d.totalPhotographers, TARGETS.photographers)}%`])
+  rows.push(['Clients',       String(TARGETS.clients),       String(d.totalClients),       `${pct(d.totalClients, TARGETS.clients)}%`])
+  rows.push(['Conversations', String(TARGETS.conversations), String(d.totalConversations), `${pct(d.totalConversations, TARGETS.conversations)}%`])
+  rows.push(['Bookings',      String(TARGETS.bookings),      String(d.totalBookings),      `${pct(d.totalBookings, TARGETS.bookings)}%`])
+  rows.push([])
+
+  rows.push(['SUPPLY QUALITY'])
+  rows.push(['Metric', 'Value'])
+  rows.push(['Avg trust score',      d.avgTrustScore ?? '—'])
+  rows.push(['Fully onboarded (≥80%)', String(d.fullyOnboarded)])
+  rows.push(['Google Business linked', String(d.completeness.hasGoogleLinked)])
+  rows.push(['Portfolio uploaded',     String(d.completeness.hasPortfolio)])
+  rows.push([])
+
+  rows.push(['SPECIALTIES'])
+  rows.push(['Specialty', 'Photographers'])
+  for (const s of d.specialtyDist) rows.push([s.label, String(s.supply)])
+  rows.push([])
+
+  if (d.areaMetrics.length > 0) {
+    rows.push(['NEIGHBOURHOOD BREAKDOWN'])
+    rows.push(['Area', 'Photographers', 'Clients'])
+    for (const a of d.areaMetrics) rows.push([a.area, String(a.photographers), String(a.clients)])
+    rows.push([])
+  }
+
+  rows.push(['TOP CLIENTS (by messages sent)'])
+  rows.push(['Name', 'Messages sent', 'Saves'])
+  for (const c of d.topClients) rows.push([c.fullName, String(c.messagesSent), String(c.saves)])
+
+  return rows.map(r => r.map(v => `"${v.replace(/"/g, '""')}"`).join(',')).join('\n')
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-type ViewTab = 'overview' | 'clients' | 'photographers'
-
 export default function AnalyticsPage() {
-  const [view, setView] = useState<ViewTab>('overview')
+  const [data, setData]       = useState<AnalyticsData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState('')
+  const downloadRef           = useRef<HTMLAnchorElement>(null)
 
-  const latest = WEEKLY[WEEKLY.length - 1]
-  const prev   = WEEKLY[WEEKLY.length - 2]
+  const load = useCallback(async () => {
+    setLoading(true); setError('')
+    try {
+      const res = await fetch('/api/admin/analytics')
+      if (!res.ok) throw new Error()
+      setData(await res.json())
+    } catch { setError('Could not load analytics.') }
+    finally { setLoading(false) }
+  }, [])
 
-  const clientDelta  = Math.round(((latest.newClients - prev.newClients) / prev.newClients) * 100)
-  const photoDelta   = Math.round(((latest.newPhotographers - prev.newPhotographers) / prev.newPhotographers) * 100)
-  const msgDelta     = Math.round(((latest.messages - prev.messages) / prev.messages) * 100)
-  const bookingDelta = Math.round(((latest.bookings - prev.bookings) / prev.bookings) * 100)
+  useEffect(() => { load() }, [load])
 
-  const maxDemand = Math.max(...SPECIALTY_DEMAND.map(s => s.inquiries))
-  const maxArea   = Math.max(...AREA_ACTIVITY.map(a => a.clients + a.photographers))
+  function downloadCSV() {
+    if (!data) return
+    const since = sinceLabel(data.platformSince)
+    const csv  = buildCSV(data, since)
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url  = URL.createObjectURL(blob)
+    const a    = downloadRef.current!
+    a.href     = url
+    a.download = `truenorth-analytics-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const d = data
+
+  // Computed rates
+  const messagingRate  = d ? pct(d.totalConversations, d.totalClients)    : 0
+  const bookingRate    = d ? pct(d.totalBookings, d.totalConversations)    : 0
+  const completionRate = d ? pct(d.completedBookings, d.totalBookings)     : 0
+  const reviewRate     = d ? pct(d.totalReviews, d.completedBookings)      : 0
+  const saveRate       = d ? pct(d.totalSaves, d.totalClients)             : 0
+  const onboardingRate = d ? pct(d.fullyOnboarded, d.totalPhotographers)   : 0
+  const trustCoverage  = d ? pct(d.completeness.hasGoogleLinked, d.completeness.total) : 0
+
+  // Phase 2 score: how many of the 4 targets are hit
+  const phase2Targets = d ? [
+    d.totalPhotographers >= TARGETS.photographers,
+    d.totalClients       >= TARGETS.clients,
+    d.totalConversations >= TARGETS.conversations,
+    d.totalBookings      >= TARGETS.bookings,
+  ] : []
+  const phase2Score   = phase2Targets.filter(Boolean).length
+  const phase2Ready   = phase2Score === 4
 
   return (
     <div className="min-h-screen bg-ink-50">
-      {/* Nav */}
-      <header className="bg-white border-b border-ink-100 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="font-serif font-bold text-ink text-lg">TrueNorth</Link>
-            <span className="text-ink-200 text-lg">/</span>
-            <Link href="/admin" className="text-sm font-medium text-ink-400 hover:text-ink transition-colors">Admin</Link>
-            <span className="text-ink-200 text-lg">/</span>
-            <span className="text-sm font-semibold text-ink-500">Analytics</span>
-          </div>
-          <nav className="flex items-center gap-1">
-            {[
-              { href: '/admin',             label: 'Dashboard'     },
-              { href: '/admin/analytics',   label: 'Analytics'     },
-              { href: '/admin/accounts',    label: 'Accounts'      },
-              { href: '/admin/support', label: 'Support' },
-              { href: '/admin/trust-health', label: 'Trust health'  },
-            ].map(n => (
-              <Link key={n.href} href={n.href}
-                className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${
-                  n.href === '/admin/analytics' ? 'bg-ink text-white' : 'text-ink-400 hover:text-ink hover:bg-ink-50'
-                }`}
-              >{n.label}</Link>
-            ))}
-          </nav>
-          <div className="w-8 h-8 rounded-full bg-ink flex items-center justify-center text-white text-xs font-bold">A</div>
-        </div>
-      </header>
+      <AdminNav />
+      {/* Hidden download anchor */}
+      <a ref={downloadRef} className="hidden" />
 
-      <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+      <main className="max-w-7xl mx-auto px-6 py-8 space-y-10">
 
-        {/* Header + view switcher */}
-        <div className="flex items-center justify-between flex-wrap gap-4">
+        {/* ── Header ──────────────────────────────────────────────────── */}
+        <div className="flex items-start justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-ink">Analytics</h1>
-            <p className="text-sm text-ink-300 mt-0.5">Client & photographer activity · Edmonton</p>
+            <h1 className="text-2xl font-bold text-ink">Platform analytics</h1>
+            {d?.platformSince && (
+              <div className="flex items-center gap-1.5 mt-1">
+                <Clock className="w-3.5 h-3.5 text-ink-300" />
+                <p className="text-sm text-ink-300">
+                  Since <span className="font-medium text-ink-500">{sinceLabel(d.platformSince)}</span> · Edmonton, AB
+                </p>
+              </div>
+            )}
           </div>
-          <div className="flex gap-1 bg-white border border-ink-100 p-1 rounded-xl">
-            {([
-              { key: 'overview',       label: 'Overview'       },
-              { key: 'clients',        label: 'Clients'        },
-              { key: 'photographers',  label: 'Photographers'  },
-            ] as { key: ViewTab; label: string }[]).map(t => (
-              <button key={t.key} onClick={() => setView(t.key)}
-                className={`text-sm font-medium px-4 py-2 rounded-lg transition-all ${
-                  view === t.key ? 'bg-ink text-white' : 'text-ink-400 hover:text-ink'
-                }`}
-              >{t.label}</button>
-            ))}
+          <div className="flex items-center gap-2">
+            <button onClick={load} disabled={loading}
+              className="flex items-center gap-2 text-sm font-medium border border-ink-100 bg-white text-ink-500 px-4 py-2 rounded-xl hover:bg-ink-50 disabled:opacity-50 transition-colors">
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              Refresh
+            </button>
+            <button onClick={downloadCSV} disabled={!data}
+              className="flex items-center gap-2 text-sm font-semibold bg-ink text-white px-4 py-2 rounded-xl hover:bg-ink-800 disabled:opacity-50 transition-colors">
+              <Download className="w-3.5 h-3.5" />
+              Export CSV
+            </button>
           </div>
         </div>
 
-        {/* ── OVERVIEW ─────────────────────────────────────────────────────── */}
-        {view === 'overview' && (
-          <div className="space-y-6">
-            {/* KPI row */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <KPI label="Total clients" value={latest.newClients.toString()} delta={clientDelta} chart chartField="newClients" chartColor="bg-blue-400" />
-              <KPI label="Active photographers" value={latest.newPhotographers.toString()} delta={photoDelta} chart chartField="newPhotographers" chartColor="bg-violet-400" />
-              <KPI label="Messages this week" value={latest.messages.toString()} delta={msgDelta} chart chartField="messages" chartColor="bg-emerald-400" />
-              <KPI label="Bookings confirmed" value={latest.bookings.toString()} delta={bookingDelta} chart chartField="bookings" chartColor="bg-amber-400" />
-            </div>
-
-            {/* Specialty demand vs supply */}
-            <div className="bg-white rounded-2xl p-6 border border-ink-100">
-              <div className="flex items-center gap-2 mb-5">
-                <Zap className="w-4 h-4 text-ink-400" />
-                <h2 className="font-semibold text-ink">Specialty demand vs supply</h2>
-                <span className="text-xs text-ink-300 ml-1">client inquiries vs photographer count</span>
+        {loading && !d ? (
+          <div className="flex items-center justify-center py-24">
+            <Loader2 className="w-6 h-6 animate-spin text-ink-300" />
+          </div>
+        ) : error ? (
+          <div className="bg-red-50 border border-red-200 rounded-2xl py-10 text-center">
+            <p className="text-sm text-red-600">{error}</p>
+            <button onClick={load} className="mt-3 text-xs text-red-600 underline">Retry</button>
+          </div>
+        ) : d && (
+          <>
+            {/* ── 1. Phase 2 readiness ──────────────────────────────────── */}
+            <section>
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h2 className="text-base font-bold text-ink">Phase 2 readiness</h2>
+                  <p className="text-xs text-ink-300 mt-0.5">
+                    Targets to unlock Phase 2 features — priority listings &amp; advanced booking tools
+                  </p>
+                </div>
+                <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border font-semibold text-sm ${
+                  phase2Ready
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                    : 'bg-amber-50 border-amber-200 text-amber-700'
+                }`}>
+                  {phase2Ready
+                    ? <><CheckCircle2 className="w-4 h-4" /> Ready for Phase 2</>
+                    : <><Target className="w-4 h-4" /> {phase2Score}/4 targets hit</>
+                  }
+                </div>
               </div>
-              <div className="space-y-3">
-                {SPECIALTY_DEMAND.map(s => {
-                  const gap = s.inquiries / s.supply
-                  const hot = gap > 3
-                  return (
-                    <div key={s.label}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-medium text-ink">{s.label}</span>
-                        <div className="flex items-center gap-3">
-                          {hot && <span className="text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded-full">High demand</span>}
-                          <span className="text-xs text-ink-300">{s.inquiries} inquiries · {s.supply} photographers</span>
-                        </div>
-                      </div>
-                      <div className="relative h-3 bg-ink-50 rounded-full overflow-hidden">
-                        <div className="absolute left-0 h-full bg-ink-200 rounded-full" style={{ width: `${(s.supply / maxDemand) * 100}%` }} />
-                        <div className={`absolute left-0 h-full rounded-full opacity-70 ${hot ? 'bg-red-400' : 'bg-blue-400'}`} style={{ width: `${(s.inquiries / maxDemand) * 100}%` }} />
-                      </div>
+
+              <div className="bg-white rounded-2xl p-6 border border-ink-100 space-y-5">
+                <TargetBar label="Photographers listed"   value={d.totalPhotographers} target={TARGETS.photographers} color="bg-violet-400" />
+                <TargetBar label="Clients signed up"       value={d.totalClients}       target={TARGETS.clients}       color="bg-blue-400"   />
+                <TargetBar label="Conversations started"   value={d.totalConversations} target={TARGETS.conversations} color="bg-emerald-400"/>
+                <TargetBar label="Bookings confirmed"      value={d.totalBookings}       target={TARGETS.bookings}      color="bg-amber-400"  />
+
+                <div className="pt-4 border-t border-ink-50 text-xs text-ink-400">
+                  Phase 2 unlocks: <span className="font-medium text-ink">Priority listings for photographers</span> · <span className="font-medium text-ink">Advanced booking management tools</span> · <span className="font-medium text-ink">Enhanced client matching</span>
+                </div>
+              </div>
+            </section>
+
+            {/* ── 2. Growth momentum ───────────────────────────────────── */}
+            <section>
+              <h2 className="text-base font-bold text-ink mb-1">Growth momentum</h2>
+              <p className="text-xs text-ink-300 mb-5">New activity this week vs last week</p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { label: 'Total clients',      value: d.totalClients,       sub: `+${d.newClientsThisWeek} this week`,       delta: d.clientDelta,       icon: Users,          accent: 'bg-blue-50 text-blue-600'    },
+                  { label: 'Photographers',      value: d.totalPhotographers, sub: `+${d.newPhotographersThisWeek} this week`,  delta: d.photographerDelta, icon: Camera,         accent: 'bg-violet-50 text-violet-600'},
+                  { label: 'Messages sent',      value: d.totalMessages,      sub: `+${d.newMessagesThisWeek} this week`,       delta: d.messageDelta,      icon: MessageSquare,  accent: 'bg-emerald-50 text-emerald-600'},
+                  { label: 'Bookings',           value: d.totalBookings,      sub: `+${d.newBookingsThisWeek} this week`,       delta: d.bookingDelta,      icon: BookOpen,       accent: 'bg-amber-50 text-amber-600'  },
+                ].map(m => (
+                  <div key={m.label} className="bg-white rounded-2xl p-5 border border-ink-100 flex flex-col gap-3">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${m.accent}`}>
+                      <m.icon className="w-4 h-4" />
                     </div>
-                  )
-                })}
-              </div>
-              <div className="flex items-center gap-4 mt-4 pt-4 border-t border-ink-50 text-xs">
-                <div className="flex items-center gap-1.5"><div className="w-3 h-2 rounded-sm bg-blue-400 opacity-70" /><span className="text-ink-400">Client demand</span></div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-2 rounded-sm bg-ink-200" /><span className="text-ink-400">Photographer supply</span></div>
-              </div>
-            </div>
-
-            {/* Area activity */}
-            <div className="bg-white rounded-2xl p-6 border border-ink-100">
-              <div className="flex items-center gap-2 mb-5">
-                <MapPin className="w-4 h-4 text-ink-400" />
-                <h2 className="font-semibold text-ink">Activity by neighbourhood</h2>
-              </div>
-              <div className="space-y-3">
-                {AREA_ACTIVITY.map(a => (
-                  <div key={a.label} className="flex items-center gap-4">
-                    <span className="text-sm text-ink-500 w-24 flex-shrink-0">{a.label}</span>
-                    <div className="flex-1 flex gap-1 h-5 items-stretch">
-                      <div className="bg-blue-100 rounded-l-md flex items-center pl-2" style={{ flex: a.clients }}>
-                        <span className="text-[10px] font-medium text-blue-600 whitespace-nowrap">{a.clients} clients</span>
-                      </div>
-                      <div className="bg-violet-100 rounded-r-md flex items-center pl-2" style={{ flex: a.photographers }}>
-                        <span className="text-[10px] font-medium text-violet-600 whitespace-nowrap">{a.photographers} photog.</span>
-                      </div>
+                    <div>
+                      <p className="text-2xl font-bold text-ink">{m.value.toLocaleString()}</p>
+                      <p className="text-xs text-ink-400 mt-0.5">{m.label}</p>
+                      <p className="text-[10px] text-ink-300">{m.sub}</p>
+                      <div className="mt-1.5"><Delta v={m.delta ?? null} /></div>
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
-        )}
+            </section>
 
-        {/* ── CLIENTS ──────────────────────────────────────────────────────── */}
-        {view === 'clients' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <KPI label="Total clients"        value="45"   sub="all time"       delta={clientDelta}  />
-              <KPI label="Active this week"     value="12"   sub="sent ≥1 message" />
-              <KPI label="Messages sent"        value={WEEKLY.reduce((a, d) => a + d.messages, 0).toString()} sub="all time" />
-              <KPI label="Photographers saved"  value={WEEKLY.reduce((a, d) => a + d.saves, 0).toString()} sub="across all clients" />
-            </div>
-
-            {/* Engagement funnel */}
-            <div className="bg-white rounded-2xl p-6 border border-ink-100">
-              <h2 className="font-semibold text-ink mb-5">Client engagement funnel</h2>
-              <div className="space-y-3">
+            {/* ── 3. Marketplace health ─────────────────────────────────── */}
+            <section>
+              <h2 className="text-base font-bold text-ink mb-1">Marketplace health</h2>
+              <p className="text-xs text-ink-300 mb-5">Conversion rates that signal whether the platform is working</p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
-                  { label: 'Signed up',          value: 45, pct: 100, color: 'bg-ink'          },
-                  { label: 'Browsed photographers', value: 41, pct: 91, color: 'bg-blue-500'    },
-                  { label: 'Saved a photographer', value: 28, pct: 62, color: 'bg-blue-400'     },
-                  { label: 'Sent a message',       value: 18, pct: 40, color: 'bg-emerald-500'  },
-                  { label: 'Booking confirmed',    value: 8,  pct: 18, color: 'bg-emerald-400'  },
-                  { label: 'Left a review',        value: 3,  pct: 7,  color: 'bg-amber-400'    },
+                  { value: `${messagingRate}%`,  label: 'Client → message rate',      note: `${d.totalConversations} of ${d.totalClients} clients messaged` },
+                  { value: `${bookingRate}%`,    label: 'Conversation → booking rate', note: `${d.totalBookings} of ${d.totalConversations} convos → booking` },
+                  { value: `${completionRate}%`, label: 'Booking completion rate',     note: `${d.completedBookings} of ${d.totalBookings} sessions completed` },
+                  { value: `${reviewRate}%`,     label: 'Post-session review rate',    note: `${d.totalReviews} of ${d.completedBookings} left a review` },
+                ].map(s => (
+                  <div key={s.label} className="bg-white rounded-2xl p-5 border border-ink-100">
+                    <p className="text-3xl font-bold text-ink">{s.value}</p>
+                    <p className="text-xs font-medium text-ink-500 mt-1">{s.label}</p>
+                    <p className="text-[10px] text-ink-300 mt-0.5">{s.note}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* ── 4. Client journey funnel ──────────────────────────────── */}
+            <section>
+              <h2 className="text-base font-bold text-ink mb-1">Client journey funnel</h2>
+              <p className="text-xs text-ink-300 mb-5">From signup to completed booking</p>
+              <div className="bg-white rounded-2xl p-6 border border-ink-100 space-y-4">
+                {[
+                  { label: 'Signed up',               value: d.totalClients,        color: 'bg-ink',          note: '100% baseline' },
+                  { label: 'Saved a photographer',     value: Math.min(d.totalSaves, d.totalClients), color: 'bg-blue-400',   note: `${saveRate}% showed buying intent` },
+                  { label: 'Started a conversation',   value: d.totalConversations,  color: 'bg-violet-400',   note: `${messagingRate}% messaged a photographer` },
+                  { label: 'Made a booking',           value: d.totalBookings,       color: 'bg-emerald-400',  note: `${bookingRate}% conv → booking` },
+                  { label: 'Session completed',        value: d.completedBookings,   color: 'bg-emerald-600',  note: `${completionRate}% completion rate` },
+                  { label: 'Left a review',            value: d.totalReviews,        color: 'bg-amber-400',    note: `${reviewRate}% post-session` },
                 ].map(f => (
                   <div key={f.label} className="flex items-center gap-4">
-                    <span className="text-sm text-ink-500 w-44 flex-shrink-0">{f.label}</span>
+                    <div className="w-48 flex-shrink-0">
+                      <p className="text-sm font-medium text-ink">{f.label}</p>
+                      <p className="text-[10px] text-ink-300">{f.note}</p>
+                    </div>
                     <div className="flex-1 bg-ink-50 rounded-full h-3 overflow-hidden">
-                      <div className={`h-full rounded-full ${f.color}`} style={{ width: `${f.pct}%` }} />
+                      <div className={`h-full rounded-full ${f.color}`}
+                        style={{ width: `${pct(f.value, d.totalClients)}%` }} />
                     </div>
-                    <div className="flex items-center gap-2 w-16 flex-shrink-0 text-right">
-                      <span className="text-sm font-semibold text-ink">{f.value}</span>
-                      <span className="text-xs text-ink-300">{f.pct}%</span>
-                    </div>
+                    <span className="text-sm font-bold text-ink w-12 text-right flex-shrink-0">
+                      {f.value.toLocaleString()}
+                    </span>
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
 
-            {/* Top clients table */}
-            <div className="bg-white rounded-2xl border border-ink-100 overflow-hidden">
-              <div className="px-6 py-4 border-b border-ink-50 flex items-center gap-2">
-                <Users className="w-4 h-4 text-ink-400" />
-                <h2 className="font-semibold text-ink">Most active clients</h2>
-              </div>
-              <div className="divide-y divide-ink-50">
-                {TOP_CLIENTS.map(c => (
-                  <div key={c.name} className="flex items-center gap-4 px-6 py-4 hover:bg-ink-50 transition-colors">
-                    <div className={`w-9 h-9 rounded-full ${c.bg} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
-                      {c.initials}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-ink">{c.name}</p>
-                      <p className="text-xs text-ink-300">Joined {c.joined}</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm font-bold text-ink">{c.messagesent}</p>
-                      <p className="text-xs text-ink-300">Messages</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm font-bold text-ink">{c.photographers}</p>
-                      <p className="text-xs text-ink-300">Photographers</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
+            {/* ── 5. Supply quality + Specialty + Area ──────────────────── */}
+            <section>
+              <h2 className="text-base font-bold text-ink mb-1">Supply-side quality</h2>
+              <p className="text-xs text-ink-300 mb-5">Photographer readiness and marketplace coverage</p>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* ── PHOTOGRAPHERS ─────────────────────────────────────────────────── */}
-        {view === 'photographers' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <KPI label="Total photographers"  value="12"  sub="active on platform"  delta={photoDelta}  />
-              <KPI label="Pending approval"      value="3"   sub="awaiting review"      />
-              <KPI label="Avg trust score"       value="4.1" sub="composite across all" />
-              <KPI label="Fully onboarded"       value="9"   sub="profile completeness ≥80%" />
-            </div>
-
-            {/* Profile completeness */}
-            <div className="bg-white rounded-2xl p-6 border border-ink-100">
-              <h2 className="font-semibold text-ink mb-5">Profile completeness breakdown</h2>
-              <div className="space-y-3">
-                {[
-                  { label: 'Display name',      done: 12, total: 12 },
-                  { label: 'Bio written',        done: 10, total: 12 },
-                  { label: 'Specialties set',    done: 12, total: 12 },
-                  { label: 'Rate added',         done: 9,  total: 12 },
-                  { label: 'Portfolio uploaded', done: 8,  total: 12 },
-                  { label: 'Google linked',      done: 6,  total: 12 },
-                  { label: 'Instagram linked',   done: 5,  total: 12 },
-                ].map(f => (
-                  <div key={f.label} className="flex items-center gap-4">
-                    <span className="text-sm text-ink-500 w-40 flex-shrink-0">{f.label}</span>
-                    <div className="flex-1 bg-ink-50 rounded-full h-2.5 overflow-hidden">
-                      <div className="h-full rounded-full bg-ink" style={{ width: `${(f.done / f.total) * 100}%` }} />
-                    </div>
-                    <span className="text-sm font-semibold text-ink w-12 text-right flex-shrink-0">{f.done}/{f.total}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Top photographers table */}
-            <div className="bg-white rounded-2xl border border-ink-100 overflow-hidden">
-              <div className="px-6 py-4 border-b border-ink-50 flex items-center gap-2">
-                <Camera className="w-4 h-4 text-ink-400" />
-                <h2 className="font-semibold text-ink">Top photographers by engagement</h2>
-              </div>
-              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-6 py-3 border-b border-ink-50 bg-ink-50">
-                {['Photographer', 'Specialty', 'Messages', 'Saves', 'Trust'].map(h => (
-                  <span key={h} className="text-xs font-semibold text-ink-400 uppercase tracking-widest">{h}</span>
-                ))}
-              </div>
-              <div className="divide-y divide-ink-50">
-                {TOP_PHOTOGRAPHERS.map((p, i) => (
-                  <div key={p.name} className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-4 px-6 py-4 items-center hover:bg-ink-50 transition-colors">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="text-xs font-bold text-ink-300 w-4 flex-shrink-0">{i + 1}</span>
-                      <div className={`w-8 h-8 rounded-full ${p.bg} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
-                        {p.initials}
+                {/* Quality metrics */}
+                <div className="bg-white rounded-2xl p-6 border border-ink-100 space-y-4">
+                  <p className="text-xs font-semibold text-ink-400 uppercase tracking-widest">Key metrics</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    {[
+                      { v: `${onboardingRate}%`, label: 'Fully onboarded', sub: `${d.fullyOnboarded}/${d.totalPhotographers} at ≥80%` },
+                      { v: `${trustCoverage}%`,  label: 'GBP connected',   sub: `${d.completeness.hasGoogleLinked}/${d.completeness.total} have trust score` },
+                      { v: d.avgTrustScore ?? '—', label: 'Avg trust score', sub: 'Scale 75–100' },
+                      { v: String(d.pendingApprovals), label: 'Pending approval', sub: 'Awaiting review' },
+                    ].map(s => (
+                      <div key={s.label}>
+                        <p className="text-xl font-bold text-ink">{s.v}</p>
+                        <p className="text-[10px] font-medium text-ink-500">{s.label}</p>
+                        <p className="text-[10px] text-ink-300">{s.sub}</p>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-ink truncate">{p.name}</p>
-                        <p className="text-[10px] text-ink-300">{p.area}</p>
+                    ))}
+                  </div>
+
+                  <div className="pt-3 border-t border-ink-50">
+                    <p className="text-[10px] font-semibold text-ink-400 uppercase tracking-widest mb-2.5">Profile completeness</p>
+                    {d.completeness.total > 0 && [
+                      { label: 'Display name',  n: d.completeness.hasDisplayName },
+                      { label: 'Bio',           n: d.completeness.hasBio         },
+                      { label: 'Rate set',      n: d.completeness.hasRate        },
+                      { label: 'Portfolio uploaded', n: d.completeness.hasPortfolio },
+                      { label: 'Google linked', n: d.completeness.hasGoogleLinked },
+                    ].map(f => (
+                      <div key={f.label} className="flex items-center gap-2 mb-2">
+                        <span className="text-[10px] text-ink-500 w-28 flex-shrink-0">{f.label}</span>
+                        <div className="flex-1 bg-ink-50 rounded-full h-1.5 overflow-hidden">
+                          <div className="h-full rounded-full bg-ink"
+                            style={{ width: `${pct(f.n, d.completeness.total)}%` }} />
+                        </div>
+                        <span className="text-[10px] font-semibold text-ink w-10 text-right">{f.n}/{d.completeness.total}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Specialty supply */}
+                <div className="bg-white rounded-2xl p-6 border border-ink-100">
+                  <p className="text-xs font-semibold text-ink-400 uppercase tracking-widest mb-4">Specialty supply</p>
+                  {d.specialtyDist.length === 0 ? (
+                    <p className="text-sm text-ink-300">No specialty data yet</p>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {d.specialtyDist.map(s => {
+                        const max = Math.max(...d.specialtyDist.map(x => x.supply), 1)
+                        return (
+                          <div key={s.label} className="flex items-center gap-3">
+                            <span className="text-xs text-ink-600 w-24 flex-shrink-0 truncate">{s.label}</span>
+                            <div className="flex-1 bg-ink-50 rounded-full h-2 overflow-hidden">
+                              <div className="h-full rounded-full bg-ink"
+                                style={{ width: `${(s.supply / max) * 100}%` }} />
+                            </div>
+                            <span className="text-xs font-bold text-ink w-5 text-right">{s.supply}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Area metrics */}
+                <div className="bg-white rounded-2xl p-6 border border-ink-100">
+                  <div className="flex items-center gap-2 mb-4">
+                    <MapPin className="w-3.5 h-3.5 text-ink-400" />
+                    <p className="text-xs font-semibold text-ink-400 uppercase tracking-widest">By neighbourhood</p>
+                  </div>
+                  {d.areaMetrics.length === 0 ? (
+                    <p className="text-sm text-ink-300">No location data yet — add locations to profiles</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {d.areaMetrics.map(a => (
+                        <div key={a.area}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-ink">{a.area}</span>
+                            <div className="flex items-center gap-2 text-[10px] text-ink-400">
+                              <span className="text-violet-600 font-semibold">{a.photographers}P</span>
+                              <span className="text-blue-600 font-semibold">{a.clients}C</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-0.5 h-2">
+                            <div className="bg-violet-400 rounded-l-full" style={{ flex: a.photographers }} />
+                            <div className="bg-blue-300 rounded-r-full" style={{ flex: a.clients || 0.1 }} />
+                          </div>
+                        </div>
+                      ))}
+                      <div className="flex items-center gap-3 pt-2 text-[10px] text-ink-400">
+                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-violet-400" />Photographers</span>
+                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-300" />Clients</span>
                       </div>
                     </div>
-                    <span className="text-xs text-ink-500">{p.specialty}</span>
-                    <span className="text-sm font-bold text-ink">{p.messages}</span>
-                    <span className="text-sm font-bold text-ink">{p.saves}</span>
-                    <div className="flex items-center gap-1">
-                      <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                      <span className="text-sm font-bold text-ink">{p.trustScore}</span>
-                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            {/* ── 6. Top photographers + clients ───────────────────────── */}
+            <section>
+              <h2 className="text-base font-bold text-ink mb-5">Engagement leaders</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                {/* Top photographers */}
+                <div className="bg-white rounded-2xl border border-ink-100 overflow-hidden">
+                  <div className="px-5 py-4 border-b border-ink-50 flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-ink-400" />
+                    <h3 className="font-semibold text-ink text-sm">Top photographers by conversations</h3>
                   </div>
-                ))}
-              </div>
-            </div>
+                  {d.topPhotographers.length === 0 ? (
+                    <p className="text-sm text-ink-300 px-5 py-6">No conversation data yet</p>
+                  ) : (
+                    <div className="divide-y divide-ink-50">
+                      {d.topPhotographers.slice(0, 6).map((p, i) => (
+                        <div key={p.id} className="flex items-center gap-3 px-5 py-3 hover:bg-ink-50 transition-colors">
+                          <span className="text-xs font-bold text-ink-300 w-4 flex-shrink-0">{i + 1}</span>
+                          <div className={`w-8 h-8 rounded-full ${avatarColor(p.id)} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
+                            {initials(p.displayName)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-ink truncate">{p.displayName}</p>
+                            <p className="text-[10px] text-ink-300">{p.specialties.slice(0,2).join(' · ') || '—'}</p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-sm font-bold text-ink">{p.conversations}</p>
+                            <p className="text-[10px] text-ink-300">convos</p>
+                          </div>
+                          {p.trustScore > 0 && (
+                            <div className="flex items-center gap-0.5 text-[10px] font-semibold text-blue-600 w-10 flex-shrink-0">
+                              <Shield className="w-2.5 h-2.5" />{Number(p.trustScore).toFixed(0)}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-            {/* Saves sparkline */}
-            <div className="bg-white rounded-2xl p-6 border border-ink-100">
-              <div className="flex items-center gap-2 mb-4">
-                <Heart className="w-4 h-4 text-ink-400" />
-                <h2 className="font-semibold text-ink">Weekly saves (clients bookmarking photographers)</h2>
+                {/* Top clients */}
+                <div className="bg-white rounded-2xl border border-ink-100 overflow-hidden">
+                  <div className="px-5 py-4 border-b border-ink-50 flex items-center gap-2">
+                    <Users className="w-4 h-4 text-ink-400" />
+                    <h3 className="font-semibold text-ink text-sm">Most active clients</h3>
+                  </div>
+                  {d.topClients.length === 0 ? (
+                    <p className="text-sm text-ink-300 px-5 py-6">No client activity yet</p>
+                  ) : (
+                    <div className="divide-y divide-ink-50">
+                      {d.topClients.slice(0, 6).map((c, i) => (
+                        <div key={c.id} className="flex items-center gap-3 px-5 py-3 hover:bg-ink-50 transition-colors">
+                          <span className="text-xs font-bold text-ink-300 w-4 flex-shrink-0">{i + 1}</span>
+                          <div className={`w-8 h-8 rounded-full ${avatarColor(c.id)} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
+                            {initials(c.fullName)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-ink truncate">{c.fullName}</p>
+                            <p className="text-[10px] text-ink-300">
+                              Joined {new Date(c.createdAt).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}
+                            </p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-sm font-bold text-ink">{c.messagesSent}</p>
+                            <p className="text-[10px] text-ink-300">messages</p>
+                          </div>
+                          <div className="text-right flex-shrink-0 w-10">
+                            <p className="text-sm font-bold text-ink">{c.saves}</p>
+                            <p className="text-[10px] text-ink-300">saves</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-              <Sparkline data={WEEKLY} field="saves" color="bg-rose-400" />
-              <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-ink-50">
-                <div className="text-center">
-                  <p className="text-lg font-bold text-ink">{WEEKLY.reduce((a, d) => a + d.saves, 0)}</p>
-                  <p className="text-xs text-ink-300">Total saves</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-bold text-ink">{Math.round(WEEKLY.reduce((a, d) => a + d.saves, 0) / WEEKLY.length)}</p>
-                  <p className="text-xs text-ink-300">Avg / week</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-bold text-ink">Sarah Chen</p>
-                  <p className="text-xs text-ink-300">Most saved</p>
+            </section>
+
+            {/* ── 7. Investor snapshot ──────────────────────────────────── */}
+            <section>
+              <div className="bg-ink rounded-2xl p-6 relative overflow-hidden">
+                <div className="absolute inset-0 grid-pattern pointer-events-none opacity-40" />
+                <div className="relative z-10">
+                  <p className="text-xs font-semibold text-ink-400 uppercase tracking-widest mb-4">
+                    Investor snapshot · TrueNorth Frames
+                  </p>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                    {[
+                      { v: d.totalPhotographers, label: 'Edmonton photographers listed', note: 'Supply-side of the marketplace' },
+                      { v: d.totalClients,        label: 'Clients seeking photographers', note: 'Demand-side, growing week-on-week' },
+                      { v: `${messagingRate}%`,   label: 'Client engagement rate',        note: 'Clients who messaged a photographer' },
+                      { v: d.totalConversations,  label: 'Direct connections made',        note: 'Photographer ↔ client conversations' },
+                    ].map(s => (
+                      <div key={s.label}>
+                        <p className="text-3xl font-bold text-white">{typeof s.v === 'number' ? s.v.toLocaleString() : s.v}</p>
+                        <p className="text-sm font-semibold text-ink-300 mt-1">{s.label}</p>
+                        <p className="text-xs text-ink-500 mt-0.5">{s.note}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            </section>
+          </>
         )}
-
       </main>
     </div>
   )

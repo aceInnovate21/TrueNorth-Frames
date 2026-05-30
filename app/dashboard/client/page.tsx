@@ -445,10 +445,18 @@ function DeleteAccountModal({ onClose }: { onClose: () => void }) {
   const [confirm, setConfirm] = useState('')
   const [deleting, setDeleting] = useState(false)
 
-  function handleDelete() {
+  async function handleDelete() {
     if (confirm !== 'DELETE') return
     setDeleting(true)
-    setTimeout(() => { router.push('/login') }, 1500)
+    try {
+      const res = await fetch('/api/account/delete', { method: 'POST' })
+      if (!res.ok) throw new Error('Delete failed')
+      await supabase.auth.signOut()
+      router.push('/login?deleted=1')
+    } catch {
+      setDeleting(false)
+      alert('Something went wrong. Please try again or contact support.')
+    }
   }
 
   return (
@@ -573,16 +581,45 @@ function CancelBookingModal({ photographerName, bookingStatus, onConfirm, onClos
   )
 }
 
-function SupportWidget() {
-  const [open, setOpen] = useState(false)
-  const [category, setCategory] = useState('')
-  const [message, setMessage] = useState('')
-  const [sent, setSent] = useState(false)
+const CLIENT_SUPPORT_TOPICS: { label: string; category: string; subject: string }[] = [
+  { label: 'Booking issue',          category: 'other',           subject: 'Booking issue' },
+  { label: 'Photographer concern',   category: 'spam_report',     subject: 'Photographer concern' },
+  { label: 'Inappropriate content',  category: 'inappropriate_content', subject: 'Inappropriate content report' },
+  { label: 'Account / login issue',  category: 'account_issue',   subject: 'Account or login issue' },
+  { label: 'Payment question',       category: 'billing_dispute', subject: 'Payment question' },
+  { label: 'Something else',         category: 'other',           subject: 'General enquiry' },
+]
 
-  function submit() {
-    if (!message.trim()) return
-    setSent(true)
-    setTimeout(() => { setSent(false); setOpen(false); setMessage(''); setCategory('') }, 2500)
+function SupportWidget() {
+  const [open, setOpen]       = useState(false)
+  const [topicIdx, setTopicIdx] = useState('')
+  const [message, setMessage] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sent, setSent]       = useState(false)
+  const [error, setError]     = useState('')
+
+  async function submit() {
+    const topic = CLIENT_SUPPORT_TOPICS[Number(topicIdx)]
+    if (!topic || !message.trim()) return
+    setSending(true)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/support', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category:    topic.category,
+          subject:     topic.subject,
+          description: message.trim(),
+        }),
+      })
+      if (!res.ok) throw new Error()
+      setSent(true)
+    } catch {
+      setError('Failed to send — please try again.')
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -605,15 +642,13 @@ function SupportWidget() {
             </div>
           ) : (
             <>
-              <select value={category} onChange={e => setCategory(e.target.value)}
+              <select value={topicIdx} onChange={e => setTopicIdx(e.target.value)}
                 className="w-full border border-ink-100 rounded-xl px-3 py-2.5 text-sm text-ink bg-white outline-none focus:border-ink transition-all"
               >
                 <option value="">Select a topic…</option>
-                <option value="booking">Booking issue</option>
-                <option value="photographer">Photographer concern</option>
-                <option value="account">Account / login</option>
-                <option value="payment">Payment question</option>
-                <option value="other">Something else</option>
+                {CLIENT_SUPPORT_TOPICS.map((t, i) => (
+                  <option key={i} value={i}>{t.label}</option>
+                ))}
               </select>
               <textarea
                 value={message} onChange={e => setMessage(e.target.value)}
@@ -621,10 +656,14 @@ function SupportWidget() {
                 rows={3}
                 className="w-full border border-ink-100 rounded-xl px-3 py-2.5 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink transition-all resize-none"
               />
-              <button onClick={submit} disabled={!message.trim()}
+              {error && <p className="text-xs text-red-500">{error}</p>}
+              <button onClick={submit} disabled={sending || !topicIdx || !message.trim()}
                 className="w-full flex items-center justify-center gap-2 text-sm font-semibold bg-ink text-white py-2.5 rounded-xl hover:bg-ink-800 disabled:opacity-40 transition-all"
               >
-                <Send className="w-3.5 h-3.5" /> Send to support
+                {sending
+                  ? <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Sending…</>
+                  : <><Send className="w-3.5 h-3.5" /> Send to support</>
+                }
               </button>
               <p className="text-[10px] text-ink-300 text-center">Replies sent to your account email · usually within 24h</p>
             </>

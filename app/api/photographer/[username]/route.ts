@@ -65,7 +65,7 @@ export async function GET(
   ] = await Promise.all([
     db.from('photographer_specialties').select('specialty').eq('photographer_id', photographerId),
     db.from('external_platform_links').select('platform, profile_url, platform_rating, platform_review_count, platform_username, follower_count, engagement_rate, posting_consistency, account_age_days, is_verified, is_oauth_connected').eq('photographer_id', photographerId),
-    db.from('reviews').select('id, rating, body, public_reply, client_reply, client_replied_at, created_at, communication_rating, quality_rating, value_rating, punctuality_rating, client:users!client_id(full_name)').eq('photographer_id', photographerId).eq('flag_status', 'none').order('created_at', { ascending: false }).limit(10),
+    db.from('reviews').select('id, rating, body, public_reply, client_reply, client_replied_at, created_at, communication_rating, quality_rating, value_rating, punctuality_rating, client:users!client_id(full_name)').eq('photographer_id', photographerId).in('flag_status', ['none', 'flagged']).order('created_at', { ascending: false }).limit(10),
     db.from('packages').select('id, name, description, billing_type, price, deliverables, is_popular, banner_url, specialty').eq('photographer_id', photographerId).eq('is_active', true).order('sort_order', { ascending: true }),
     db.from('photographer_faqs').select('id, question, answer, sort_order').eq('photographer_id', photographerId).eq('is_published', true).order('sort_order', { ascending: true }),
     db.from('availability_day_status').select('date, status').eq('photographer_id', photographerId).gte('date', today).lte('date', in90),

@@ -63,11 +63,14 @@ export async function fetchGoogleSignals(accessToken: string): Promise<PlatformS
       next: { revalidate: 0 },
     })
     if (!accountsRes.ok) {
-      return { platform: 'google', error: `HTTP ${accountsRes.status} fetching GBP accounts` }
+      if (accountsRes.status === 403) {
+        return { platform: 'google', error: 'No Google Business Profile found for this account. Create one at business.google.com and reconnect.' }
+      }
+      return { platform: 'google', error: `Google API error (${accountsRes.status}) — please reconnect your account.` }
     }
     const accountsData = await accountsRes.json()
     const account = accountsData?.accounts?.[0]
-    if (!account) return { platform: 'google', error: 'No Google Business accounts found' }
+    if (!account) return { platform: 'google', error: 'No Google Business Profile found for this account. Create one at business.google.com and reconnect.' }
     const accountName = account.name  // e.g. "accounts/123456"
 
     // 2. List locations under account

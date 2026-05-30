@@ -57,19 +57,12 @@ export async function POST(request: NextRequest) {
       return serverError('Failed to save review')
     }
   } else {
-    const { error } = await db
-      .from('reviews')
-      .insert({
-        booking_id,
-        client_id: booking.client_id,
-        photographer_id: profile.id,
-        rating: 3, // placeholder overall — client hasn't reviewed yet
-        ...clientReviewPayload,
-      })
-    if (error) {
-      console.error('[photographer/reviews/client INSERT] error:', error)
-      return serverError('Failed to save review')
-    }
+    // Client hasn't reviewed yet — don't create a row with a fake rating.
+    // The photographer's review will be saved when the client submits theirs (review row created then).
+    return NextResponse.json(
+      { error: 'The client must submit their review first before you can review them.' },
+      { status: 422 }
+    )
   }
 
   return NextResponse.json({ success: true })

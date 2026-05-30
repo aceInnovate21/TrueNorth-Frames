@@ -20,7 +20,8 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTo = searchParams.get('redirect') ?? null
+  const redirectTo  = searchParams.get('redirect') ?? null
+  const wasDeleted  = searchParams.get('deleted') === '1'
   const [role, setRole] = useState<Role | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -75,12 +76,25 @@ function LoginForm() {
       return
     }
 
-    // Verify the role matches what they selected
+    // Fetch role + account_status in one query
     const { data: userData } = await supabase
       .from('users')
-      .select('role')
+      .select('role, account_status')
       .eq('id', data.user.id)
-      .single() as { data: { role: string } | null; error: unknown }
+      .single() as { data: { role: string; account_status: string } | null; error: unknown }
+
+    // Suspended / banned / deactivated — sign out immediately and show clear message
+    if (userData?.account_status === 'suspended' || userData?.account_status === 'banned' || userData?.account_status === 'deactivated') {
+      await supabase.auth.signOut()
+      setLoading(false)
+      const msg = userData.account_status === 'deactivated'
+        ? 'This account has been deleted. If you believe this is a mistake, contact support@truenorthframes.ca.'
+        : 'Your account has been suspended. Please contact support at support@truenorthframes.ca to resolve this.'
+      setErrors({ form: msg })
+      setShake(true)
+      setTimeout(() => setShake(false), 500)
+      return
+    }
 
     if (userData?.role && userData.role !== role) {
       await supabase.auth.signOut()
@@ -180,6 +194,14 @@ function LoginForm() {
 
           <h1 className="font-serif text-3xl font-bold text-ink mb-1">Welcome back</h1>
           <p className="text-ink-300 text-sm mb-8">Sign in to your TrueNorth Frames account.</p>
+
+          {/* Account deleted confirmation */}
+          {wasDeleted && (
+            <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 mb-5">
+              <AlertCircle className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-blue-700 leading-snug">Your account has been deleted. We're sorry to see you go — your data will be removed within 30 days.</p>
+            </div>
+          )}
 
           {/* Form-level error */}
           {errors.form && (
