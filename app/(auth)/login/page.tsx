@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowRight, Star, Eye, EyeOff, AlertCircle, User, Camera } from 'lucide-react'
+import { ArrowRight, Star, Eye, EyeOff, AlertCircle, CheckCircle2, User, Camera } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 type Role = 'client' | 'photographer'
@@ -20,8 +20,10 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTo  = searchParams.get('redirect') ?? null
-  const wasDeleted  = searchParams.get('deleted') === '1'
+  const redirectTo   = searchParams.get('redirect') ?? null
+  const wasDeleted   = searchParams.get('deleted') === '1'
+  const wasVerified  = searchParams.get('verified') === '1'
+  const verifyFailed = searchParams.get('error') === 'verification_failed'
   const [role, setRole] = useState<Role | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -194,6 +196,22 @@ function LoginForm() {
 
           <h1 className="font-serif text-3xl font-bold text-ink mb-1">Welcome back</h1>
           <p className="text-ink-300 text-sm mb-8">Sign in to your TrueNorth Frames account.</p>
+
+          {/* Email verified success */}
+          {wasVerified && (
+            <div className="flex items-start gap-2.5 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 mb-5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-emerald-700 leading-snug">Email verified! Sign in below to get started.</p>
+            </div>
+          )}
+
+          {/* Verification failed */}
+          {verifyFailed && (
+            <div className="flex items-start gap-2.5 bg-red-50 border border-red-100 rounded-xl px-4 py-3 mb-5">
+              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700 leading-snug">That verification link has expired or is invalid. Please sign up again or contact support.</p>
+            </div>
+          )}
 
           {/* Account deleted confirmation */}
           {wasDeleted && (

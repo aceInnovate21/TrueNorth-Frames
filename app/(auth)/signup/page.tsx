@@ -48,6 +48,7 @@ function SignupForm() {
   const [loading, setLoading] = useState(false)
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [formError, setFormError] = useState<string | null>(null)
+  const [emailSent, setEmailSent] = useState(false)
 
   const strength = getStrength(password)
 
@@ -84,6 +85,7 @@ function SignupForm() {
       password,
       options: {
         data: { full_name: fullName, role },
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
       },
     })
 
@@ -123,16 +125,9 @@ function SignupForm() {
       return
     }
 
-    // 3. Redirect — if there's a pending booking redirect, go there (draft will auto-submit)
-    const params = new URLSearchParams({ firstName, lastName })
-    if (redirectTo && role === 'client') {
-      // Client signed up to send a booking — skip onboarding, go straight back
-      router.push(redirectTo)
-    } else if (role === 'photographer') {
-      router.push(`/onboarding/photographer?${params.toString()}`)
-    } else {
-      router.push(`/onboarding?${params.toString()}`)
-    }
+    // 3. Show "check your email" screen — Supabase sends a confirmation link
+    setLoading(false)
+    setEmailSent(true)
   }
 
   const errs = validate()
@@ -202,6 +197,44 @@ function SignupForm() {
             </Link>
           </div>
 
+          {/* ── Check your email screen ─────────────────────────── */}
+          {emailSent ? (
+            <div className="flex flex-col items-center text-center py-8">
+              <div className="w-16 h-16 bg-ink rounded-2xl flex items-center justify-center mb-6" style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+                <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25H4.5a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5H4.5a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                </svg>
+              </div>
+              <h1 className="font-serif text-3xl font-bold text-ink mb-3">Check your email</h1>
+              <p className="text-ink-400 text-sm leading-relaxed mb-2">
+                We sent a verification link to
+              </p>
+              <p className="font-semibold text-ink text-sm mb-6">{email}</p>
+              <p className="text-ink-400 text-sm leading-relaxed max-w-sm mb-8">
+                Click the link in the email to verify your account and get started. It may take a minute or two to arrive.
+              </p>
+              <div className="w-full bg-ink-50 rounded-2xl p-5 text-left space-y-3 mb-8">
+                <p className="text-xs font-semibold text-ink-400 uppercase tracking-widest">What to expect</p>
+                {[
+                  'Check your inbox (and spam folder just in case)',
+                  'Click "Verify email address" in the email',
+                  'You\'ll be taken straight to your dashboard',
+                ].map((step, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <div className="w-5 h-5 rounded-full bg-ink text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{i + 1}</div>
+                    <p className="text-sm text-ink-500 leading-snug">{step}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-ink-300">
+                Wrong email?{' '}
+                <button onClick={() => setEmailSent(false)} className="text-ink font-semibold underline underline-offset-2 hover:text-ink-600 transition-colors">
+                  Go back and change it
+                </button>
+              </p>
+            </div>
+          ) : (
+          <>
           <h1 className="font-serif text-3xl font-bold text-ink mb-1">Join TrueNorth Frames</h1>
           <p className="text-ink-300 text-sm mb-8">Free to join. No credit card required.</p>
 
@@ -389,6 +422,8 @@ function SignupForm() {
               Sign in
             </Link>
           </p>
+          </>
+          )}
         </div>
       </div>
     </div>
