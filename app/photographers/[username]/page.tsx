@@ -12,14 +12,16 @@ import {
 
 // ─── Portfolio lightbox + masonry grid ────────────────────────────────────────
 
-interface PortfolioPhoto { id: string; album_id: string; src: string; caption: string }
+interface PortfolioPhoto { id: string; album_id: string; src: string; caption: string; tags?: string[]; photo_taken_month?: number | null; photo_taken_year?: number | null }
 interface PortfolioVideo { id: string; album_id: string; src: string; title: string; duration_seconds: number | null }
 interface PortfolioAlbum { id: string; title: string; photo_count: number; video_count: number; cover_src: string; collage_srcs: string[] }
-interface StandalonePhoto { id: string; src: string; caption: string }
+interface StandalonePhoto { id: string; src: string; caption: string; tags?: string[]; photo_taken_month?: number | null; photo_taken_year?: number | null }
 interface StandaloneVideo { id: string; src: string; title: string; duration_seconds: number | null }
 
+const MONTH_NAMES_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
 function Lightbox({ photos, startIdx, onClose }: {
-  photos: { id: string; src: string; caption: string }[]
+  photos: { id: string; src: string; caption: string; tags?: string[]; photo_taken_month?: number | null; photo_taken_year?: number | null }[]
   startIdx: number
   onClose: () => void
 }) {
@@ -36,6 +38,8 @@ function Lightbox({ photos, startIdx, onClose }: {
     return () => window.removeEventListener('keydown', onKey)
   }, [photos.length, onClose])
 
+  const hasMeta = ph.caption || (ph.tags && ph.tags.length > 0) || (ph.photo_taken_month && ph.photo_taken_year)
+
   return (
     <div className="fixed inset-0 z-50 bg-black/95 flex flex-col" onClick={onClose}>
       <div className="flex items-center justify-between px-4 py-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
@@ -47,7 +51,7 @@ function Lightbox({ photos, startIdx, onClose }: {
 
       <div className="flex-1 flex items-center justify-center relative min-h-0 px-12" onClick={e => e.stopPropagation()}>
         <div className="relative w-full h-full flex items-center justify-center">
-          <img src={ph.src} alt={ph.caption || ''} className="max-w-full max-h-full object-contain rounded-lg" style={{ maxHeight: 'calc(100vh - 140px)' }} />
+          <img src={ph.src} alt={ph.caption || ''} className="max-w-full max-h-full object-contain rounded-lg" style={{ maxHeight: 'calc(100vh - 160px)' }} />
         </div>
         {idx > 0 && (
           <button onClick={() => setIdx(i => i - 1)}
@@ -64,11 +68,28 @@ function Lightbox({ photos, startIdx, onClose }: {
       </div>
 
       <div className="flex-shrink-0 pb-4" onClick={e => e.stopPropagation()}>
-        {ph.caption && (
-          <p className="text-white/70 text-sm text-center px-6 py-2 leading-relaxed">{ph.caption}</p>
+        {hasMeta && (
+          <div className="text-center px-6 py-2 space-y-1.5">
+            {ph.caption && (
+              <p className="text-white/80 text-sm leading-relaxed">{ph.caption}</p>
+            )}
+            {/* Tags + date row */}
+            {((ph.tags && ph.tags.length > 0) || (ph.photo_taken_month && ph.photo_taken_year)) && (
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                {ph.photo_taken_month && ph.photo_taken_year && (
+                  <span className="text-white/40 text-xs">
+                    {MONTH_NAMES_SHORT[ph.photo_taken_month - 1]} {ph.photo_taken_year}
+                  </span>
+                )}
+                {(ph.tags ?? []).map(t => (
+                  <span key={t} className="text-white/50 text-xs bg-white/10 px-2 py-0.5 rounded-full">#{t}</span>
+                ))}
+              </div>
+            )}
+          </div>
         )}
         {photos.length > 1 && (
-          <div className="flex items-center justify-center gap-1.5 px-4 mt-1 overflow-x-auto scrollbar-none">
+          <div className="flex items-center justify-center gap-1.5 px-4 mt-2 overflow-x-auto scrollbar-none">
             {photos.map((t, i) => (
               <button key={t.id} onClick={() => setIdx(i)}
                 className={`flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden transition-all ${i === idx ? 'ring-2 ring-white scale-110' : 'opacity-40 hover:opacity-70'}`}>
@@ -133,7 +154,7 @@ function PortfolioGrid({
   allVideos: PortfolioVideo[]
 }) {
   const [openAlbumId, setOpenAlbumId] = useState<string | null>(null)
-  const [lightbox, setLightbox] = useState<{ photos: { id: string; src: string; caption: string }[]; idx: number } | null>(null)
+  const [lightbox, setLightbox] = useState<{ photos: { id: string; src: string; caption: string; tags?: string[]; photo_taken_month?: number | null; photo_taken_year?: number | null }[]; idx: number } | null>(null)
   const [activeVideo, setActiveVideo] = useState<{ src: string; title: string } | null>(null)
 
   const openAlbum = openAlbumId ? albums.find(a => a.id === openAlbumId) ?? null : null
@@ -142,7 +163,12 @@ function PortfolioGrid({
   const isEmpty = standalonePhotos.length === 0 && standaloneVideos.length === 0 && albums.length === 0
 
   // Shared photo item
-  function PhotoItem({ ph, idx, photosForLightbox }: { ph: { id: string; src: string; caption: string }; idx: number; photosForLightbox: { id: string; src: string; caption: string }[] }) {
+  function PhotoItem({ ph, idx, photosForLightbox }: {
+    ph: { id: string; src: string; caption: string; tags?: string[]; photo_taken_month?: number | null; photo_taken_year?: number | null }
+    idx: number
+    photosForLightbox: { id: string; src: string; caption: string; tags?: string[]; photo_taken_month?: number | null; photo_taken_year?: number | null }[]
+  }) {
+    const hasMeta = ph.caption || (ph.tags && ph.tags.length > 0) || (ph.photo_taken_month && ph.photo_taken_year)
     return (
       <button
         key={ph.id}
@@ -152,10 +178,24 @@ function PortfolioGrid({
         style={{ marginBottom: '6px' }}
       >
         <img src={ph.src} alt={ph.caption || ''} className="w-full h-auto block" />
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-300 pointer-events-none" />
-        {ph.caption && (
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 translate-y-full group-hover:translate-y-0 transition-transform duration-300 pointer-events-none">
-            <p className="text-white text-[10px] font-medium line-clamp-2">{ph.caption}</p>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+        {hasMeta && (
+          <div className="absolute bottom-0 left-0 right-0 p-2.5 translate-y-full group-hover:translate-y-0 transition-transform duration-300 pointer-events-none">
+            {ph.caption && (
+              <p className="text-white text-[10px] font-medium line-clamp-2 mb-1">{ph.caption}</p>
+            )}
+            {((ph.tags && ph.tags.length > 0) || (ph.photo_taken_month && ph.photo_taken_year)) && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {ph.photo_taken_month && ph.photo_taken_year && (
+                  <span className="text-white/50 text-[9px]">
+                    {MONTH_NAMES_SHORT[ph.photo_taken_month - 1]} {ph.photo_taken_year}
+                  </span>
+                )}
+                {(ph.tags ?? []).slice(0, 2).map(t => (
+                  <span key={t} className="text-white/60 text-[9px] bg-white/15 px-1.5 py-0.5 rounded-full">#{t}</span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </button>
@@ -213,7 +253,7 @@ function PortfolioGrid({
           ) : (
             <div className="space-y-4">
               {albumPhotos.length > 0 && (
-                <div className="columns-2 sm:columns-3" style={{ columnGap: '6px' }}>
+                <div className="columns-2 sm:columns-3 lg:columns-4" style={{ columnGap: '6px' }}>
                   {albumPhotos.map((ph, idx) => (
                     <PhotoItem key={ph.id} ph={ph} idx={idx} photosForLightbox={albumPhotos} />
                   ))}
@@ -293,11 +333,11 @@ function PortfolioGrid({
             </div>
           )}
 
-          {/* Standalone photos masonry */}
+          {/* Standalone photos masonry — asymmetric, 2→3→4 cols */}
           {standalonePhotos.length > 0 && (
             <div>
               <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wide mb-3">Photos</p>
-              <div className="columns-2 sm:columns-3" style={{ columnGap: '6px' }}>
+              <div className="columns-2 sm:columns-3 lg:columns-4" style={{ columnGap: '6px' }}>
                 {standalonePhotos.map((ph, idx) => (
                   <PhotoItem key={ph.id} ph={ph} idx={idx} photosForLightbox={standalonePhotos} />
                 ))}
@@ -933,6 +973,16 @@ export default function ProfilePage({ params }: { params: { username: string } }
                   {p.location && (
                     <span className="flex items-center gap-1 text-ink-400 text-xs">
                       <MapPin className="w-3 h-3" />{p.location}
+                    </span>
+                  )}
+                  {p.years_experience != null && (
+                    <span className="flex items-center gap-1 text-ink-400 text-xs">
+                      <Camera className="w-3 h-3" />
+                      {p.years_experience === 0
+                        ? 'Just starting out in Edmonton'
+                        : p.years_experience >= 10
+                        ? '10+ years in Edmonton'
+                        : `${p.years_experience}+ years in Edmonton`}
                     </span>
                   )}
                   <span className="flex items-center gap-1 text-ink-300 text-xs">
