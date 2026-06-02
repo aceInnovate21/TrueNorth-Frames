@@ -648,10 +648,14 @@ function PortfolioReel({ specialty, tag }: { specialty: string; tag: string }) {
             <Share2 className="w-4 h-4" />
           </button>
 
-          {/* Counter */}
-          <div className="absolute top-4 left-4 bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1 z-10">
-            <span className="text-white text-[11px] font-medium">{currentIdx + 1} / {reelItems.length}{hasMore ? '+' : ''}</span>
-          </div>
+          {/* Counter — only show when there are multiple photographers loaded */}
+          {reelItems.length > 1 && (
+            <div className="absolute top-4 left-4 bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1 z-10">
+              <span className="text-white text-[11px] font-medium">
+                {currentIdx + 1} / {reelItems.length}{hasMore ? '+' : ''}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
