@@ -1,5 +1,8 @@
 {
+  "/_not-found/page": "app/_not-found/page.js",
   "/photographers/page": "app/photographers/page.js",
+  "/photographers/[username]/page": "app/photographers/[username]/page.js",
   "/api/portfolio-reel/route": "app/api/portfolio-reel/route.js",
-  "/photographers/[username]/page": "app/photographers/[username]/page.js"
+  "/api/client/me/route": "app/api/client/me/route.js",
+  "/api/photographer/profile/route": "app/api/photographer/profile/route.js"
 }

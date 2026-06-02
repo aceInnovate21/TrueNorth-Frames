@@ -13,6 +13,7 @@ import {
 import { Nav } from '@/components/nav'
 import { Footer } from '@/components/footer'
 import { PhotographerBadge } from '@/components/photographer-badge'
+import { MasonryGrid, type MasonryPhoto } from '@/components/masonry-grid'
 import type { Badge } from '@/lib/badges'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -364,6 +365,94 @@ function Pagination({ page, totalPages, onPage }: { page: number; totalPages: nu
       </button>
     </div>
   )
+}
+
+// ─── Portfolio Masonry (desktop) ──────────────────────────────────────────────
+
+function PortfolioMasonry({ specialty, tag, onClear }: { specialty: string; tag: string; onClear: () => void }) {
+  const [photos, setPhotos]         = useState<MasonryPhoto[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [seed]                      = useState(() => Math.floor(Math.random() * 999999))
+  const [page, setPage]             = useState(1)
+  const [hasMore, setHasMore]       = useState(true)
+
+  const fetchMasonry = useCallback(async (pg: number, append = false) => {
+    if (pg === 1) setLoading(true); else setLoadingMore(true)
+    try {
+      const p = new URLSearchParams({ seed: String(seed), page: String(pg) })
+      if (specialty) p.set('specialty', specialty)
+      if (tag)       p.set('tag', tag)
+      const res = await fetch(`/api/portfolio-reel?${p}`)
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      const flat = flattenToMasonryPhotos(data.reelPhotographers ?? [])
+      setPhotos(prev => append ? [...prev, ...flat] : flat)
+      setHasMore(data.hasMore ?? false)
+    } catch { /* silent */ }
+    finally { setLoading(false); setLoadingMore(false) }
+  }, [seed, specialty, tag])
+
+  useEffect(() => { setPage(1); setPhotos([]); fetchMasonry(1) }, [fetchMasonry])
+
+  function loadMore() {
+    const next = page + 1
+    setPage(next)
+    fetchMasonry(next, true)
+  }
+
+  return (
+    <div>
+      <MasonryGrid photos={photos} loading={loading} onClear={onClear} />
+      {hasMore && !loading && (
+        <div className="flex justify-center mt-8">
+          <button onClick={loadMore} disabled={loadingMore}
+            className="flex items-center gap-2 text-sm font-semibold text-ink border border-ink-200 px-6 py-3 rounded-xl hover:bg-ink hover:text-white transition-colors disabled:opacity-50">
+            {loadingMore
+              ? <><div className="w-4 h-4 border-2 border-ink-300 border-t-ink rounded-full animate-spin" /> Loading…</>
+              : 'Load more photos'
+            }
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Flatten reel items → masonry photos ─────────────────────────────────────
+
+function flattenToMasonryPhotos(reelItems: ReelPhotographer[]): MasonryPhoto[] {
+  const photos: MasonryPhoto[] = []
+  for (const item of reelItems) {
+    for (const photo of item.photos) {
+      if (!photo.src) continue
+      photos.push({
+        id: photo.id,
+        src: photo.src,
+        caption: photo.caption,
+        tags: photo.tags,
+        photo_taken_month: photo.photo_taken_month,
+        photo_taken_year: photo.photo_taken_year,
+        photographer: {
+          photographerId: item.photographerId,
+          username: item.username,
+          displayName: item.displayName,
+          location: item.location,
+          avatarUrl: item.avatarUrl,
+          nativeAvgRating: item.nativeAvgRating,
+          nativeReviewCount: item.nativeReviewCount,
+          badge: item.badge,
+          specialties: item.specialties,
+        },
+      })
+    }
+  }
+  // Shuffle so same-photographer photos aren't grouped together
+  for (let i = photos.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [photos[i], photos[j]] = [photos[j], photos[i]]
+  }
+  return photos
 }
 
 // ─── Portfolio Reel ───────────────────────────────────────────────────────────
@@ -1040,9 +1129,10 @@ function PhotographersPageInner() {
       <div className="bg-ink-50 min-h-screen">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-          {/* ── Portfolio Reel ── */}
+          {/* ── Portfolio — masonry on desktop, reel on mobile ── */}
           {tab === 'portfolio' && (
-            <div className="max-w-lg mx-auto">
+            <>
+              {/* Active filter chips */}
               {(selectedSpecialty || selectedTag) && (
                 <div className="flex items-center gap-2 mb-4 flex-wrap">
                   {selectedSpecialty && (
@@ -1059,8 +1149,17 @@ function PhotographersPageInner() {
                   )}
                 </div>
               )}
-              <PortfolioReel specialty={selectedSpecialty} tag={selectedTag} />
-            </div>
+
+              {/* Desktop: Pinterest-style asymmetric masonry grid */}
+              <div className="hidden lg:block">
+                <PortfolioMasonry specialty={selectedSpecialty} tag={selectedTag} onClear={clearAll} />
+              </div>
+
+              {/* Mobile: vertical reel scroll */}
+              <div className="lg:hidden max-w-lg mx-auto">
+                <PortfolioReel specialty={selectedSpecialty} tag={selectedTag} />
+              </div>
+            </>
           )}
 
           {/* ── Photographers grid ── */}

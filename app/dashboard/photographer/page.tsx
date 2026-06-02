@@ -4961,6 +4961,18 @@ function PhotographerDashboardInner() {
                         </div>
                       )}
 
+                      {/* Upload guidelines reminder */}
+                      <div className="flex items-start gap-3 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+                        <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-amber-900">Photography work only</p>
+                          <p className="text-xs text-amber-700 leading-relaxed mt-0.5">
+                            Upload real photos you shot — no flyers, text graphics, screenshots, or stock images.
+                            {' '}<a href="/guidelines" target="_blank" className="underline underline-offset-2 font-medium hover:text-amber-900 transition-colors">View full guidelines →</a>
+                          </p>
+                        </div>
+                      </div>
+
                       {/* Photos grid */}
                       {openAlbum.photos.length === 0 ? (
                         <div onClick={() => portfolioPhotoInputRef.current?.click()}
@@ -5106,6 +5118,18 @@ function PhotographerDashboardInner() {
                           <button onClick={() => setPortfolioUploadError(null)} className="ml-auto"><X className="w-3.5 h-3.5" /></button>
                         </div>
                       )}
+
+                      {/* Upload guidelines reminder */}
+                      <div className="flex items-start gap-3 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+                        <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-amber-900">Photography work only</p>
+                          <p className="text-xs text-amber-700 leading-relaxed mt-0.5">
+                            Upload real photos you shot — no flyers, text graphics, screenshots, or stock images.
+                            {' '}<a href="/guidelines" target="_blank" className="underline underline-offset-2 font-medium hover:text-amber-900 transition-colors">View full guidelines →</a>
+                          </p>
+                        </div>
+                      </div>
 
                       {/* ── Section 1: Photos ── */}
                       <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
