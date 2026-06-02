@@ -6,12 +6,14 @@ import { useState, useCallback, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   Search, SlidersHorizontal, Star, MapPin, ChevronRight, X,
-  Baby, Briefcase, Heart, Home, Sparkles, User, LayoutGrid, List,
-  Shield, ChevronDown, ChevronLeft, Package, Clock, CheckCircle2,
-  Camera,
+  Baby, Briefcase, Heart, Home, Sparkles, User,
+  Shield, ChevronDown, ChevronLeft, Package, Camera,
+  Share2, ChevronUp, Images,
 } from 'lucide-react'
 import { Nav } from '@/components/nav'
 import { Footer } from '@/components/footer'
+import { PhotographerBadge } from '@/components/photographer-badge'
+import type { Badge } from '@/lib/badges'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +32,30 @@ interface Photographer {
   native_review_count: number
   specialties: string[]
   available_today: boolean
+  badge: Badge
+}
+
+interface ReelPhoto {
+  id: string
+  src: string
+  caption: string
+  tags: string[]
+  photo_taken_month: number | null
+  photo_taken_year: number | null
+}
+
+interface ReelPhotographer {
+  photographerId: string
+  username: string
+  displayName: string
+  location: string
+  avatarUrl: string | null
+  nativeAvgRating: number
+  nativeReviewCount: number
+  trustScore: number
+  specialties: string[]
+  badge: Badge
+  photos: ReelPhoto[]
 }
 
 interface PackageListing {
@@ -63,6 +89,11 @@ const SPECIALTIES = [
   { value: 'newborn',     label: 'Newborn',     icon: Baby },
 ]
 
+const PHOTO_TAGS = [
+  'outdoor', 'studio', 'golden hour', 'black & white',
+  'editorial', 'nature', 'night', 'travel',
+]
+
 const NEIGHBOURHOODS = [
   { value: 'downtown',      label: 'Downtown' },
   { value: 'oliver',        label: 'Oliver' },
@@ -86,6 +117,8 @@ const PACKAGE_SORT = [
   { value: 'price_desc', label: 'Price: high → low' },
 ]
 
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function initials(name: string) {
@@ -94,15 +127,39 @@ function initials(name: string) {
 
 function avatarBg(id: string) {
   const palette = [
-    'bg-slate-700', 'bg-zinc-700', 'bg-stone-700', 'bg-neutral-700',
-    'bg-gray-700',  'bg-slate-600', 'bg-zinc-600', 'bg-stone-600',
+    'bg-slate-700','bg-zinc-700','bg-stone-700','bg-neutral-700',
+    'bg-gray-700','bg-slate-600','bg-zinc-600','bg-stone-600',
   ]
   let h = 0
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
   return palette[h % palette.length]
 }
 
-// ─── Photographer Grid Card ───────────────────────────────────────────────────
+// 2 established + 1 rising talent randomisation when no search active
+function mixedSort(photographers: Photographer[], hasActiveFilters: boolean): Photographer[] {
+  if (hasActiveFilters || photographers.length <= 3) return photographers
+
+  const rising     = photographers.filter(p => p.badge.type === 'rising_talent' || p.badge.type === 'newly_joined')
+  const established = photographers.filter(p => p.badge.type !== 'rising_talent' && p.badge.type !== 'newly_joined')
+
+  const result: Photographer[] = []
+  let ri = 0, ei = 0
+  let slot = 0
+
+  while (ei < established.length || ri < rising.length) {
+    if (slot % 3 === 2 && ri < rising.length) {
+      result.push(rising[ri++])
+    } else if (ei < established.length) {
+      result.push(established[ei++])
+    } else {
+      result.push(rising[ri++])
+    }
+    slot++
+  }
+  return result
+}
+
+// ─── Grid Card (no price) ────────────────────────────────────────────────────
 
 function GridCard({ p }: { p: Photographer }) {
   const hasRating = p.native_avg_rating > 0
@@ -145,61 +202,47 @@ function GridCard({ p }: { p: Photographer }) {
         ) : null}
 
         <div className="absolute bottom-0 left-0 right-0 px-4 pb-4 pt-8">
-          <div className="flex items-end justify-between gap-2">
-            <div className="flex items-end gap-2.5 min-w-0">
-              <div className="relative w-9 h-9 rounded-xl overflow-hidden border-2 border-white/80 flex-shrink-0 shadow-md">
-                {p.avatar_url ? (
-                  <Image src={p.avatar_url} alt={p.display_name} fill className="object-cover" sizes="36px" />
-                ) : (
-                  <div className={`w-full h-full flex items-center justify-center ${avatarBg(p.id)} text-white text-[11px] font-bold`}>
-                    {initials(p.display_name)}
-                  </div>
-                )}
-              </div>
-              <div className="min-w-0">
-                <p className="text-white font-semibold text-base leading-tight truncate">{p.display_name}</p>
-                {p.location && (
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <MapPin className="w-2.5 h-2.5 text-white/70 flex-shrink-0" />
-                    <p className="text-white/70 text-[11px] truncate">{p.location}</p>
-                  </div>
-                )}
-              </div>
+          <div className="flex items-end gap-2.5 min-w-0">
+            <div className="relative w-9 h-9 rounded-xl overflow-hidden border-2 border-white/80 flex-shrink-0 shadow-md">
+              {p.avatar_url ? (
+                <Image src={p.avatar_url} alt={p.display_name} fill className="object-cover" sizes="36px" />
+              ) : (
+                <div className={`w-full h-full flex items-center justify-center ${avatarBg(p.id)} text-white text-[11px] font-bold`}>
+                  {initials(p.display_name)}
+                </div>
+              )}
             </div>
-            {p.rate_display && (
-              <div className="text-right flex-shrink-0">
-                <p className="text-white font-bold text-sm">{p.rate_display.split('/')[0]}</p>
-                {p.rate_display.includes('/') && (
-                  <p className="text-white/60 text-[10px]">/{p.rate_display.split('/')[1]}</p>
-                )}
-              </div>
-            )}
+            <div className="min-w-0">
+              <p className="text-white font-semibold text-base leading-tight truncate">{p.display_name}</p>
+              {p.location && (
+                <div className="flex items-center gap-1 mt-0.5">
+                  <MapPin className="w-2.5 h-2.5 text-white/70 flex-shrink-0" />
+                  <p className="text-white/70 text-[11px] truncate">{p.location}</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       <div className="p-4">
+        <div className="flex items-center justify-between mb-2.5">
+          <PhotographerBadge badge={p.badge} size="sm" />
+          {hasRating && (
+            <span className="text-[10px] text-ink-400">
+              <span className="font-semibold text-ink">{p.native_review_count}</span> review{p.native_review_count !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
         {p.specialties.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            {p.specialties.map(s => (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {p.specialties.slice(0, 3).map(s => (
               <span key={s} className="bg-ink-50 text-ink-500 text-[10px] font-medium px-2 py-0.5 rounded-full">{s}</span>
             ))}
           </div>
         )}
-        {p.bio && <p className="text-ink-400 text-xs leading-relaxed mb-3 line-clamp-2">{p.bio}</p>}
-        <div className="flex items-center justify-between pt-3 border-t border-ink-50">
-          <div className="flex items-center gap-1.5">
-            {hasRating && (
-              <span className="text-[10px] text-ink-400">
-                <span className="font-semibold text-ink">{p.native_review_count}</span> review{p.native_review_count !== 1 ? 's' : ''}
-              </span>
-            )}
-            {p.trust_score > 0 && (
-              <span className="flex items-center gap-1 text-[10px] text-ink-300 bg-ink-50 px-1.5 py-0.5 rounded">
-                <Shield className="w-2.5 h-2.5" /> {p.trust_score.toFixed(1)}
-              </span>
-            )}
-          </div>
+        {p.bio && <p className="text-ink-400 text-xs leading-relaxed line-clamp-2 mb-3">{p.bio}</p>}
+        <div className="flex items-center justify-end pt-3 border-t border-ink-50">
           <div className="flex items-center gap-1 text-ink-400 text-[10px] font-semibold group-hover:text-ink transition-colors">
             View profile <ChevronRight className="w-3 h-3" />
           </div>
@@ -209,241 +252,86 @@ function GridCard({ p }: { p: Photographer }) {
   )
 }
 
-// ─── Photographer List Row ────────────────────────────────────────────────────
+// ─── Grid Skeleton ─────────────────────────────────────────────────────────
 
-function ListRow({ p }: { p: Photographer }) {
-  const hasRating = p.native_avg_rating > 0
+function GridSkeleton() {
   return (
-    <Link
-      href={`/photographers/${p.username}`}
-      className="group flex items-center gap-4 bg-white rounded-2xl p-4 transition-all duration-200 hover:-translate-y-0.5"
-      style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}
-    >
-      <div className="relative flex-shrink-0">
-        <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-ink-100">
-          {p.cover_src
-            ? <Image src={p.cover_src} alt={p.display_name} fill className="object-cover" sizes="80px" />
-            : <div className={`w-full h-full flex items-center justify-center ${avatarBg(p.id)} text-white font-bold text-lg`}>{initials(p.display_name)}</div>
-          }
+    <div className="bg-white rounded-2xl overflow-hidden animate-pulse" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+      <div className="h-52 bg-ink-100" />
+      <div className="p-4 space-y-3">
+        <div className="h-3 bg-ink-100 rounded w-1/3" />
+        <div className="flex gap-1.5">
+          <div className="h-5 bg-ink-50 rounded-full w-16" />
+          <div className="h-5 bg-ink-50 rounded-full w-14" />
         </div>
-        <div className="absolute -bottom-1.5 -right-1.5 w-8 h-8 rounded-lg overflow-hidden border-2 border-white shadow-sm">
-          {p.avatar_url
-            ? <Image src={p.avatar_url} alt={p.display_name} fill className="object-cover" sizes="32px" />
-            : <div className={`w-full h-full flex items-center justify-center ${avatarBg(p.id)} text-white text-[10px] font-bold`}>{initials(p.display_name)}</div>
-          }
-        </div>
+        <div className="h-3 bg-ink-50 rounded w-full" />
+        <div className="h-3 bg-ink-50 rounded w-3/4" />
+        <div className="h-px bg-ink-50" />
+        <div className="h-3 bg-ink-50 rounded w-1/4 ml-auto" />
       </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-0.5">
-          <p className="font-semibold text-ink text-sm leading-tight">{p.display_name}</p>
-          {p.available_today && (
-            <span className="bg-emerald-50 text-emerald-600 text-[9px] font-bold px-1.5 py-0.5 rounded-full border border-emerald-100">Available today</span>
-          )}
-        </div>
-        {p.location && (
-          <div className="flex items-center gap-1 mb-2">
-            <MapPin className="w-3 h-3 text-ink-300" />
-            <p className="text-ink-300 text-xs">{p.location}</p>
-          </div>
-        )}
-        {p.specialties.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
-            {p.specialties.map(s => (
-              <span key={s} className="bg-ink-50 text-ink-500 text-[10px] font-medium px-2 py-0.5 rounded-full">{s}</span>
-            ))}
-          </div>
-        )}
-        {p.bio && <p className="text-ink-400 text-xs leading-relaxed line-clamp-1 hidden sm:block">{p.bio}</p>}
-      </div>
-
-      <div className="flex-shrink-0 flex flex-col items-end gap-2 min-w-[90px]">
-        {hasRating ? (
-          <div className="flex items-center gap-1">
-            <Star className="w-3.5 h-3.5 text-ink fill-ink" />
-            <span className="font-bold text-ink text-sm">{p.native_avg_rating.toFixed(1)}</span>
-            <span className="text-ink-300 text-xs">({p.native_review_count})</span>
-          </div>
-        ) : p.trust_score > 0 ? (
-          <div className="flex items-center gap-1 text-ink-400 text-xs">
-            <Shield className="w-3.5 h-3.5" />
-            <span className="font-bold text-ink">{p.trust_score.toFixed(1)}</span>
-          </div>
-        ) : null}
-        {p.rate_display && <p className="font-bold text-ink text-sm">{p.rate_display}</p>}
-        <div className="flex items-center gap-0.5 mt-1 text-ink text-[10px] font-semibold group-hover:gap-1 transition-all">
-          View <ChevronRight className="w-3 h-3" />
-        </div>
-      </div>
-    </Link>
+    </div>
   )
 }
 
 // ─── Package Card ─────────────────────────────────────────────────────────────
 
 function PackageCard({ pkg }: { pkg: PackageListing }) {
-  const ph = pkg.photographer
   return (
-    <div
-      className={`relative bg-white rounded-2xl border flex flex-col transition-all duration-200 hover:-translate-y-0.5 overflow-hidden ${
-        pkg.is_popular ? 'border-ink ring-1 ring-ink' : 'border-ink-100'
-      }`}
-      style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 6px 20px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)' }}
-    >
-      {/* Popular strip — sits above banner when banner present, else absolute */}
-      {pkg.is_popular && !pkg.banner_url && (
-        <div className="bg-ink py-1 flex items-center justify-center gap-1.5">
-          <Star className="w-2.5 h-2.5 text-white fill-white" />
-          <span className="text-white text-[10px] font-bold tracking-wide uppercase">Most Popular</span>
+    <Link href={`/photographers/${pkg.photographer.username}`}
+      className="group block bg-white rounded-2xl overflow-hidden transition-all duration-200 hover:-translate-y-0.5"
+      style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 6px 20px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.05)' }}>
+      {pkg.banner_url ? (
+        <div className="relative h-36 overflow-hidden">
+          <Image src={pkg.banner_url} alt={pkg.name} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="400px" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+          {pkg.is_popular && (
+            <span className="absolute top-3 left-3 bg-ink text-white text-[10px] font-bold px-2.5 py-1 rounded-full">Popular</span>
+          )}
+        </div>
+      ) : (
+        <div className={`h-20 flex items-center justify-center ${avatarBg(pkg.id)} relative`}>
+          <Package className="w-8 h-8 text-white opacity-40" />
+          {pkg.is_popular && (
+            <span className="absolute top-3 left-3 bg-white text-ink text-[10px] font-bold px-2.5 py-1 rounded-full">Popular</span>
+          )}
         </div>
       )}
-
-      {/* Banner image */}
-      {pkg.banner_url ? (
-        <div className="relative w-full h-36 overflow-hidden flex-shrink-0">
-          <Image src={pkg.banner_url} alt={pkg.name} fill
-            className="object-cover"
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/40" />
-          {pkg.is_popular && (
-            <div className="absolute top-2.5 left-3 flex items-center gap-1 bg-ink/90 backdrop-blur-sm px-2.5 py-1 rounded-full">
-              <Star className="w-2.5 h-2.5 text-white fill-white" />
-              <span className="text-white text-[10px] font-bold tracking-wide uppercase">Most Popular</span>
-            </div>
-          )}
-        </div>
-      ) : null}
-
-      <div className="p-5 flex flex-col flex-1">
-        {/* Package name + price */}
-        <div className="flex items-start justify-between gap-3 mb-2">
-          <div className="min-w-0">
-            <p className="font-bold text-ink text-base leading-tight">{pkg.name}</p>
-            {pkg.description && (
-              <p className="text-ink-400 text-xs mt-1 leading-relaxed line-clamp-2">{pkg.description}</p>
-            )}
-          </div>
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <p className="font-semibold text-ink text-sm leading-snug">{pkg.name}</p>
           <div className="text-right flex-shrink-0">
-            <p className="font-bold text-2xl text-ink leading-none">${pkg.price}</p>
-            <div className="flex items-center justify-end gap-1 mt-0.5">
-              {pkg.billing_type === 'hourly'
-                ? <><Clock className="w-2.5 h-2.5 text-ink-300" /><span className="text-[10px] text-ink-300">/ hr</span></>
-                : <><Package className="w-2.5 h-2.5 text-ink-300" /><span className="text-[10px] text-ink-300">/ session</span></>
-              }
-            </div>
+            <p className="font-bold text-ink text-sm">${pkg.price}</p>
+            <p className="text-ink-300 text-[10px]">{pkg.billing_type === 'hourly' ? '/hr' : 'session'}</p>
           </div>
         </div>
-
-        {/* Billing type + specialty pills */}
-        <div className="flex flex-wrap items-center gap-1.5 mb-3">
-          <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-            pkg.billing_type === 'hourly'
-              ? 'bg-violet-50 text-violet-600 border border-violet-100'
-              : 'bg-sky-50 text-sky-600 border border-sky-100'
-          }`}>
-            {pkg.billing_type === 'hourly' ? <Clock className="w-2.5 h-2.5" /> : <Package className="w-2.5 h-2.5" />}
-            {pkg.billing_type === 'hourly' ? 'Hourly' : 'Package'}
-          </span>
-          {pkg.specialty && (
-            <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full bg-ink-50 text-ink-500 border border-ink-100">
-              {pkg.specialty.charAt(0).toUpperCase() + pkg.specialty.slice(1).replace('-', ' ')}
-            </span>
-          )}
-        </div>
-
-        {/* Deliverables */}
-        {pkg.deliverables.length > 0 && (
-          <ul className="space-y-1.5 mb-4 flex-1">
-            {pkg.deliverables.slice(0, 4).map((d, i) => (
-              <li key={i} className="flex items-start gap-2 text-xs text-ink-500">
-                <CheckCircle2 className="w-3.5 h-3.5 text-ink mt-0.5 flex-shrink-0" />
-                {d}
-              </li>
-            ))}
-            {pkg.deliverables.length > 4 && (
-              <li className="text-[10px] text-ink-300 pl-5">+{pkg.deliverables.length - 4} more included</li>
+        {pkg.description && <p className="text-ink-400 text-xs leading-relaxed line-clamp-2 mb-3">{pkg.description}</p>}
+        <div className="flex items-center gap-2 pt-3 border-t border-ink-50">
+          <div className="relative w-6 h-6 rounded-lg overflow-hidden flex-shrink-0">
+            {pkg.photographer.avatar_url ? (
+              <Image src={pkg.photographer.avatar_url} alt={pkg.photographer.display_name} fill className="object-cover" sizes="24px" />
+            ) : (
+              <div className={`w-full h-full ${avatarBg(pkg.photographer.id)} flex items-center justify-center text-white text-[8px] font-bold`}>
+                {initials(pkg.photographer.display_name)}
+              </div>
             )}
-          </ul>
-        )}
-
-        {/* Spacer pushes footer down */}
-        <div className="flex-1" />
-
-        {/* Photographer attribution */}
-        <div className="pt-3 mt-3 border-t border-ink-50">
-          <Link
-            href={`/photographers/${ph.username}`}
-            className="flex items-center gap-2.5 group/ph"
-          >
-            <div className="relative w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 border border-ink-100">
-              {ph.avatar_url
-                ? <Image src={ph.avatar_url} alt={ph.display_name} fill className="object-cover" sizes="32px" />
-                : <div className={`w-full h-full flex items-center justify-center ${avatarBg(ph.id)} text-white text-[10px] font-bold`}>{initials(ph.display_name)}</div>
-              }
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-ink group-hover/ph:underline truncate">{ph.display_name}</p>
-              {ph.location && (
-                <div className="flex items-center gap-0.5">
-                  <MapPin className="w-2.5 h-2.5 text-ink-300 flex-shrink-0" />
-                  <p className="text-[10px] text-ink-300 truncate">{ph.location}</p>
-                </div>
-              )}
-            </div>
-            <ChevronRight className="w-3.5 h-3.5 text-ink-200 group-hover/ph:text-ink transition-colors flex-shrink-0" />
-          </Link>
+          </div>
+          <p className="text-xs text-ink-500 truncate">{pkg.photographer.display_name}</p>
+          <ChevronRight className="w-3 h-3 text-ink-300 ml-auto flex-shrink-0 group-hover:text-ink transition-colors" />
         </div>
       </div>
-    </div>
-  )
-}
-
-// ─── Skeletons ────────────────────────────────────────────────────────────────
-
-function GridSkeleton() {
-  return (
-    <div className="bg-white rounded-2xl overflow-hidden animate-pulse"
-      style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.05)' }}>
-      <div className="h-52 bg-ink-100" />
-      <div className="p-4 space-y-3">
-        <div className="flex gap-1.5"><div className="h-5 w-16 bg-ink-100 rounded-full" /><div className="h-5 w-14 bg-ink-100 rounded-full" /></div>
-        <div className="space-y-1.5"><div className="h-3 bg-ink-100 rounded w-full" /><div className="h-3 bg-ink-100 rounded w-3/4" /></div>
-      </div>
-    </div>
+    </Link>
   )
 }
 
 function PackageSkeleton() {
   return (
-    <div className="bg-white rounded-2xl border border-ink-100 overflow-hidden animate-pulse"
-      style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+    <div className="bg-white rounded-2xl overflow-hidden animate-pulse">
       <div className="h-36 bg-ink-100" />
-      <div className="p-5 space-y-3">
-        <div className="flex justify-between">
-          <div className="space-y-1.5 flex-1"><div className="h-4 bg-ink-100 rounded w-2/3" /><div className="h-3 bg-ink-100 rounded w-full" /></div>
-          <div className="ml-4"><div className="h-7 w-16 bg-ink-100 rounded" /></div>
-        </div>
-        <div className="h-5 w-16 bg-ink-100 rounded-full" />
-        <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-3 bg-ink-100 rounded w-full" />)}</div>
-        <div className="pt-3 border-t border-ink-50 flex items-center gap-2">
-          <div className="w-8 h-8 bg-ink-100 rounded-lg" />
-          <div className="space-y-1"><div className="h-3 w-24 bg-ink-100 rounded" /><div className="h-2 w-16 bg-ink-100 rounded" /></div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ListSkeleton() {
-  return (
-    <div className="flex items-center gap-4 bg-white rounded-2xl p-4 animate-pulse"
-      style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.05)' }}>
-      <div className="w-20 h-20 rounded-xl bg-ink-100 flex-shrink-0" />
-      <div className="flex-1 space-y-2">
-        <div className="h-4 bg-ink-100 rounded w-1/3" />
-        <div className="h-3 bg-ink-100 rounded w-1/4" />
-        <div className="flex gap-1.5"><div className="h-5 w-16 bg-ink-100 rounded-full" /><div className="h-5 w-14 bg-ink-100 rounded-full" /></div>
+      <div className="p-4 space-y-3">
+        <div className="flex justify-between"><div className="h-4 bg-ink-100 rounded w-1/2" /><div className="h-4 bg-ink-100 rounded w-12" /></div>
+        <div className="h-3 bg-ink-50 rounded w-full" />
+        <div className="h-px bg-ink-50" />
+        <div className="h-3 bg-ink-50 rounded w-2/3" />
       </div>
     </div>
   )
@@ -455,36 +343,350 @@ function Pagination({ page, totalPages, onPage }: { page: number; totalPages: nu
   if (totalPages <= 1) return null
   const pages = Array.from({ length: totalPages }, (_, i) => i + 1)
     .filter(n => n === 1 || n === totalPages || Math.abs(n - page) <= 1)
-    .reduce<(number | '…')[]>((acc, n, idx, arr) => {
-      if (idx > 0 && (n as number) - (arr[idx - 1] as number) > 1) acc.push('…')
-      acc.push(n)
-      return acc
-    }, [])
-
   return (
-    <div className="flex items-center justify-center gap-2 mt-10">
-      <button onClick={() => onPage(page - 1)} disabled={page <= 1}
-        className="flex items-center gap-1 px-3 py-2 text-xs font-medium rounded-lg border border-ink-100 bg-white text-ink-400 hover:text-ink hover:border-ink-300 disabled:opacity-40 disabled:pointer-events-none transition-colors">
-        <ChevronLeft className="w-3.5 h-3.5" /> Prev
+    <div className="flex justify-center items-center gap-2 mt-8">
+      <button onClick={() => onPage(page - 1)} disabled={page === 1}
+        className="w-9 h-9 flex items-center justify-center rounded-xl border border-ink-100 disabled:opacity-30 hover:bg-ink-50 transition-colors">
+        <ChevronLeft className="w-4 h-4" />
       </button>
-      <div className="flex items-center gap-1">
-        {pages.map((n, i) => n === '…'
-          ? <span key={`e${i}`} className="px-2 py-1 text-xs text-ink-300">…</span>
-          : <button key={n} onClick={() => onPage(n as number)}
-              className={`w-8 h-8 text-xs font-semibold rounded-lg border transition-colors ${page === n ? 'bg-ink text-white border-ink' : 'bg-white text-ink-500 border-ink-100 hover:border-ink-300'}`}>
-              {n}
-            </button>
-        )}
-      </div>
-      <button onClick={() => onPage(page + 1)} disabled={page >= totalPages}
-        className="flex items-center gap-1 px-3 py-2 text-xs font-medium rounded-lg border border-ink-100 bg-white text-ink-400 hover:text-ink hover:border-ink-300 disabled:opacity-40 disabled:pointer-events-none transition-colors">
-        Next <ChevronRight className="w-3.5 h-3.5" />
+      {pages.map((n, i) => (
+        <span key={n}>
+          {i > 0 && pages[i - 1] !== n - 1 && <span className="text-ink-200 text-sm px-1">…</span>}
+          <button onClick={() => onPage(n)}
+            className={`w-9 h-9 text-sm font-medium rounded-xl border transition-colors ${n === page ? 'bg-ink text-white border-ink' : 'border-ink-100 text-ink-500 hover:bg-ink-50'}`}>
+            {n}
+          </button>
+        </span>
+      ))}
+      <button onClick={() => onPage(page + 1)} disabled={page === totalPages}
+        className="w-9 h-9 flex items-center justify-center rounded-xl border border-ink-100 disabled:opacity-30 hover:bg-ink-50 transition-colors">
+        <ChevronRight className="w-4 h-4" />
       </button>
     </div>
   )
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── Portfolio Reel ───────────────────────────────────────────────────────────
+
+function PortfolioReel({ specialty, tag }: { specialty: string; tag: string }) {
+  const [reelItems, setReelItems]   = useState<ReelPhotographer[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [seed]                      = useState(() => Math.floor(Math.random() * 999999))
+  const [page, setPage]             = useState(1)
+  const [hasMore, setHasMore]       = useState(true)
+  // currentIdx = index in reelItems (which photographer)
+  const [currentIdx, setCurrentIdx] = useState(0)
+  // photoIdx per photographer
+  const [photoIdxMap, setPhotoIdxMap] = useState<Record<string, number>>({})
+  const [drawer, setDrawer]         = useState<ReelPhotographer | null>(null)
+  const [copied, setCopied]         = useState(false)
+  const containerRef                = useRef<HTMLDivElement>(null)
+  const touchStartY                 = useRef<number | null>(null)
+  const touchStartX                 = useRef<number | null>(null)
+
+  const fetchReel = useCallback(async (pg: number, append = false) => {
+    if (pg === 1) setLoading(true); else setLoadingMore(true)
+    try {
+      const p = new URLSearchParams({ seed: String(seed), page: String(pg) })
+      if (specialty) p.set('specialty', specialty)
+      if (tag)       p.set('tag', tag)
+      const res = await fetch(`/api/portfolio-reel?${p}`)
+      if (!res.ok) throw new Error()
+      const data = await res.json()
+      setReelItems(prev => append ? [...prev, ...(data.reelPhotographers ?? [])] : (data.reelPhotographers ?? []))
+      setHasMore(data.hasMore ?? false)
+    } catch { /* silent */ }
+    finally { setLoading(false); setLoadingMore(false) }
+  }, [seed, specialty, tag])
+
+  useEffect(() => { setCurrentIdx(0); setPhotoIdxMap({}); setPage(1); fetchReel(1) }, [fetchReel])
+
+  // Load more when near end
+  useEffect(() => {
+    if (hasMore && !loadingMore && currentIdx >= reelItems.length - 3) {
+      const next = page + 1
+      setPage(next)
+      fetchReel(next, true)
+    }
+  }, [currentIdx, reelItems.length, hasMore, loadingMore, page, fetchReel])
+
+  function goNext() { if (currentIdx < reelItems.length - 1) setCurrentIdx(i => i + 1) }
+  function goPrev() { if (currentIdx > 0) setCurrentIdx(i => i - 1) }
+
+  function nextPhoto(photographerId: string, total: number) {
+    setPhotoIdxMap(m => ({ ...m, [photographerId]: Math.min((m[photographerId] ?? 0) + 1, total - 1) }))
+  }
+  function prevPhoto(photographerId: string) {
+    setPhotoIdxMap(m => ({ ...m, [photographerId]: Math.max((m[photographerId] ?? 0) - 1, 0) }))
+  }
+
+  // Touch handling — vertical = next/prev photographer, horizontal = next/prev photo
+  function onTouchStart(e: React.TouchEvent) {
+    touchStartY.current = e.touches[0].clientY
+    touchStartX.current = e.touches[0].clientX
+  }
+  function onTouchEnd(e: React.TouchEvent, photographer: ReelPhotographer) {
+    if (touchStartY.current === null || touchStartX.current === null) return
+    const dy = touchStartY.current - e.changedTouches[0].clientY
+    const dx = touchStartX.current - e.changedTouches[0].clientX
+    const absX = Math.abs(dx), absY = Math.abs(dy)
+
+    if (absY > absX && absY > 40) {
+      if (dy > 0) goNext(); else goPrev()
+    } else if (absX > absY && absX > 30) {
+      const photoIdx = photoIdxMap[photographer.photographerId] ?? 0
+      if (dx > 0) nextPhoto(photographer.photographerId, photographer.photos.length)
+      else if (photoIdx > 0) prevPhoto(photographer.photographerId)
+    }
+    touchStartY.current = null; touchStartX.current = null
+  }
+
+  function share(username: string) {
+    const url = `${window.location.origin}/photographers/${username}`
+    if (navigator.share) {
+      navigator.share({ title: 'Check out this photographer', url }).catch(() => {})
+    } else {
+      navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) }).catch(() => {})
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[80vh]">
+        <div className="text-center">
+          <div className="w-12 h-12 rounded-2xl bg-ink animate-pulse mx-auto mb-3" />
+          <p className="text-ink-300 text-sm">Loading portfolio…</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (reelItems.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <div className="w-16 h-16 bg-ink-100 rounded-2xl flex items-center justify-center mb-4">
+          <Images className="w-7 h-7 text-ink-300" />
+        </div>
+        <h3 className="font-semibold text-ink text-lg mb-2">No portfolio photos yet</h3>
+        <p className="text-ink-400 text-sm max-w-xs">Try a different specialty or tag filter — photographers are uploading their work now.</p>
+      </div>
+    )
+  }
+
+  const current = reelItems[currentIdx]
+  const photoIdx = photoIdxMap[current?.photographerId ?? ''] ?? 0
+  const currentPhoto = current?.photos[photoIdx]
+
+  return (
+    <div className="relative" ref={containerRef}>
+      {/* Copied toast */}
+      {copied && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-ink text-white text-xs font-semibold px-4 py-2 rounded-full shadow-lg animate-fade-in">
+          Link copied!
+        </div>
+      )}
+
+      {/* Quick drawer backdrop */}
+      {drawer && (
+        <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={() => setDrawer(null)} />
+      )}
+
+      {/* Quick drawer */}
+      {drawer && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl p-6 max-w-lg mx-auto shadow-float-xl"
+          style={{ boxShadow: '0 -8px 40px rgba(0,0,0,0.18)' }}>
+          <div className="w-10 h-1 bg-ink-100 rounded-full mx-auto mb-5" />
+          <div className="flex items-center gap-3 mb-4">
+            <div className="relative w-12 h-12 rounded-2xl overflow-hidden flex-shrink-0">
+              {drawer.avatarUrl ? (
+                <Image src={drawer.avatarUrl} alt={drawer.displayName} fill className="object-cover" sizes="48px" />
+              ) : (
+                <div className={`w-full h-full ${avatarBg(drawer.photographerId)} flex items-center justify-center text-white font-bold text-sm`}>
+                  {initials(drawer.displayName)}
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="font-semibold text-ink">{drawer.displayName}</p>
+              {drawer.location && <p className="text-ink-400 text-xs flex items-center gap-1"><MapPin className="w-3 h-3" />{drawer.location}</p>}
+            </div>
+            <div className="ml-auto"><PhotographerBadge badge={drawer.badge} size="sm" /></div>
+          </div>
+          {drawer.specialties.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              {drawer.specialties.map(s => (
+                <span key={s} className="text-xs bg-ink-50 text-ink-500 px-2.5 py-1 rounded-full">{s}</span>
+              ))}
+            </div>
+          )}
+          {drawer.nativeAvgRating > 0 && (
+            <div className="flex items-center gap-1.5 mb-4 text-sm text-ink-400">
+              <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+              <span className="font-semibold text-ink">{drawer.nativeAvgRating.toFixed(1)}</span>
+              <span>({drawer.nativeReviewCount} review{drawer.nativeReviewCount !== 1 ? 's' : ''})</span>
+            </div>
+          )}
+          <div className="flex gap-3">
+            <Link href={`/photographers/${drawer.username}`}
+              className="flex-1 bg-ink text-white text-sm font-semibold py-3 rounded-xl text-center hover:bg-ink-800 transition-colors">
+              View full profile
+            </Link>
+            <button onClick={() => { share(drawer.username); setDrawer(null) }}
+              className="w-12 h-12 border border-ink-100 rounded-xl flex items-center justify-center hover:bg-ink-50 transition-colors flex-shrink-0">
+              <Share2 className="w-4 h-4 text-ink-400" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Reel card */}
+      {current && currentPhoto && (
+        <div
+          className="relative bg-black rounded-2xl overflow-hidden select-none"
+          style={{ height: 'min(80vh, 640px)' }}
+          onTouchStart={onTouchStart}
+          onTouchEnd={(e) => onTouchEnd(e, current)}
+        >
+          {/* Photo */}
+          <Image
+            key={currentPhoto.id}
+            src={currentPhoto.src}
+            alt={currentPhoto.caption || current.displayName}
+            fill
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, 640px"
+            priority
+          />
+
+          {/* Dark gradient bottom */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
+
+          {/* Nav arrows — desktop */}
+          <button onClick={goPrev} disabled={currentIdx === 0}
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/40 hover:bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-colors disabled:opacity-20 hidden sm:flex z-10">
+            <ChevronUp className="w-5 h-5" />
+          </button>
+          <button onClick={goNext} disabled={currentIdx >= reelItems.length - 1}
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-black/40 hover:bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-colors disabled:opacity-20 hidden sm:flex z-10">
+            <ChevronDown className="w-5 h-5" />
+          </button>
+
+          {/* Photo swipe dots (left/right) */}
+          {current.photos.length > 1 && (
+            <div className="absolute top-4 left-0 right-0 flex justify-center gap-1 z-10 pointer-events-none">
+              {current.photos.map((_, i) => (
+                <div key={i} className={`h-1 rounded-full transition-all duration-200 ${i === photoIdx ? 'w-6 bg-white' : 'w-1.5 bg-white/40'}`} />
+              ))}
+            </div>
+          )}
+
+          {/* Left/right photo swipe arrows — desktop */}
+          {current.photos.length > 1 && (
+            <>
+              {photoIdx > 0 && (
+                <button onClick={() => prevPhoto(current.photographerId)}
+                  className="absolute left-3 bottom-32 w-8 h-8 bg-black/40 hover:bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-colors hidden sm:flex z-10">
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              )}
+              {photoIdx < current.photos.length - 1 && (
+                <button onClick={() => nextPhoto(current.photographerId, current.photos.length)}
+                  className="absolute right-3 bottom-32 w-8 h-8 bg-black/40 hover:bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-colors hidden sm:flex z-10">
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+            </>
+          )}
+
+          {/* Bottom overlay */}
+          <div className="absolute bottom-0 left-0 right-0 p-5 z-10">
+            {/* Photographer info — tap to open drawer */}
+            <button className="flex items-center gap-3 mb-3 w-full text-left" onClick={() => setDrawer(current)}>
+              <div className="relative w-10 h-10 rounded-2xl overflow-hidden border-2 border-white/60 flex-shrink-0">
+                {current.avatarUrl ? (
+                  <Image src={current.avatarUrl} alt={current.displayName} fill className="object-cover" sizes="40px" />
+                ) : (
+                  <div className={`w-full h-full ${avatarBg(current.photographerId)} flex items-center justify-center text-white text-[11px] font-bold`}>
+                    {initials(current.displayName)}
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-semibold text-sm leading-tight truncate">{current.displayName}</p>
+                {current.location && (
+                  <p className="text-white/60 text-xs flex items-center gap-1 truncate">
+                    <MapPin className="w-2.5 h-2.5 flex-shrink-0" />{current.location}
+                  </p>
+                )}
+              </div>
+              <PhotographerBadge badge={current.badge} size="sm" />
+            </button>
+
+            {/* Caption */}
+            {currentPhoto.caption && (
+              <p className="text-white/90 text-sm leading-relaxed mb-2 line-clamp-2">{currentPhoto.caption}</p>
+            )}
+
+            {/* Tags + date row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {currentPhoto.photo_taken_month && currentPhoto.photo_taken_year && (
+                <span className="text-white/50 text-[11px]">
+                  {MONTH_NAMES[(currentPhoto.photo_taken_month ?? 1) - 1]} {currentPhoto.photo_taken_year}
+                </span>
+              )}
+              {(currentPhoto.tags ?? []).slice(0, 3).map(t => (
+                <span key={t} className="text-white/60 text-[11px] bg-white/10 px-2 py-0.5 rounded-full">#{t}</span>
+              ))}
+            </div>
+          </div>
+
+          {/* Share button */}
+          <button
+            onClick={() => share(current.username)}
+            className="absolute top-4 right-4 w-9 h-9 bg-black/40 hover:bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-colors z-10">
+            <Share2 className="w-4 h-4" />
+          </button>
+
+          {/* Counter */}
+          <div className="absolute top-4 left-4 bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1 z-10">
+            <span className="text-white text-[11px] font-medium">{currentIdx + 1} / {reelItems.length}{hasMore ? '+' : ''}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop: swipe hint */}
+      <div className="hidden sm:flex items-center justify-center gap-6 mt-4 text-xs text-ink-300">
+        <span>↑ ↓ scroll photographers</span>
+        <span>· ← → swipe photos</span>
+        <span>· tap name for profile</span>
+      </div>
+      <div className="sm:hidden flex items-center justify-center gap-4 mt-3 text-xs text-ink-300">
+        <span>Swipe up/down · left/right</span>
+      </div>
+
+      {/* Desktop nav bar below card */}
+      <div className="hidden sm:flex items-center justify-center gap-3 mt-4">
+        <button onClick={goPrev} disabled={currentIdx === 0}
+          className="flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink disabled:opacity-30 transition-colors border border-ink-100 px-4 py-2 rounded-xl">
+          <ChevronUp className="w-4 h-4" /> Previous
+        </button>
+        <button onClick={goNext} disabled={currentIdx >= reelItems.length - 1 && !hasMore}
+          className="flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink disabled:opacity-30 transition-colors border border-ink-100 px-4 py-2 rounded-xl">
+          Next <ChevronDown className="w-4 h-4" />
+        </button>
+      </div>
+
+      {loadingMore && (
+        <div className="flex justify-center mt-4">
+          <div className="w-5 h-5 border-2 border-ink-200 border-t-ink rounded-full animate-spin" />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function PhotographersPage() {
   return <Suspense><PhotographersPageInner /></Suspense>
@@ -493,8 +695,8 @@ export default function PhotographersPage() {
 function PhotographersPageInner() {
   const searchParams = useSearchParams()
 
-  // ── Mode ──────────────────────────────────────────────────────────────────
-  const [mode, setMode] = useState<'photographers' | 'packages'>('photographers')
+  // ── Tab ───────────────────────────────────────────────────────────────────
+  const [tab, setTab] = useState<'portfolio' | 'photographers' | 'packages'>('portfolio')
 
   // ── Shared filters ────────────────────────────────────────────────────────
   const [query, setQuery]                           = useState('')
@@ -503,23 +705,25 @@ function PhotographersPageInner() {
   const [showFilters, setShowFilters]               = useState(false)
   const [minRating, setMinRating]                   = useState(0)
   const [availableOnly, setAvailableOnly]           = useState(false)
-  const [viewMode, setViewMode]                     = useState<'grid' | 'list'>('grid')
   const [page, setPage]                             = useState(1)
 
-  // ── Photographer-only sort ────────────────────────────────────────────────
+  // ── Portfolio reel filters ────────────────────────────────────────────────
+  const [selectedTag, setSelectedTag] = useState('')
+
+  // ── Photographer sort ─────────────────────────────────────────────────────
   const [photoSort, setPhotoSort] = useState('rating')
 
-  // ── Package-specific filters ──────────────────────────────────────────────
-  const [billingType, setBillingType]   = useState('')
-  const [minPrice, setMinPrice]         = useState(0)
-  const [maxPrice, setMaxPrice]         = useState(0)
-  const [packageSort, setPackageSort]   = useState('popular')
+  // ── Package filters ───────────────────────────────────────────────────────
+  const [billingType, setBillingType] = useState('')
+  const [minPrice, setMinPrice]       = useState(0)
+  const [maxPrice, setMaxPrice]       = useState(0)
+  const [packageSort, setPackageSort] = useState('popular')
 
   // ── Data ──────────────────────────────────────────────────────────────────
   const [photographers, setPhotographers] = useState<Photographer[]>([])
   const [packages, setPackages]           = useState<PackageListing[]>([])
   const [total, setTotal]                 = useState(0)
-  const [loading, setLoading]             = useState(true)
+  const [loading, setLoading]             = useState(false)
   const [error, setError]                 = useState(false)
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -527,7 +731,7 @@ function PhotographersPageInner() {
   // Pre-fill specialty from URL
   useEffect(() => {
     const sp = searchParams.get('specialty')
-    if (sp) setSelectedSpecialty(sp)
+    if (sp) { setSelectedSpecialty(sp); setTab('portfolio') }
   }, [searchParams])
 
   const fetchPhotographers = useCallback(async (opts: {
@@ -547,8 +751,8 @@ function PhotographersPageInner() {
       const res = await fetch(`/api/photographers?${p}`)
       if (!res.ok) throw new Error()
       const data = await res.json()
-      setPhotographers(data.photographers)
-      setTotal(data.total)
+      setPhotographers(data.photographers ?? [])
+      setTotal(data.total ?? 0)
     } catch { setError(true) }
     finally { setLoading(false) }
   }, [])
@@ -571,75 +775,65 @@ function PhotographersPageInner() {
       const res = await fetch(`/api/packages?${p}`)
       if (!res.ok) throw new Error()
       const data = await res.json()
-      setPackages(data.packages)
-      setTotal(data.total)
+      setPackages(data.packages ?? [])
+      setTotal(data.total ?? 0)
     } catch { setError(true) }
     finally { setLoading(false) }
   }, [])
 
-  // Debounced refetch on filter change (reset to page 1)
+  // Fetch when tab switches to photographers or packages
   useEffect(() => {
+    if (tab === 'portfolio') return
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       setPage(1)
-      if (mode === 'photographers') {
+      if (tab === 'photographers') {
         fetchPhotographers({ q: query, specialty: selectedSpecialty, neighbourhood: selectedNeighbourhood, minRating, availableOnly, sort: photoSort, page: 1 })
       } else {
         fetchPackages({ q: query, specialty: selectedSpecialty, neighbourhood: selectedNeighbourhood, billingType, minPrice, maxPrice, sort: packageSort, page: 1 })
       }
     }, 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [query, selectedSpecialty, selectedNeighbourhood, minRating, availableOnly, photoSort, billingType, minPrice, maxPrice, packageSort, mode])
+  }, [query, selectedSpecialty, selectedNeighbourhood, minRating, availableOnly, photoSort, billingType, minPrice, maxPrice, packageSort, tab])
 
-  // Page change (no debounce)
   useEffect(() => {
-    if (mode === 'photographers') {
+    if (tab === 'portfolio') return
+    if (tab === 'photographers') {
       fetchPhotographers({ q: query, specialty: selectedSpecialty, neighbourhood: selectedNeighbourhood, minRating, availableOnly, sort: photoSort, page })
     } else {
       fetchPackages({ q: query, specialty: selectedSpecialty, neighbourhood: selectedNeighbourhood, billingType, minPrice, maxPrice, sort: packageSort, page })
     }
-  }, [page])
+  }, [page]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function switchMode(m: 'photographers' | 'packages') {
-    setMode(m)
-    setPage(1)
-    setQuery('')
-    setSelectedSpecialty('')
-    setSelectedNeighbourhood('')
-    setMinRating(0)
-    setAvailableOnly(false)
-    setBillingType('')
-    setMinPrice(0)
-    setMaxPrice(0)
-    setShowFilters(false)
-  }
-
-  function goPage(n: number) {
-    setPage(n)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+  function switchTab(t: typeof tab) {
+    setTab(t); setPage(1); setQuery('')
+    setSelectedSpecialty(''); setSelectedNeighbourhood('')
+    setMinRating(0); setAvailableOnly(false)
+    setBillingType(''); setMinPrice(0); setMaxPrice(0)
+    setSelectedTag(''); setShowFilters(false)
   }
 
   function clearAll() {
     setQuery(''); setSelectedSpecialty(''); setSelectedNeighbourhood('')
     setMinRating(0); setAvailableOnly(false)
     setBillingType(''); setMinPrice(0); setMaxPrice(0)
-    setPage(1)
+    setSelectedTag(''); setPage(1)
   }
 
+  function goPage(n: number) { setPage(n); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+
   const totalPages = Math.ceil(total / 12)
+  const hasActiveFilters = !!(query || selectedSpecialty || selectedNeighbourhood || minRating || availableOnly)
+  const displayedPhotographers = tab === 'photographers' ? mixedSort(photographers, hasActiveFilters) : photographers
 
   const activeFiltersCount = [
-    selectedSpecialty,
-    selectedNeighbourhood,
+    selectedSpecialty, selectedNeighbourhood,
     minRating > 0 ? 'r' : '',
     availableOnly ? 'a' : '',
     billingType,
     minPrice > 0 || maxPrice > 0 ? 'p' : '',
+    selectedTag,
   ].filter(Boolean).length
-
-  const sortOptions = mode === 'photographers' ? PHOTOGRAPHER_SORT : PACKAGE_SORT
-  const sortValue   = mode === 'photographers' ? photoSort : packageSort
-  function setSort(v: string) { mode === 'photographers' ? setPhotoSort(v) : setPackageSort(v) }
 
   return (
     <>
@@ -647,75 +841,51 @@ function PhotographersPageInner() {
 
       {/* ── Page header ──────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-ink-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-7">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-end justify-between gap-4 flex-wrap">
             <div>
-              <h1 className="font-serif text-3xl sm:text-4xl font-bold text-ink mb-1">
-                Edmonton Photographers
-              </h1>
-              <p className="text-ink-400 text-sm">
-                {loading ? 'Loading…' : `${total} ${mode === 'photographers' ? `photographer${total !== 1 ? 's' : ''}` : `package${total !== 1 ? 's' : ''}`}`}
-                {' · '}Verified trust scores · No booking fees
-              </p>
+              <h1 className="font-serif text-3xl sm:text-4xl font-bold text-ink mb-1">Edmonton Photographers</h1>
+              <p className="text-ink-400 text-sm">Verified trust scores · No booking fees</p>
             </div>
 
-            <div className="flex items-center gap-3">
-              {/* Mode toggle */}
-              <div className="flex items-center bg-ink-50 rounded-xl p-1 border border-ink-100">
-                <button
-                  onClick={() => switchMode('photographers')}
-                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all ${
-                    mode === 'photographers' ? 'bg-white text-ink shadow-sm border border-ink-100' : 'text-ink-400 hover:text-ink'
-                  }`}
-                >
-                  <Camera className="w-3.5 h-3.5" /> Photographers
+            {/* 3-tab toggle */}
+            <div className="flex items-center bg-ink-50 rounded-xl p-1 border border-ink-100">
+              {([
+                { id: 'portfolio',      label: 'Portfolio',      Icon: Images },
+                { id: 'photographers',  label: 'Photographers',  Icon: Camera },
+                { id: 'packages',       label: 'Packages',       Icon: Package },
+              ] as const).map(({ id, label, Icon }) => (
+                <button key={id} onClick={() => switchTab(id)}
+                  className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    tab === id ? 'bg-white text-ink shadow-sm border border-ink-100' : 'text-ink-400 hover:text-ink'
+                  }`}>
+                  <Icon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{label}</span>
                 </button>
-                <button
-                  onClick={() => switchMode('packages')}
-                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all ${
-                    mode === 'packages' ? 'bg-white text-ink shadow-sm border border-ink-100' : 'text-ink-400 hover:text-ink'
-                  }`}
-                >
-                  <Package className="w-3.5 h-3.5" /> Packages
-                </button>
-              </div>
-
-              {/* Grid/list toggle — photographers only */}
-              {mode === 'photographers' && (
-                <div className="hidden sm:flex items-center gap-1 border border-ink-100 rounded-xl p-1 bg-white">
-                  <button onClick={() => setViewMode('grid')}
-                    className={`p-2 rounded-lg transition-colors ${viewMode === 'grid' ? 'bg-ink text-white' : 'text-ink-400 hover:text-ink'}`}>
-                    <LayoutGrid className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => setViewMode('list')}
-                    className={`p-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-ink text-white' : 'text-ink-400 hover:text-ink'}`}>
-                    <List className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
+              ))}
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── Filter bar ───────────────────────────────────────────────────── */}
+      {/* ── Filter bar — sticky ───────────────────────────────────────────── */}
       <div className="bg-white border-b border-ink-100 sticky top-16 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
 
-            {/* Search */}
-            <label className="flex items-center gap-2 flex-1 min-w-[160px] max-w-xs bg-ink-50 rounded-xl px-3.5 py-2.5">
-              <Search className="w-3.5 h-3.5 text-ink-300 flex-shrink-0" />
-              <input
-                type="text" value={query} onChange={e => setQuery(e.target.value)}
-                placeholder={mode === 'photographers' ? 'Search by name, specialty…' : 'Search packages…'}
-                className="bg-transparent text-ink text-sm placeholder-ink-300 outline-none w-full"
-              />
-              {query && <button onClick={() => setQuery('')}><X className="w-3.5 h-3.5 text-ink-300 hover:text-ink" /></button>}
-            </label>
+            {/* Search — not shown on portfolio tab */}
+            {tab !== 'portfolio' && (
+              <label className="flex items-center gap-2 flex-1 min-w-[160px] max-w-xs bg-ink-50 rounded-xl px-3.5 py-2.5">
+                <Search className="w-3.5 h-3.5 text-ink-300 flex-shrink-0" />
+                <input type="text" value={query} onChange={e => setQuery(e.target.value)}
+                  placeholder={tab === 'photographers' ? 'Search by name…' : 'Search packages…'}
+                  className="bg-transparent text-ink text-sm placeholder-ink-300 outline-none w-full" />
+                {query && <button onClick={() => setQuery('')}><X className="w-3.5 h-3.5 text-ink-300 hover:text-ink" /></button>}
+              </label>
+            )}
 
-            {/* Specialty pills — desktop */}
-            <div className="hidden lg:flex items-center gap-1.5">
+            {/* Specialty pills */}
+            <div className="hidden lg:flex items-center gap-1.5 flex-wrap">
               {SPECIALTIES.map(s => (
                 <button key={s.value}
                   onClick={() => setSelectedSpecialty(selectedSpecialty === s.value ? '' : s.value)}
@@ -726,8 +896,21 @@ function PhotographersPageInner() {
               ))}
             </div>
 
-            {/* Available today — photographers only */}
-            {mode === 'photographers' && (
+            {/* Tag filter — portfolio tab only */}
+            {tab === 'portfolio' && (
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none flex-nowrap">
+                {PHOTO_TAGS.map(t => (
+                  <button key={t} onClick={() => setSelectedTag(selectedTag === t ? '' : t)}
+                    className={`flex-shrink-0 text-xs font-medium px-3 py-2 rounded-lg border transition-colors capitalize ${
+                      selectedTag === t ? 'bg-ink text-white border-ink' : 'bg-white text-ink-500 border-ink-100 hover:border-ink-300'
+                    }`}>#{t}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Available today — photographers tab */}
+            {tab === 'photographers' && (
               <button onClick={() => setAvailableOnly(!availableOnly)}
                 className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-colors flex-shrink-0 ${
                   availableOnly ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-ink-500 border-ink-100 hover:border-ink-300'
@@ -737,8 +920,8 @@ function PhotographersPageInner() {
               </button>
             )}
 
-            {/* Billing type — packages only */}
-            {mode === 'packages' && (
+            {/* Billing type — packages tab */}
+            {tab === 'packages' && (
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 {[{ v: '', l: 'All' }, { v: 'hourly', l: 'Hourly' }, { v: 'package', l: 'Session' }].map(bt => (
                   <button key={bt.v} onClick={() => setBillingType(billingType === bt.v ? '' : bt.v)}
@@ -750,31 +933,44 @@ function PhotographersPageInner() {
               </div>
             )}
 
-            {/* Filters */}
-            <button onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-colors flex-shrink-0 ${
-                showFilters || activeFiltersCount > 0 ? 'bg-ink text-white border-ink' : 'bg-white text-ink-500 border-ink-100 hover:border-ink-300'
-              }`}>
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              Filters
-              {activeFiltersCount > 0 && (
-                <span className="bg-white text-ink rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{activeFiltersCount}</span>
-              )}
-              <ChevronDown className={`w-3 h-3 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-            </button>
+            {/* Filters — not on portfolio */}
+            {tab !== 'portfolio' && (
+              <button onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-colors flex-shrink-0 ${
+                  showFilters || activeFiltersCount > 0 ? 'bg-ink text-white border-ink' : 'bg-white text-ink-500 border-ink-100 hover:border-ink-300'
+                }`}>
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                Filters
+                {activeFiltersCount > 0 && (
+                  <span className="bg-white text-ink rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{activeFiltersCount}</span>
+                )}
+                <ChevronDown className={`w-3 h-3 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+              </button>
+            )}
 
-            {/* Sort */}
-            <select value={sortValue} onChange={e => setSort(e.target.value)}
-              className="text-xs font-medium text-ink-500 border border-ink-100 rounded-lg px-3 py-2 outline-none bg-white cursor-pointer flex-shrink-0 ml-auto">
-              {sortOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+            {/* Sort — not on portfolio */}
+            {tab !== 'portfolio' && (
+              <select
+                value={tab === 'photographers' ? photoSort : packageSort}
+                onChange={e => tab === 'photographers' ? setPhotoSort(e.target.value) : setPackageSort(e.target.value)}
+                className="text-xs font-medium text-ink-500 border border-ink-100 rounded-lg px-3 py-2 outline-none bg-white cursor-pointer flex-shrink-0 ml-auto">
+                {(tab === 'photographers' ? PHOTOGRAPHER_SORT : PACKAGE_SORT).map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            )}
+
+            {/* Clear filters — portfolio tab */}
+            {tab === 'portfolio' && (selectedSpecialty || selectedTag) && (
+              <button onClick={clearAll} className="ml-auto text-xs text-ink-400 hover:text-ink underline underline-offset-2 flex-shrink-0">
+                Clear
+              </button>
+            )}
           </div>
 
           {/* Expanded filter panel */}
-          {showFilters && (
+          {showFilters && tab !== 'portfolio' && (
             <div className="mt-4 pt-4 border-t border-ink-50 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-
-              {/* Specialty — mobile */}
               <div className="lg:hidden">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-300 mb-2">Specialty</p>
                 <div className="flex flex-wrap gap-1.5">
@@ -787,8 +983,6 @@ function PhotographersPageInner() {
                   ))}
                 </div>
               </div>
-
-              {/* Neighbourhood */}
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-300 mb-2">Neighbourhood</p>
                 <div className="flex flex-wrap gap-1.5">
@@ -801,9 +995,7 @@ function PhotographersPageInner() {
                   ))}
                 </div>
               </div>
-
-              {/* Min rating — photographers only */}
-              {mode === 'photographers' && (
+              {tab === 'photographers' && (
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-300 mb-2">Min rating</p>
                   <div className="flex gap-1.5 flex-wrap">
@@ -818,9 +1010,7 @@ function PhotographersPageInner() {
                   </div>
                 </div>
               )}
-
-              {/* Price range — packages only */}
-              {mode === 'packages' && (
+              {tab === 'packages' && (
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-300 mb-2">Price range</p>
                   <div className="flex items-center gap-2">
@@ -832,12 +1022,9 @@ function PhotographersPageInner() {
                   </div>
                 </div>
               )}
-
               {activeFiltersCount > 0 && (
                 <div className="sm:col-span-2 lg:col-span-4 flex justify-end">
-                  <button onClick={clearAll} className="text-xs text-ink-400 hover:text-ink transition-colors underline underline-offset-2">
-                    Clear all filters
-                  </button>
+                  <button onClick={clearAll} className="text-xs text-ink-400 hover:text-ink underline underline-offset-2">Clear all filters</button>
                 </div>
               )}
             </div>
@@ -849,105 +1036,117 @@ function PhotographersPageInner() {
       <div className="bg-ink-50 min-h-screen">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-          {/* Result bar */}
-          <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-            <p className="text-sm text-ink-400">
-              {loading
-                ? <span className="inline-block w-32 h-4 bg-ink-100 rounded animate-pulse" />
-                : <><span className="font-semibold text-ink">{total}</span> {mode === 'photographers' ? `photographer${total !== 1 ? 's' : ''}` : `package${total !== 1 ? 's' : ''}`}
-                    {selectedSpecialty && <> in <span className="font-medium text-ink capitalize">{selectedSpecialty}</span></>}
-                    {selectedNeighbourhood && <> · <span className="font-medium text-ink">{NEIGHBOURHOODS.find(n => n.value === selectedNeighbourhood)?.label}</span></>}
-                    {availableOnly && <> · <span className="font-medium text-emerald-600">Available today</span></>}
-                    {totalPages > 1 && <> · Page {page} of {totalPages}</>}
-                  </>
-              }
-            </p>
-
-            {/* Active filter chips */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {selectedSpecialty && (
-                <button onClick={() => setSelectedSpecialty('')} className="flex items-center gap-1 text-xs bg-ink text-white px-2.5 py-1 rounded-full">
-                  <span className="capitalize">{selectedSpecialty}</span> <X className="w-2.5 h-2.5" />
-                </button>
+          {/* ── Portfolio Reel ── */}
+          {tab === 'portfolio' && (
+            <div className="max-w-lg mx-auto">
+              {(selectedSpecialty || selectedTag) && (
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                  {selectedSpecialty && (
+                    <button onClick={() => setSelectedSpecialty('')}
+                      className="flex items-center gap-1 text-xs bg-ink text-white px-2.5 py-1 rounded-full capitalize">
+                      {selectedSpecialty} <X className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+                  {selectedTag && (
+                    <button onClick={() => setSelectedTag('')}
+                      className="flex items-center gap-1 text-xs bg-ink text-white px-2.5 py-1 rounded-full">
+                      #{selectedTag} <X className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+                </div>
               )}
-              {selectedNeighbourhood && (
-                <button onClick={() => setSelectedNeighbourhood('')} className="flex items-center gap-1 text-xs bg-ink text-white px-2.5 py-1 rounded-full">
-                  {NEIGHBOURHOODS.find(n => n.value === selectedNeighbourhood)?.label} <X className="w-2.5 h-2.5" />
-                </button>
-              )}
-              {minRating > 0 && (
-                <button onClick={() => setMinRating(0)} className="flex items-center gap-1 text-xs bg-ink text-white px-2.5 py-1 rounded-full">
-                  {minRating}+ stars <X className="w-2.5 h-2.5" />
-                </button>
-              )}
-              {availableOnly && (
-                <button onClick={() => setAvailableOnly(false)} className="flex items-center gap-1 text-xs bg-emerald-500 text-white px-2.5 py-1 rounded-full">
-                  Available today <X className="w-2.5 h-2.5" />
-                </button>
-              )}
-              {billingType && (
-                <button onClick={() => setBillingType('')} className="flex items-center gap-1 text-xs bg-ink text-white px-2.5 py-1 rounded-full capitalize">
-                  {billingType === 'package' ? 'Session' : 'Hourly'} <X className="w-2.5 h-2.5" />
-                </button>
-              )}
-              {(minPrice > 0 || maxPrice > 0) && (
-                <button onClick={() => { setMinPrice(0); setMaxPrice(0) }} className="flex items-center gap-1 text-xs bg-ink text-white px-2.5 py-1 rounded-full">
-                  {minPrice > 0 ? `$${minPrice}` : '$0'}–{maxPrice > 0 ? `$${maxPrice}` : '∞'} <X className="w-2.5 h-2.5" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Error */}
-          {error && (
-            <div className="flex flex-col items-center justify-center py-24 text-center">
-              <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center mb-4">
-                <X className="w-7 h-7 text-red-400" />
-              </div>
-              <h3 className="font-semibold text-ink text-lg mb-2">Something went wrong</h3>
-              <p className="text-ink-400 text-sm mb-6">Could not load results. Please try again.</p>
-              <button onClick={clearAll}
-                className="text-sm font-semibold text-ink border border-ink-200 px-5 py-2.5 rounded-xl hover:bg-ink hover:text-white transition-colors">
-                Try again
-              </button>
+              <PortfolioReel specialty={selectedSpecialty} tag={selectedTag} />
             </div>
           )}
 
-          {/* ── Photographers ── */}
-          {!error && mode === 'photographers' && (
-            loading ? (
-              viewMode === 'grid'
-                ? <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">{Array.from({length:6}).map((_,i)=><GridSkeleton key={i}/>)}</div>
-                : <div className="flex flex-col gap-3">{Array.from({length:6}).map((_,i)=><ListSkeleton key={i}/>)}</div>
-            ) : photographers.length > 0 ? (
-              <>
-                {viewMode === 'grid'
-                  ? <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">{photographers.map(p=><GridCard key={p.id} p={p}/>)}</div>
-                  : <div className="flex flex-col gap-3">{photographers.map(p=><ListRow key={p.id} p={p}/>)}</div>
-                }
-                <Pagination page={page} totalPages={totalPages} onPage={goPage} />
-              </>
-            ) : (
-              <EmptyState onClear={clearAll} label="photographers" />
-            )
+          {/* ── Photographers grid ── */}
+          {tab === 'photographers' && (
+            <>
+              <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+                <p className="text-sm text-ink-400">
+                  {loading
+                    ? <span className="inline-block w-32 h-4 bg-ink-100 rounded animate-pulse" />
+                    : <><span className="font-semibold text-ink">{total}</span> photographer{total !== 1 ? 's' : ''}
+                        {selectedSpecialty && <> in <span className="font-medium text-ink capitalize">{selectedSpecialty}</span></>}
+                        {!hasActiveFilters && <span className="text-ink-300"> · randomised</span>}
+                      </>
+                  }
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {selectedSpecialty && (
+                    <button onClick={() => setSelectedSpecialty('')} className="flex items-center gap-1 text-xs bg-ink text-white px-2.5 py-1 rounded-full">
+                      <span className="capitalize">{selectedSpecialty}</span> <X className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+                  {selectedNeighbourhood && (
+                    <button onClick={() => setSelectedNeighbourhood('')} className="flex items-center gap-1 text-xs bg-ink text-white px-2.5 py-1 rounded-full">
+                      {NEIGHBOURHOODS.find(n => n.value === selectedNeighbourhood)?.label} <X className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+                  {minRating > 0 && (
+                    <button onClick={() => setMinRating(0)} className="flex items-center gap-1 text-xs bg-ink text-white px-2.5 py-1 rounded-full">
+                      {minRating}+ stars <X className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+                  {availableOnly && (
+                    <button onClick={() => setAvailableOnly(false)} className="flex items-center gap-1 text-xs bg-emerald-500 text-white px-2.5 py-1 rounded-full">
+                      Available today <X className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {error ? (
+                <div className="flex flex-col items-center justify-center py-24 text-center">
+                  <X className="w-8 h-8 text-red-300 mb-3" />
+                  <h3 className="font-semibold text-ink mb-2">Something went wrong</h3>
+                  <button onClick={clearAll} className="text-sm font-semibold text-ink border border-ink-200 px-5 py-2.5 rounded-xl hover:bg-ink hover:text-white transition-colors">
+                    Try again
+                  </button>
+                </div>
+              ) : loading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {Array.from({ length: 6 }).map((_, i) => <GridSkeleton key={i} />)}
+                </div>
+              ) : displayedPhotographers.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {displayedPhotographers.map(p => <GridCard key={p.id} p={p} />)}
+                  </div>
+                  <Pagination page={page} totalPages={totalPages} onPage={goPage} />
+                </>
+              ) : (
+                <EmptyState onClear={clearAll} label="photographers" />
+              )}
+            </>
           )}
 
           {/* ── Packages ── */}
-          {!error && mode === 'packages' && (
-            loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {Array.from({length:6}).map((_,i)=><PackageSkeleton key={i}/>)}
-              </div>
-            ) : packages.length > 0 ? (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {packages.map(pkg => <PackageCard key={pkg.id} pkg={pkg} />)}
+          {tab === 'packages' && (
+            <>
+              {error ? (
+                <div className="flex flex-col items-center justify-center py-24 text-center">
+                  <X className="w-8 h-8 text-red-300 mb-3" />
+                  <h3 className="font-semibold text-ink mb-2">Something went wrong</h3>
+                  <button onClick={clearAll} className="text-sm font-semibold text-ink border border-ink-200 px-5 py-2.5 rounded-xl hover:bg-ink hover:text-white transition-colors">
+                    Try again
+                  </button>
                 </div>
-                <Pagination page={page} totalPages={totalPages} onPage={goPage} />
-              </>
-            ) : (
-              <EmptyState onClear={clearAll} label="packages" />
-            )
+              ) : loading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {Array.from({ length: 6 }).map((_, i) => <PackageSkeleton key={i} />)}
+                </div>
+              ) : packages.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {packages.map(pkg => <PackageCard key={pkg.id} pkg={pkg} />)}
+                  </div>
+                  <Pagination page={page} totalPages={totalPages} onPage={goPage} />
+                </>
+              ) : (
+                <EmptyState onClear={clearAll} label="packages" />
+              )}
+            </>
           )}
         </div>
       </div>
