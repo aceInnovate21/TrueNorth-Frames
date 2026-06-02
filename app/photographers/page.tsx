@@ -45,8 +45,10 @@ interface ReelPhoto {
   photo_taken_year: number | null
 }
 
-interface ReelPhotographer {
+interface ReelItem {
   photographerId: string
+  albumId: string | null
+  isAlbum: boolean
   username: string
   displayName: string
   location: string
@@ -58,6 +60,9 @@ interface ReelPhotographer {
   badge: Badge
   photos: ReelPhoto[]
 }
+
+// Keep for masonry flatten helper
+type ReelPhotographer = ReelItem
 
 interface PackageListing {
   id: string
@@ -386,7 +391,7 @@ function PortfolioMasonry({ specialty, tag, onClear }: { specialty: string; tag:
       const res = await fetch(`/api/portfolio-reel?${p}`)
       if (!res.ok) throw new Error()
       const data = await res.json()
-      const flat = flattenToMasonryPhotos(data.reelPhotographers ?? [])
+      const flat = flattenToMasonryPhotos(data.reelItems ?? [])
       setPhotos(prev => append ? [...prev, ...flat] : flat)
       setHasMore(data.hasMore ?? false)
     } catch { /* silent */ }
@@ -458,17 +463,15 @@ function flattenToMasonryPhotos(reelItems: ReelPhotographer[]): MasonryPhoto[] {
 // ─── Portfolio Reel ───────────────────────────────────────────────────────────
 
 function PortfolioReel({ specialty, tag }: { specialty: string; tag: string }) {
-  const [reelItems, setReelItems]   = useState<ReelPhotographer[]>([])
+  const [reelItems, setReelItems]   = useState<ReelItem[]>([])
   const [loading, setLoading]       = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [seed]                      = useState(() => Math.floor(Math.random() * 999999))
   const [page, setPage]             = useState(1)
   const [hasMore, setHasMore]       = useState(true)
-  // currentIdx = index in reelItems (which photographer)
   const [currentIdx, setCurrentIdx] = useState(0)
-  // photoIdx per photographer
   const [photoIdxMap, setPhotoIdxMap] = useState<Record<string, number>>({})
-  const [drawer, setDrawer]         = useState<ReelPhotographer | null>(null)
+  const [drawer, setDrawer]         = useState<ReelItem | null>(null)
   const [copied, setCopied]         = useState(false)
   const containerRef                = useRef<HTMLDivElement>(null)
   const touchStartY                 = useRef<number | null>(null)
@@ -483,7 +486,7 @@ function PortfolioReel({ specialty, tag }: { specialty: string; tag: string }) {
       const res = await fetch(`/api/portfolio-reel?${p}`)
       if (!res.ok) throw new Error()
       const data = await res.json()
-      setReelItems(prev => append ? [...prev, ...(data.reelPhotographers ?? [])] : (data.reelPhotographers ?? []))
+      setReelItems(prev => append ? [...prev, ...(data.reelItems ?? [])] : (data.reelItems ?? []))
       setHasMore(data.hasMore ?? false)
     } catch { /* silent */ }
     finally { setLoading(false); setLoadingMore(false) }
@@ -503,11 +506,11 @@ function PortfolioReel({ specialty, tag }: { specialty: string; tag: string }) {
   function goNext() { if (currentIdx < reelItems.length - 1) setCurrentIdx(i => i + 1) }
   function goPrev() { if (currentIdx > 0) setCurrentIdx(i => i - 1) }
 
-  function nextPhoto(photographerId: string, total: number) {
-    setPhotoIdxMap(m => ({ ...m, [photographerId]: Math.min((m[photographerId] ?? 0) + 1, total - 1) }))
+  function nextPhoto(reelIdx: number, total: number) {
+    setPhotoIdxMap(m => ({ ...m, [reelIdx]: Math.min((m[reelIdx] ?? 0) + 1, total - 1) }))
   }
-  function prevPhoto(photographerId: string) {
-    setPhotoIdxMap(m => ({ ...m, [photographerId]: Math.max((m[photographerId] ?? 0) - 1, 0) }))
+  function prevPhoto(reelIdx: number) {
+    setPhotoIdxMap(m => ({ ...m, [reelIdx]: Math.max((m[reelIdx] ?? 0) - 1, 0) }))
   }
 
   // Touch handling — vertical = next/prev photographer, horizontal = next/prev photo
@@ -515,7 +518,7 @@ function PortfolioReel({ specialty, tag }: { specialty: string; tag: string }) {
     touchStartY.current = e.touches[0].clientY
     touchStartX.current = e.touches[0].clientX
   }
-  function onTouchEnd(e: React.TouchEvent, photographer: ReelPhotographer) {
+  function onTouchEnd(e: React.TouchEvent, item: ReelItem) {
     if (touchStartY.current === null || touchStartX.current === null) return
     const dy = touchStartY.current - e.changedTouches[0].clientY
     const dx = touchStartX.current - e.changedTouches[0].clientX
@@ -523,10 +526,11 @@ function PortfolioReel({ specialty, tag }: { specialty: string; tag: string }) {
 
     if (absY > absX && absY > 40) {
       if (dy > 0) goNext(); else goPrev()
-    } else if (absX > absY && absX > 30) {
-      const photoIdx = photoIdxMap[photographer.photographerId] ?? 0
-      if (dx > 0) nextPhoto(photographer.photographerId, photographer.photos.length)
-      else if (photoIdx > 0) prevPhoto(photographer.photographerId)
+    } else if (absX > absY && absX > 30 && item.isAlbum) {
+      // Only swipe left/right within an album card — standalone has 1 photo so no swipe
+      const photoIdx = photoIdxMap[currentIdx] ?? 0
+      if (dx > 0) nextPhoto(currentIdx, item.photos.length)
+      else if (photoIdx > 0) prevPhoto(currentIdx)
     }
     touchStartY.current = null; touchStartX.current = null
   }
@@ -564,7 +568,7 @@ function PortfolioReel({ specialty, tag }: { specialty: string; tag: string }) {
   }
 
   const current = reelItems[currentIdx]
-  const photoIdx = photoIdxMap[current?.photographerId ?? ''] ?? 0
+  const photoIdx = photoIdxMap[currentIdx] ?? 0
   const currentPhoto = current?.photos[photoIdx]
 
   return (
@@ -661,8 +665,8 @@ function PortfolioReel({ specialty, tag }: { specialty: string; tag: string }) {
             <ChevronDown className="w-5 h-5" />
           </button>
 
-          {/* Photo swipe dots (left/right) */}
-          {current.photos.length > 1 && (
+          {/* Photo swipe dots — albums only */}
+          {current.isAlbum && current.photos.length > 1 && (
             <div className="absolute top-4 left-0 right-0 flex justify-center gap-1 z-10 pointer-events-none">
               {current.photos.map((_, i) => (
                 <div key={i} className={`h-1 rounded-full transition-all duration-200 ${i === photoIdx ? 'w-6 bg-white' : 'w-1.5 bg-white/40'}`} />
@@ -670,17 +674,17 @@ function PortfolioReel({ specialty, tag }: { specialty: string; tag: string }) {
             </div>
           )}
 
-          {/* Left/right photo swipe arrows — desktop */}
-          {current.photos.length > 1 && (
+          {/* Left/right photo swipe arrows — desktop, albums only */}
+          {current.isAlbum && current.photos.length > 1 && (
             <>
               {photoIdx > 0 && (
-                <button onClick={() => prevPhoto(current.photographerId)}
+                <button onClick={() => prevPhoto(currentIdx)}
                   className="absolute left-3 bottom-32 w-8 h-8 bg-black/40 hover:bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-colors hidden sm:flex z-10">
                   <ChevronLeft className="w-4 h-4" />
                 </button>
               )}
               {photoIdx < current.photos.length - 1 && (
-                <button onClick={() => nextPhoto(current.photographerId, current.photos.length)}
+                <button onClick={() => nextPhoto(currentIdx, current.photos.length)}
                   className="absolute right-3 bottom-32 w-8 h-8 bg-black/40 hover:bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-colors hidden sm:flex z-10">
                   <ChevronRight className="w-4 h-4" />
                 </button>
@@ -737,8 +741,16 @@ function PortfolioReel({ specialty, tag }: { specialty: string; tag: string }) {
             <Share2 className="w-4 h-4" />
           </button>
 
-          {/* Counter — only show when there are multiple photographers loaded */}
-          {reelItems.length > 1 && (
+          {/* Album badge — shown on album cards */}
+          {current.isAlbum && (
+            <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-sm rounded-full px-2.5 py-1 z-10 flex items-center gap-1">
+              <Images className="w-3 h-3 text-white/70" />
+              <span className="text-white text-[11px] font-medium">Album · {current.photos.length} photos</span>
+            </div>
+          )}
+
+          {/* Counter — standalone cards only, when multiple items */}
+          {!current.isAlbum && reelItems.length > 1 && (
             <div className="absolute top-4 left-4 bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1 z-10">
               <span className="text-white text-[11px] font-medium">
                 {currentIdx + 1} / {reelItems.length}{hasMore ? '+' : ''}
@@ -750,12 +762,12 @@ function PortfolioReel({ specialty, tag }: { specialty: string; tag: string }) {
 
       {/* Desktop: swipe hint */}
       <div className="hidden sm:flex items-center justify-center gap-6 mt-4 text-xs text-ink-300">
-        <span>↑ ↓ scroll photographers</span>
-        <span>· ← → swipe photos</span>
+        <span>↑ ↓ scroll</span>
+        <span>· ← → swipe album photos</span>
         <span>· tap name for profile</span>
       </div>
       <div className="sm:hidden flex items-center justify-center gap-4 mt-3 text-xs text-ink-300">
-        <span>Swipe up/down · left/right</span>
+        <span>Swipe up/down · tap name for profile</span>
       </div>
 
       {/* Desktop nav bar below card */}

@@ -1,4 +1,4 @@
 {
-  "/photographers/page": "app/photographers/page.js",
-  "/photographers/[username]/page": "app/photographers/[username]/page.js"
+  "/api/portfolio-reel/route": "app/api/portfolio-reel/route.js",
+  "/photographers/page": "app/photographers/page.js"
 }

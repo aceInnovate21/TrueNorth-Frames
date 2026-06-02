@@ -1,9 +1,9 @@
 {
   "pages": {
-    "/photographers/page": [
+    "/photographers/[username]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/photographers/page.js"
+      "static/chunks/app/photographers/[username]/page.js"
     ],
     "/layout": [
       "static/chunks/webpack.js",
@@ -11,10 +11,15 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/photographers/[username]/page": [
+    "/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/photographers/[username]/page.js"
+      "static/chunks/app/page.js"
+    ],
+    "/photographers/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/photographers/page.js"
     ]
   }
 }
