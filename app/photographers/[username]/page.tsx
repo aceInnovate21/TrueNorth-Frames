@@ -163,10 +163,11 @@ function PortfolioGrid({
   const isEmpty = standalonePhotos.length === 0 && standaloneVideos.length === 0 && albums.length === 0
 
   // Shared photo item
-  function PhotoItem({ ph, idx, photosForLightbox }: {
+  function PhotoItem({ ph, idx, photosForLightbox, masonry = false }: {
     ph: { id: string; src: string; caption: string; tags?: string[]; photo_taken_month?: number | null; photo_taken_year?: number | null }
     idx: number
     photosForLightbox: { id: string; src: string; caption: string; tags?: string[]; photo_taken_month?: number | null; photo_taken_year?: number | null }[]
+    masonry?: boolean
   }) {
     const hasMeta = ph.caption || (ph.tags && ph.tags.length > 0) || (ph.photo_taken_month && ph.photo_taken_year)
     return (
@@ -174,8 +175,8 @@ function PortfolioGrid({
         key={ph.id}
         type="button"
         onClick={() => setLightbox({ photos: photosForLightbox, idx })}
-        className="relative w-full break-inside-avoid rounded-xl overflow-hidden bg-ink-100 group block cursor-pointer"
-        style={{ marginBottom: '6px' }}
+        className={`relative w-full rounded-xl overflow-hidden bg-ink-100 group block cursor-pointer ${masonry ? 'break-inside-avoid' : ''}`}
+        style={masonry ? { marginBottom: '6px' } : undefined}
       >
         <img src={ph.src} alt={ph.caption || ''} className="w-full h-auto block" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
@@ -255,7 +256,7 @@ function PortfolioGrid({
               {albumPhotos.length > 0 && (
                 <div className="columns-2 sm:columns-3 lg:columns-4" style={{ columnGap: '6px' }}>
                   {albumPhotos.map((ph, idx) => (
-                    <PhotoItem key={ph.id} ph={ph} idx={idx} photosForLightbox={albumPhotos} />
+                    <PhotoItem key={ph.id} ph={ph} idx={idx} photosForLightbox={albumPhotos} masonry />
                   ))}
                 </div>
               )}
@@ -333,11 +334,11 @@ function PortfolioGrid({
             </div>
           )}
 
-          {/* Standalone photos masonry — asymmetric, 2→3→4 cols */}
+          {/* Standalone photos — vertical scroll, full width per photo */}
           {standalonePhotos.length > 0 && (
             <div>
               <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wide mb-3">Photos</p>
-              <div className="columns-2 sm:columns-3 lg:columns-4" style={{ columnGap: '6px' }}>
+              <div className="flex flex-col gap-3">
                 {standalonePhotos.map((ph, idx) => (
                   <PhotoItem key={ph.id} ph={ph} idx={idx} photosForLightbox={standalonePhotos} />
                 ))}
@@ -345,11 +346,11 @@ function PortfolioGrid({
             </div>
           )}
 
-          {/* Standalone videos */}
+          {/* Standalone videos — vertical scroll */}
           {standaloneVideos.length > 0 && (
             <div>
               <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wide mb-3">Videos</p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-3">
                 {standaloneVideos.map(vid => (
                   <VideoItem key={vid.id} vid={vid} />
                 ))}
