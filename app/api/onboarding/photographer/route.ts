@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const {
     first_name, last_name, display_name, bio, location, rate,
-    specialties = [], website_url,
+    specialties = [], website_url, years_experience,
   } = body
 
   if (!display_name?.trim()) return badRequest('display_name is required')
@@ -71,6 +71,8 @@ export async function POST(request: NextRequest) {
       rate_display: rateDisplay,
       profile_status: 'approved',
       approved_at: new Date().toISOString(),
+      ...(years_experience != null ? { years_experience: Number(years_experience) } : {}),
+      ...(website_url?.trim() ? { website_url: website_url.trim() } : {}),
     }, { onConflict: 'user_id' })
     .select('id')
     .single()
@@ -88,14 +90,6 @@ export async function POST(request: NextRequest) {
     await db
       .from('photographer_specialties')
       .upsert(rows, { onConflict: 'photographer_id,specialty' })
-  }
-
-  // Save website to photographer_profiles
-  if (website_url?.trim()) {
-    await db
-      .from('photographer_profiles')
-      .update({ website_url: website_url.trim() })
-      .eq('id', photographerId)
   }
 
   return NextResponse.json({ success: true, username })

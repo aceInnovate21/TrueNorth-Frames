@@ -45,8 +45,15 @@ const MAX_PHOTO_MB         = MAX_PHOTO_BYTES / 1024 / 1024
 const MAX_ALBUM_NAME       = PLATFORM_CONFIG.max_album_name_length
 const MAX_CAPTION          = PLATFORM_CONFIG.max_photo_caption_length
 
+const PHOTO_TAG_OPTIONS = [
+  'Wedding', 'Portrait', 'Outdoor', 'Studio', 'Newborn', 'Family',
+  'Corporate', 'Events', 'Real Estate', 'Golden Hour', 'Black & White',
+  'Editorial', 'Street', 'Nature', 'Travel', 'Night',
+]
+
 interface PortfolioPhoto {
   id: string; src: string; caption: string; isCover: boolean; storage_asset_id: string
+  tags: string[]; photo_taken_month: number | null; photo_taken_year: number | null
 }
 interface PortfolioVideo {
   id: string; src: string; title: string; duration_seconds: number | null; storage_asset_id: string
@@ -4062,6 +4069,10 @@ function PhotographerDashboardInner() {
   // albumId = null means standalone photo
   const [editingCaption, setEditingCaption] = useState<{ albumId: string | null; photoId: string } | null>(null)
   const [captionDraft, setCaptionDraft] = useState('')
+  const [tagsDraft, setTagsDraft] = useState<string[]>([])
+  const [customTagDraft, setCustomTagDraft] = useState('')
+  const [takenMonthDraft, setTakenMonthDraft] = useState<string>('')
+  const [takenYearDraft, setTakenYearDraft] = useState<string>('')
   const [savingCaption, setSavingCaption] = useState(false)
   const [savedCaption, setSavedCaption] = useState<string | null>(null)
   const [editingVideoTitle, setEditingVideoTitle] = useState<{ videoId: string; isStandalone: boolean; albumId?: string } | null>(null)
@@ -4139,12 +4150,24 @@ function PhotographerDashboardInner() {
   async function savePortfolioCaption() {
     if (!editingCaption) return
     setSavingCaption(true)
-    const res = await fetch('/api/photographer/photos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingCaption.photoId, caption: captionDraft }) })
+    const allTags = [...tagsDraft, ...(customTagDraft.trim() ? [customTagDraft.trim()] : [])]
+    const res = await fetch('/api/photographer/photos', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editingCaption.photoId,
+        caption: captionDraft,
+        tags: allTags,
+        photo_taken_month: takenMonthDraft ? Number(takenMonthDraft) : null,
+        photo_taken_year:  takenYearDraft  ? Number(takenYearDraft)  : null,
+      }),
+    })
     if (res.ok) {
+      const updated = { caption: captionDraft, tags: allTags, photo_taken_month: takenMonthDraft ? Number(takenMonthDraft) : null, photo_taken_year: takenYearDraft ? Number(takenYearDraft) : null }
       if (editingCaption.albumId) {
-        setPortfolioAlbums(prev => prev.map(a => a.id !== editingCaption.albumId ? a : { ...a, photos: a.photos.map(p => p.id === editingCaption.photoId ? { ...p, caption: captionDraft } : p) }))
+        setPortfolioAlbums(prev => prev.map(a => a.id !== editingCaption.albumId ? a : { ...a, photos: a.photos.map(p => p.id === editingCaption.photoId ? { ...p, ...updated } : p) }))
       } else {
-        setStandalonePhotos(prev => prev.map(p => p.id === editingCaption.photoId ? { ...p, caption: captionDraft } : p))
+        setStandalonePhotos(prev => prev.map(p => p.id === editingCaption.photoId ? { ...p, ...updated } : p))
       }
       setSavedCaption(editingCaption.photoId)
       setTimeout(() => setSavedCaption(null), 2000)
@@ -4788,19 +4811,80 @@ function PhotographerDashboardInner() {
                     </div>
                   )}
 
-                  {/* Caption modal — works for both album photos and standalone photos */}
+                  {/* Photo details modal — caption, tags, shoot date */}
                   {editingCaption && (
                     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-                      <div className="bg-white rounded-2xl w-full max-w-sm p-5" style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
-                        <p className="text-sm font-semibold text-ink mb-3">Edit caption</p>
-                        <input type="text" value={captionDraft} onChange={e => setCaptionDraft(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') savePortfolioCaption() }}
-                          placeholder="Add a caption…" autoFocus maxLength={MAX_CAPTION}
-                          className="w-full border border-ink-100 rounded-xl px-3.5 py-2.5 text-sm text-ink outline-none focus:border-ink transition-all mb-3" />
-                        <div className="flex gap-2">
+                      <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden" style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-ink-50">
+                          <p className="text-sm font-semibold text-ink">Edit photo details</p>
+                          <button onClick={() => setEditingCaption(null)} className="text-ink-300 hover:text-ink"><X className="w-4 h-4" /></button>
+                        </div>
+                        <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+                          {/* Caption */}
+                          <div>
+                            <label className="block text-xs font-semibold text-ink-400 uppercase tracking-widest mb-2">Caption</label>
+                            <input type="text" value={captionDraft} onChange={e => setCaptionDraft(e.target.value)}
+                              placeholder="Describe this photo…" maxLength={MAX_CAPTION}
+                              className="w-full border border-ink-100 rounded-xl px-3.5 py-2.5 text-sm text-ink outline-none focus:border-ink transition-all" />
+                            <p className="text-xs text-ink-200 mt-1 text-right">{captionDraft.length}/{MAX_CAPTION}</p>
+                          </div>
+
+                          {/* Tags */}
+                          <div>
+                            <label className="block text-xs font-semibold text-ink-400 uppercase tracking-widest mb-2">Tags</label>
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                              {PHOTO_TAG_OPTIONS.map(tag => {
+                                const active = tagsDraft.includes(tag.toLowerCase())
+                                return (
+                                  <button key={tag} type="button"
+                                    onClick={() => setTagsDraft(prev => active ? prev.filter(t => t !== tag.toLowerCase()) : [...prev, tag.toLowerCase()])}
+                                    className={`text-xs px-2.5 py-1 rounded-full border transition-all ${active ? 'bg-ink text-white border-ink' : 'border-ink-100 text-ink-500 hover:border-ink-300'}`}>
+                                    {tag}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                            <input type="text" value={customTagDraft} onChange={e => setCustomTagDraft(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter' && customTagDraft.trim()) { setTagsDraft(prev => [...prev, customTagDraft.trim().toLowerCase()]); setCustomTagDraft('') } }}
+                              placeholder="Custom tag (press Enter to add)…"
+                              className="w-full border border-ink-100 rounded-xl px-3.5 py-2 text-sm text-ink outline-none focus:border-ink transition-all" />
+                            {tagsDraft.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {tagsDraft.map(t => (
+                                  <span key={t} className="flex items-center gap-1 text-xs bg-ink text-white px-2.5 py-1 rounded-full">
+                                    #{t}
+                                    <button onClick={() => setTagsDraft(prev => prev.filter(x => x !== t))} className="hover:text-ink-200"><X className="w-2.5 h-2.5" /></button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Shoot date */}
+                          <div>
+                            <label className="block text-xs font-semibold text-ink-400 uppercase tracking-widest mb-2">When was this taken?</label>
+                            <div className="flex gap-2">
+                              <select value={takenMonthDraft} onChange={e => setTakenMonthDraft(e.target.value)}
+                                className="flex-1 border border-ink-100 rounded-xl px-3 py-2.5 text-sm text-ink outline-none focus:border-ink transition-all bg-white">
+                                <option value="">Month</option>
+                                {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
+                                  <option key={m} value={String(i + 1)}>{m}</option>
+                                ))}
+                              </select>
+                              <select value={takenYearDraft} onChange={e => setTakenYearDraft(e.target.value)}
+                                className="flex-1 border border-ink-100 rounded-xl px-3 py-2.5 text-sm text-ink outline-none focus:border-ink transition-all bg-white">
+                                <option value="">Year</option>
+                                {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                                  <option key={y} value={String(y)}>{y}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="px-5 py-4 border-t border-ink-50 flex gap-2">
                           <button onClick={savePortfolioCaption} disabled={savingCaption}
                             className="flex-1 bg-ink text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-ink-800 transition-colors disabled:opacity-50">
-                            {savingCaption ? 'Saving…' : 'Save caption'}
+                            {savingCaption ? 'Saving…' : 'Save details'}
                           </button>
                           <button onClick={() => setEditingCaption(null)}
                             className="flex-1 border border-ink-100 text-ink-400 text-sm font-medium py-2.5 rounded-xl hover:bg-ink-50 transition-colors">Cancel</button>
@@ -4925,7 +5009,7 @@ function PhotographerDashboardInner() {
                                   </button>
                                 </div>
                                 <div className="p-3">
-                                  <button onClick={e => { e.stopPropagation(); setEditingCaption({ albumId: openAlbum.id, photoId: photo.id }); setCaptionDraft(photo.caption) }} className="w-full text-left">
+                                  <button onClick={e => { e.stopPropagation(); setEditingCaption({ albumId: openAlbum.id, photoId: photo.id }); setCaptionDraft(photo.caption); setTagsDraft(photo.tags ?? []); setCustomTagDraft(''); setTakenMonthDraft(photo.photo_taken_month ? String(photo.photo_taken_month) : ''); setTakenYearDraft(photo.photo_taken_year ? String(photo.photo_taken_year) : '') }} className="w-full text-left">
                                     {photo.caption ? (
                                       <p className="text-xs text-ink-500 line-clamp-2 hover:text-ink transition-colors">{photo.caption}</p>
                                     ) : (
@@ -5061,7 +5145,7 @@ function PhotographerDashboardInner() {
                                   className="absolute top-1.5 right-1.5 w-6 h-6 bg-black/60 hover:bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
                                   <X className="w-3 h-3 text-white" />
                                 </button>
-                                <button onClick={() => { setEditingCaption({ albumId: null, photoId: photo.id }); setCaptionDraft(photo.caption) }}
+                                <button onClick={() => { setEditingCaption({ albumId: null, photoId: photo.id }); setCaptionDraft(photo.caption); setTagsDraft(photo.tags ?? []); setCustomTagDraft(''); setTakenMonthDraft(photo.photo_taken_month ? String(photo.photo_taken_month) : ''); setTakenYearDraft(photo.photo_taken_year ? String(photo.photo_taken_year) : '') }}
                                   className="w-full text-left px-1.5 py-1">
                                   {photo.caption ? (
                                     <p className="text-[10px] text-ink-500 line-clamp-1 hover:text-ink transition-colors">{photo.caption}</p>

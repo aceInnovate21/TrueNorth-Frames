@@ -36,6 +36,7 @@ function PhotographerOnboardingForm() {
   const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>([])
 
   const [websiteUrl, setWebsiteUrl] = useState('')
+  const [yearsExperience, setYearsExperience] = useState<string>('')
 
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -78,6 +79,7 @@ function PhotographerOnboardingForm() {
         rate,
         specialties: selectedSpecialties,
         website_url: websiteUrl,
+        years_experience: yearsExperience ? Number(yearsExperience) : null,
       }),
     })
 
@@ -218,6 +220,40 @@ function PhotographerOnboardingForm() {
                 />
               </div>
               <p className="mt-1 text-xs text-ink-300">Clients see this as your starting price. You negotiate the final rate directly.</p>
+            </div>
+
+            {/* Years of experience in Edmonton */}
+            <div>
+              <label className="block text-sm font-medium text-ink mb-1.5">
+                Years of photography experience in Edmonton
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: 'Just starting out', value: '0' },
+                  { label: '1–3 years', value: '2' },
+                  { label: '3–5 years', value: '4' },
+                  { label: '5–10 years', value: '7' },
+                  { label: '10+ years', value: '10' },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setYearsExperience(opt.value)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-all ${yearsExperience === opt.value ? 'bg-ink text-white border-ink' : 'bg-white text-ink-500 border-ink-100 hover:border-ink-300'}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-xs text-ink-300">
+                {yearsExperience === '0'
+                  ? '🌟 You\'ll receive a Rising Talent badge — showcasing your fresh perspective to clients.'
+                  : Number(yearsExperience) >= 3
+                  ? '✅ Once you connect your Google Business Profile, you\'ll be eligible for the Trusted Pro badge.'
+                  : yearsExperience
+                  ? '🌟 You\'ll receive a Rising Talent badge — keep building and the Trusted Pro badge awaits!'
+                  : 'This helps us show the right badge on your profile.'}
+              </p>
             </div>
           </div>
 

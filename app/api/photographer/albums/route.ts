@@ -27,7 +27,7 @@ export async function GET() {
       .eq('photographer_id', photographerId)
       .order('sort_order', { ascending: true }),
     db.from('portfolio_photos')
-      .select('id, album_id, caption, sort_order, storage_asset_id')
+      .select('id, album_id, caption, tags, photo_taken_month, photo_taken_year, sort_order, storage_asset_id')
       .eq('photographer_id', photographerId)
       .order('sort_order', { ascending: true }),
     db.from('portfolio_videos')
@@ -77,6 +77,9 @@ export async function GET() {
     const albumPhotos = (photosByAlbum[a.id] ?? []).map((p: any, i: number) => ({
       id: p.id,
       caption: p.caption ?? '',
+      tags: p.tags ?? [],
+      photo_taken_month: p.photo_taken_month ?? null,
+      photo_taken_year:  p.photo_taken_year  ?? null,
       storage_asset_id: p.storage_asset_id,
       src: assetKeyMap[p.storage_asset_id] ? `${r2Base}/${assetKeyMap[p.storage_asset_id]}` : '',
       isCover: i === 0,
@@ -96,6 +99,9 @@ export async function GET() {
     standalone_photos: standalonePhotos.map((p: any, i: number) => ({
       id: p.id,
       caption: p.caption ?? '',
+      tags: p.tags ?? [],
+      photo_taken_month: p.photo_taken_month ?? null,
+      photo_taken_year:  p.photo_taken_year  ?? null,
       storage_asset_id: p.storage_asset_id,
       src: assetKeyMap[p.storage_asset_id] ? `${r2Base}/${assetKeyMap[p.storage_asset_id]}` : '',
       isCover: i === 0,

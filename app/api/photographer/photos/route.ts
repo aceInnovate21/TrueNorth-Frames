@@ -9,7 +9,7 @@ async function getPhotographerId(db: any, userId: string): Promise<string | null
 }
 
 // POST /api/photographer/photos — register photo after R2 upload
-// Body: { album_id, storage_asset_id, caption? }
+// Body: { album_id, storage_asset_id, caption?, tags?, photo_taken_month?, photo_taken_year? }
 export async function POST(request: NextRequest) {
   const { adminDb, user } = await getServerSession()
   if (!user) return unauthorized()
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   if (!photographerId) return notFound('Photographer profile not found')
 
   const body = await request.json()
-  const { album_id, storage_asset_id, caption } = body
+  const { album_id, storage_asset_id, caption, tags, photo_taken_month, photo_taken_year } = body
   if (!album_id || !storage_asset_id) return badRequest('album_id and storage_asset_id are required')
 
   const { data: album } = await db
@@ -49,16 +49,23 @@ export async function POST(request: NextRequest) {
 
   const sortOrder = existing?.[0]?.sort_order != null ? existing[0].sort_order + 1 : 0
 
+  const cleanTags = Array.isArray(tags)
+    ? tags.map((t: string) => t.trim().toLowerCase()).filter(Boolean).slice(0, 10)
+    : []
+
   const { data: photo, error } = await db
     .from('portfolio_photos')
     .insert({
       album_id,
-      photographer_id: photographerId,
+      photographer_id:  photographerId,
       storage_asset_id,
-      caption: caption?.trim().slice(0, PLATFORM_CONFIG.max_photo_caption_length) || null,
-      sort_order: sortOrder,
+      caption:          caption?.trim().slice(0, PLATFORM_CONFIG.max_photo_caption_length) || null,
+      tags:             cleanTags,
+      photo_taken_month: photo_taken_month ? Number(photo_taken_month) : null,
+      photo_taken_year:  photo_taken_year  ? Number(photo_taken_year)  : null,
+      sort_order:       sortOrder,
     })
-    .select('id, caption, sort_order, storage_asset_id')
+    .select('id, caption, tags, photo_taken_month, photo_taken_year, sort_order, storage_asset_id')
     .single()
 
   if (error || !photo) return serverError('Failed to register photo')
@@ -71,7 +78,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json(photo)
 }
 
-// PATCH /api/photographer/photos — update caption and/or sort_order
+// PATCH /api/photographer/photos — update caption, tags, date, and/or sort_order
 export async function PATCH(request: NextRequest) {
   const { adminDb, user } = await getServerSession()
   if (!user) return unauthorized()
@@ -81,12 +88,22 @@ export async function PATCH(request: NextRequest) {
   if (!photographerId) return notFound('Photographer profile not found')
 
   const body = await request.json()
-  const { id, caption, sort_order } = body
+  const { id, caption, tags, photo_taken_month, photo_taken_year, sort_order } = body
   if (!id) return badRequest('id is required')
 
   const updates: Record<string, unknown> = {}
-  if (caption !== undefined) updates.caption = caption?.trim().slice(0, PLATFORM_CONFIG.max_photo_caption_length) || null
-  if (sort_order !== undefined) updates.sort_order = sort_order
+  if (caption !== undefined)
+    updates.caption = caption?.trim().slice(0, PLATFORM_CONFIG.max_photo_caption_length) || null
+  if (tags !== undefined)
+    updates.tags = Array.isArray(tags)
+      ? tags.map((t: string) => t.trim().toLowerCase()).filter(Boolean).slice(0, 10)
+      : []
+  if (photo_taken_month !== undefined)
+    updates.photo_taken_month = photo_taken_month ? Number(photo_taken_month) : null
+  if (photo_taken_year !== undefined)
+    updates.photo_taken_year = photo_taken_year ? Number(photo_taken_year) : null
+  if (sort_order !== undefined)
+    updates.sort_order = sort_order
 
   const { error } = await db
     .from('portfolio_photos')

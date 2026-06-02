@@ -878,11 +878,11 @@ video {
 .col-span-2 {
   grid-column: span 2 / span 2;
 }
-.col-span-5 {
-  grid-column: span 5 / span 5;
-}
 .col-span-3 {
   grid-column: span 3 / span 3;
+}
+.col-span-5 {
+  grid-column: span 5 / span 5;
 }
 .row-span-2 {
   grid-row: span 2 / span 2;
