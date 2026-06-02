@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { computeBadge, getMostReviewedIds, getMostBookedIds, BadgeSignals } from '@/lib/badges'
 
 const PAGE_SIZE = 12
 
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
   // ── Fetch approved profiles ──────────────────────────────────────────────
   let profileQuery = db
     .from('photographer_profiles')
-    .select('id, username, display_name, tagline, bio, location, avatar_url, cover_image_url, rate_display, trust_score, native_avg_rating, native_review_count, created_at', { count: 'exact' })
+    .select('id, username, display_name, tagline, bio, location, avatar_url, cover_image_url, rate_display, trust_score, native_avg_rating, native_review_count, years_experience, website_url, created_at', { count: 'exact' })
     .eq('profile_status', 'approved')
 
   // Text search across name, bio, location
@@ -128,8 +129,85 @@ export async function GET(request: NextRequest) {
     availTodaySet = availableIds ?? new Set()
   }
 
+  const filteredIds = filtered.map((p: any) => p.id)
+
+  // ── Badge signals: portfolio counts, GBP, platform reviews, bookings ─────
+  const [
+    { data: portfolioCounts },
+    { data: gbpLinks },
+    { data: platformReviews },
+    { data: completedBookingsRows },
+  ] = await Promise.all([
+    // Distinct photo count per photographer
+    db.from('portfolio_photos')
+      .select('photographer_id')
+      .in('photographer_id', filteredIds),
+    // GBP connection
+    db.from('external_platform_links')
+      .select('photographer_id, platform_review_count, is_oauth_connected')
+      .eq('platform', 'google')
+      .in('photographer_id', filteredIds),
+    // Native platform reviews
+    db.from('reviews')
+      .select('photographer_id')
+      .in('photographer_id', filteredIds)
+      .eq('flag_status', 'none'),
+    // Completed bookings
+    db.from('booking_requests')
+      .select('photographer_id')
+      .in('photographer_id', filteredIds)
+      .eq('status', 'completed'),
+  ])
+
+  // Build lookup maps
+  const photoCountMap: Record<string, number> = {}
+  for (const row of portfolioCounts ?? []) {
+    photoCountMap[row.photographer_id] = (photoCountMap[row.photographer_id] ?? 0) + 1
+  }
+
+  const gbpMap: Record<string, { hasReviews: boolean }> = {}
+  for (const row of gbpLinks ?? []) {
+    gbpMap[row.photographer_id] = { hasReviews: (row.platform_review_count ?? 0) > 0 }
+  }
+
+  const platformReviewCountMap: Record<string, number> = {}
+  for (const row of platformReviews ?? []) {
+    platformReviewCountMap[row.photographer_id] = (platformReviewCountMap[row.photographer_id] ?? 0) + 1
+  }
+
+  const completedBookingMap: Record<string, number> = {}
+  for (const row of completedBookingsRows ?? []) {
+    completedBookingMap[row.photographer_id] = (completedBookingMap[row.photographer_id] ?? 0) + 1
+  }
+
+  // Build signal list for ranking
+  const signalList = filtered.map((p: any) => ({
+    id: p.id,
+    platformReviewCount: platformReviewCountMap[p.id] ?? 0,
+    completedBookings:   completedBookingMap[p.id]   ?? 0,
+  }))
+
+  const mostReviewedIds = getMostReviewedIds(signalList)
+  const mostBookedIds   = getMostBookedIds(signalList)
+
   const photographers = filtered.map((p: any) => {
     const specialties = specialtyMap[p.id] ?? []
+    const gbp = gbpMap[p.id]
+
+    const signals: BadgeSignals = {
+      yearsExperience:     p.years_experience ?? null,
+      hasGbp:              !!gbp,
+      hasWebsite:          !!(p.website_url?.trim()),
+      hasGoogleReviews:    gbp?.hasReviews ?? false,
+      portfolioPhotoCount: photoCountMap[p.id] ?? 0,
+      platformReviewCount: platformReviewCountMap[p.id] ?? 0,
+      completedBookings:   completedBookingMap[p.id]   ?? 0,
+      trustScore:          Number(p.trust_score ?? 0),
+      isMostReviewed:      mostReviewedIds.has(p.id),
+      isMostBooked:        mostBookedIds.has(p.id),
+    }
+
+    const badge = computeBadge(signals)
 
     return {
       id: p.id,
@@ -144,8 +222,10 @@ export async function GET(request: NextRequest) {
       trust_score: Number(p.trust_score ?? 0),
       native_avg_rating: Number(p.native_avg_rating ?? 0),
       native_review_count: p.native_review_count ?? 0,
+      years_experience: p.years_experience ?? null,
       specialties,
       available_today: availTodaySet.has(p.id),
+      badge,
     }
   })
 

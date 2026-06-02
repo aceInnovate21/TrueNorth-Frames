@@ -334,6 +334,7 @@ import { Nav } from '@/components/nav'
 import { Footer } from '@/components/footer'
 import { ContactModal } from '@/components/contact-modal'
 import { SaveButton } from '@/components/save-button'
+import { PhotographerBadge } from '@/components/photographer-badge'
 
 // ─── Portfolio preview card (extracted to avoid hooks-in-IIFE violation) ─────
 
@@ -921,9 +922,10 @@ export default function ProfilePage({ params }: { params: { username: string } }
           <div className="pb-5">
             <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
               <div className="min-w-0">
-                {/* Name */}
+                {/* Name + badge */}
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <h1 className="font-serif text-2xl sm:text-3xl font-bold text-ink tracking-tight">{p.display_name}</h1>
+                  {p.badge && <PhotographerBadge badge={p.badge} size="md" />}
                 </div>
                 {p.tagline && <p className="text-ink-400 text-sm mt-1">{p.tagline}</p>}
                 {/* Meta row */}

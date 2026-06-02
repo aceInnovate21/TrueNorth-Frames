@@ -1,7 +1,4 @@
 {
-  "/photographers/page": "app/photographers/page.js",
   "/photographers/[username]/page": "app/photographers/[username]/page.js",
-  "/api/photographer/[username]/route": "app/api/photographer/[username]/route.js",
-  "/api/client/me/route": "app/api/client/me/route.js",
-  "/api/photographer/profile/route": "app/api/photographer/profile/route.js"
+  "/photographers/page": "app/photographers/page.js"
 }

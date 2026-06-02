@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from '@/lib/api-helpers'
+import { computeBadge, BadgeSignals } from '@/lib/badges'
 
 // Public read-only route — no auth required, uses service role for reliable reads
 function getDb() {
@@ -23,7 +24,7 @@ export async function GET(
       id, username, display_name, tagline, bio, location,
       avatar_url, cover_image_url, website_url, instagram_url,
       rate_display, rate_note, trust_score, native_avg_rating,
-      native_review_count, profile_view_count, created_at,
+      native_review_count, profile_view_count, years_experience, created_at,
       contact_instagram_url, contact_facebook_url
     `)
     .eq('username', params.username)
@@ -37,7 +38,7 @@ export async function GET(
         id, username, display_name, tagline, bio, location,
         avatar_url, cover_image_url, website_url, instagram_url,
         rate_display, rate_note, trust_score, native_avg_rating,
-        native_review_count, profile_view_count, created_at
+        native_review_count, profile_view_count, years_experience, created_at
       `)
       .eq('username', params.username)
       .eq('profile_status', 'approved')
@@ -69,10 +70,33 @@ export async function GET(
     db.from('packages').select('id, name, description, billing_type, price, deliverables, is_popular, banner_url, specialty').eq('photographer_id', photographerId).eq('is_active', true).order('sort_order', { ascending: true }),
     db.from('photographer_faqs').select('id, question, answer, sort_order').eq('photographer_id', photographerId).eq('is_published', true).order('sort_order', { ascending: true }),
     db.from('availability_day_status').select('date, status').eq('photographer_id', photographerId).gte('date', today).lte('date', in90),
-    db.from('portfolio_photos').select('id, album_id, caption, sort_order, storage_asset_id').eq('photographer_id', photographerId).order('sort_order', { ascending: true }),
+    db.from('portfolio_photos').select('id, album_id, caption, tags, photo_taken_month, photo_taken_year, sort_order, storage_asset_id').eq('photographer_id', photographerId).order('sort_order', { ascending: true }),
     db.from('portfolio_albums').select('id, title, sort_order').eq('photographer_id', photographerId).eq('is_published', true).order('sort_order', { ascending: true }),
     db.from('portfolio_videos').select('id, album_id, title, sort_order, duration_seconds, storage_asset_id').eq('photographer_id', photographerId).order('sort_order', { ascending: true }),
   ])
+
+  // ── Badge signals for this profile ────────────────────────────────────────
+  const gbpLink = (links ?? []).find((l: any) => l.platform === 'google')
+  const [{ count: platformReviewCount }, { count: completedBookings }] = await Promise.all([
+    db.from('reviews').select('*', { count: 'exact', head: true })
+      .eq('photographer_id', photographerId).eq('flag_status', 'none'),
+    db.from('booking_requests').select('*', { count: 'exact', head: true })
+      .eq('photographer_id', photographerId).eq('status', 'completed'),
+  ])
+  const badgeSignals: BadgeSignals = {
+    yearsExperience:     profile.years_experience ?? null,
+    hasGbp:              !!gbpLink,
+    hasWebsite:          !!(profile.website_url?.trim()),
+    hasGoogleReviews:    (gbpLink?.platform_review_count ?? 0) > 0,
+    portfolioPhotoCount: (portfolioPhotos ?? []).length,
+    platformReviewCount: platformReviewCount ?? 0,
+    completedBookings:   completedBookings   ?? 0,
+    trustScore:          Number(profile.trust_score ?? 0),
+    // Single-profile view — no cross-photographer ranking context
+    isMostReviewed: false,
+    isMostBooked:   false,
+  }
+  const badge = computeBadge(badgeSignals)
 
   // Resolve storage asset keys for photos and videos in one query
   const allAssetIds = Array.from(new Set([
@@ -153,9 +177,11 @@ export async function GET(
     native_avg_rating: profile.native_avg_rating ?? 0,
     native_review_count: profile.native_review_count ?? 0,
     profile_view_count: profile.profile_view_count ?? 0,
+    years_experience: profile.years_experience ?? null,
     member_since: profile.created_at,
     contact_instagram_url: profile.contact_instagram_url ?? null,
     contact_facebook_url: profile.contact_facebook_url ?? null,
+    badge,
     specialties: (specialties ?? []).map((s: { specialty: string }) => s.specialty),
     links: linksMap,
     native_reviews: (nativeReviews ?? []).map((r: any) => ({
@@ -196,6 +222,9 @@ export async function GET(
       id: ph.id,
       src: photoAssetKeyMap[ph.storage_asset_id] ? `${r2Base}/${photoAssetKeyMap[ph.storage_asset_id]}` : '',
       caption: ph.caption ?? '',
+      tags: ph.tags ?? [],
+      photo_taken_month: ph.photo_taken_month ?? null,
+      photo_taken_year:  ph.photo_taken_year  ?? null,
     })),
     standalone_videos: standaloneVideos.map((v: any) => ({
       id: v.id,
@@ -229,6 +258,9 @@ export async function GET(
       album_id: ph.album_id,
       src: photoAssetKeyMap[ph.storage_asset_id] ? `${r2Base}/${photoAssetKeyMap[ph.storage_asset_id]}` : '',
       caption: ph.caption ?? '',
+      tags: ph.tags ?? [],
+      photo_taken_month: ph.photo_taken_month ?? null,
+      photo_taken_year:  ph.photo_taken_year  ?? null,
     })),
     portfolio_videos: (portfolioVideos ?? []).map((v: any) => ({
       id: v.id,
