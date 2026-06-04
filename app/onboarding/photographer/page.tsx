@@ -4,7 +4,10 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { ArrowRight, ArrowLeft, CheckCircle2, Camera, MapPin, DollarSign, User, Globe, Instagram, Shield, Zap, Facebook, AlertCircle } from 'lucide-react'
+import {
+  ArrowRight, ArrowLeft, CheckCircle2, Camera, MapPin, DollarSign,
+  User, Globe, Shield, Zap, AlertCircle, Star,
+} from 'lucide-react'
 
 const SPECIALTIES = [
   'Wedding', 'Portrait', 'Corporate', 'Newborn', 'Family', 'Event',
@@ -19,28 +22,159 @@ const EDMONTON_AREAS = [
 
 const STEPS = ['Account', 'Basics', 'Specialties', 'Trust', 'Done']
 
+// ─── Badge preview logic (mirrors lib/badges.ts, simplified for onboarding) ──
+
+type BadgePreview = {
+  emoji: string
+  label: string
+  description: string
+  color: string
+  textColor: string
+  borderColor: string
+}
+
+function computeOnboardingBadge({
+  yearsExperience,
+  hasGbp,
+  hasWebsite,
+  hasGbpReviews,
+}: {
+  yearsExperience: string
+  hasGbp: boolean | null
+  hasWebsite: boolean | null
+  hasGbpReviews: boolean | null
+}): BadgePreview {
+  const years = yearsExperience ? Number(yearsExperience) : null
+  const isSenior = years !== null && years >= 3
+  const isTrustedPro = isSenior && hasGbp === true && hasWebsite === true && hasGbpReviews === true
+
+  if (isTrustedPro) {
+    return {
+      emoji: '✅',
+      label: 'Trusted Pro',
+      description: '3+ years Edmonton experience, verified Google Business Profile with reviews, and a website.',
+      color: 'bg-emerald-50',
+      textColor: 'text-emerald-700',
+      borderColor: 'border-emerald-200',
+    }
+  }
+
+  if (isSenior && hasGbp === true && hasGbpReviews === true && hasWebsite !== true) {
+    return {
+      emoji: '✅',
+      label: 'Trusted Pro (almost)',
+      description: 'Add your website URL to unlock Trusted Pro. You\'re very close!',
+      color: 'bg-emerald-50',
+      textColor: 'text-emerald-700',
+      borderColor: 'border-emerald-200',
+    }
+  }
+
+  if (years !== null && years < 3) {
+    return {
+      emoji: '🌟',
+      label: 'Rising Talent',
+      description: 'Fresh perspective — upload 5+ portfolio photos to activate this badge.',
+      color: 'bg-amber-50',
+      textColor: 'text-amber-700',
+      borderColor: 'border-amber-200',
+    }
+  }
+
+  if (years === 0) {
+    return {
+      emoji: '🌟',
+      label: 'Rising Talent',
+      description: 'Just starting out — upload 5+ portfolio photos to activate this badge.',
+      color: 'bg-amber-50',
+      textColor: 'text-amber-700',
+      borderColor: 'border-amber-200',
+    }
+  }
+
+  if (isSenior) {
+    return {
+      emoji: '🌟',
+      label: 'Rising Talent → Trusted Pro',
+      description: 'Connect Google Business Profile with reviews + add your website to unlock Trusted Pro.',
+      color: 'bg-amber-50',
+      textColor: 'text-amber-700',
+      borderColor: 'border-amber-200',
+    }
+  }
+
+  return {
+    emoji: '🆕',
+    label: 'Newly Joined',
+    description: 'Complete your profile and upload photos to earn a badge.',
+    color: 'bg-ink-50',
+    textColor: 'text-ink-500',
+    borderColor: 'border-ink-100',
+  }
+}
+
+// ─── Yes / No button pair ─────────────────────────────────────────────────────
+
+function YesNo({
+  value, onChange, yesLabel = 'Yes', noLabel = 'No',
+}: {
+  value: boolean | null
+  onChange: (v: boolean) => void
+  yesLabel?: string
+  noLabel?: string
+}) {
+  return (
+    <div className="flex gap-3">
+      <button
+        type="button"
+        onClick={() => onChange(true)}
+        className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${
+          value === true ? 'bg-ink text-white border-ink' : 'bg-white text-ink-400 border-ink-100 hover:border-ink-300'
+        }`}
+      >
+        {yesLabel}
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(false)}
+        className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${
+          value === false ? 'bg-ink text-white border-ink' : 'bg-white text-ink-400 border-ink-100 hover:border-ink-300'
+        }`}
+      >
+        {noLabel}
+      </button>
+    </div>
+  )
+}
+
+// ─── Main form ────────────────────────────────────────────────────────────────
+
 function PhotographerOnboardingForm() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const [step, setStep] = useState(1) // 1=basics, 2=specialties, 3=links
+  const [step, setStep] = useState(1)
 
-  // Basic details
+  // Step 1 — basics
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [bio, setBio] = useState('')
   const [area, setArea] = useState('')
   const [rate, setRate] = useState('')
-
-  // Specialties
-  const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>([])
-
-  const [websiteUrl, setWebsiteUrl] = useState('')
   const [yearsExperience, setYearsExperience] = useState<string>('')
 
-  const [submitting, setSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState<string | null>(null)
-  const [touched, setTouched] = useState<Record<string, boolean>>({})
+  // Step 2 — specialties
+  const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>([])
+
+  // Step 3 — trust questions
+  const [hasGbp, setHasGbp]             = useState<boolean | null>(null)
+  const [hasWebsite, setHasWebsite]     = useState<boolean | null>(null)
+  const [websiteUrl, setWebsiteUrl]     = useState('')
+  const [hasGbpReviews, setHasGbpReviews] = useState<boolean | null>(null)
+
+  const [submitting, setSubmitting]     = useState(false)
+  const [submitError, setSubmitError]   = useState<string | null>(null)
+  const [touched, setTouched]           = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     const fn = searchParams.get('firstName')
@@ -51,17 +185,18 @@ function PhotographerOnboardingForm() {
 
   function touch(f: string) { setTouched(t => ({ ...t, [f]: true })) }
 
-  // Step 1 validation
-  const step1Valid = displayName.trim() && bio.trim().length >= 20 && area && rate
-
-  // Step 2 validation
+  // Validations
+  const step1Valid = displayName.trim() && bio.trim().length >= 20 && area && rate && yearsExperience !== ''
   const step2Valid = selectedSpecialties.length >= 1
+  const step3Valid = hasGbp !== null && hasWebsite !== null && (hasGbp ? hasGbpReviews !== null : true)
 
   function toggleSpecialty(s: string) {
     setSelectedSpecialties(prev =>
       prev.includes(s) ? prev.filter(x => x !== s) : prev.length < 5 ? [...prev, s] : prev
     )
   }
+
+  const badgePreview = computeOnboardingBadge({ yearsExperience, hasGbp, hasWebsite, hasGbpReviews })
 
   async function handleFinish() {
     setSubmitting(true)
@@ -78,8 +213,10 @@ function PhotographerOnboardingForm() {
         location: area,
         rate,
         specialties: selectedSpecialties,
-        website_url: websiteUrl,
+        website_url: hasWebsite && websiteUrl.trim() ? websiteUrl.trim() : null,
         years_experience: yearsExperience ? Number(yearsExperience) : null,
+        has_gbp: hasGbp,
+        has_gbp_reviews: hasGbpReviews,
       }),
     })
 
@@ -107,20 +244,17 @@ function PhotographerOnboardingForm() {
       {/* Step bar */}
       <div className="flex items-center gap-1.5 mb-10">
         {STEPS.map((label, i) => {
-          const stepNum = i // 0=Account(done), 1=Basics, 2=Specialties, 3=Links, 4=Done
-          const done = stepNum < step || (step === 3 && stepNum === 3)
-          const active = stepNum === step
+          const done   = i < step || (step === 3 && i === 3)
+          const active = i === step
           return (
             <div key={label} className="flex items-center gap-1.5 flex-1 last:flex-none">
               <div className="flex items-center gap-1">
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 transition-colors ${
-                  stepNum === 0 || done
-                    ? 'bg-ink'
-                    : active ? 'bg-ink' : 'border border-ink-100 bg-white'
+                  i === 0 || done ? 'bg-ink' : active ? 'bg-ink' : 'border border-ink-100 bg-white'
                 }`}>
-                  {stepNum === 0 || done
+                  {i === 0 || done
                     ? <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                    : <span className={active ? 'text-white' : 'text-ink-300'}>{stepNum}</span>
+                    : <span className={active ? 'text-white' : 'text-ink-300'}>{i}</span>
                   }
                 </div>
                 <span className={`text-xs hidden sm:block ${active ? 'font-semibold text-ink' : 'text-ink-300'}`}>{label}</span>
@@ -142,17 +276,21 @@ function PhotographerOnboardingForm() {
             <p className="text-ink-300 text-sm">This is what clients see when they find your profile.</p>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-5">
             {/* Display name */}
             <div>
-              <label className="block text-sm font-medium text-ink mb-1.5">Display name</label>
+              <label className="block text-sm font-medium text-ink mb-1.5">
+                Display name <span className="text-red-500">*</span>
+              </label>
               <input
                 type="text"
                 placeholder="e.g. Sarah Chen Photography"
                 value={displayName}
                 onChange={e => setDisplayName(e.target.value)}
                 onBlur={() => touch('displayName')}
-                className={`w-full border rounded-xl px-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:ring-2 transition-all ${touched.displayName && !displayName.trim() ? 'border-red-300 focus:ring-red-100' : 'border-ink-100 focus:border-ink focus:ring-ink/10'}`}
+                className={`w-full border rounded-xl px-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:ring-2 transition-all ${
+                  touched.displayName && !displayName.trim() ? 'border-red-300 focus:ring-red-100' : 'border-ink-100 focus:border-ink focus:ring-ink/10'
+                }`}
               />
               <p className="mt-1 text-xs text-ink-300">Your name or business name — shown on your profile card.</p>
             </div>
@@ -160,7 +298,7 @@ function PhotographerOnboardingForm() {
             {/* Bio */}
             <div>
               <label className="block text-sm font-medium text-ink mb-1.5">
-                Bio
+                Bio <span className="text-red-500">*</span>
                 <span className="ml-2 text-ink-300 font-normal text-xs">({bio.length}/300)</span>
               </label>
               <textarea
@@ -169,7 +307,9 @@ function PhotographerOnboardingForm() {
                 value={bio}
                 onChange={e => setBio(e.target.value.slice(0, 300))}
                 onBlur={() => touch('bio')}
-                className={`w-full border rounded-xl px-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:ring-2 transition-all resize-none ${touched.bio && bio.trim().length < 20 ? 'border-red-300 focus:ring-red-100' : 'border-ink-100 focus:border-ink focus:ring-ink/10'}`}
+                className={`w-full border rounded-xl px-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:ring-2 transition-all resize-none ${
+                  touched.bio && bio.trim().length < 20 ? 'border-red-300 focus:ring-red-100' : 'border-ink-100 focus:border-ink focus:ring-ink/10'
+                }`}
               />
               {touched.bio && bio.trim().length < 20 && bio.length > 0 && (
                 <p className="mt-1 text-xs text-red-500">At least 20 characters — give clients something to connect with.</p>
@@ -179,92 +319,86 @@ function PhotographerOnboardingForm() {
             {/* Area */}
             <div>
               <label className="block text-sm font-medium text-ink mb-2">
-                <span className="flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-ink-300" />
-                  Your area
-                </span>
+                Your area in Edmonton <span className="text-red-500">*</span>
               </label>
               <div className="flex flex-wrap gap-2">
                 {EDMONTON_AREAS.map(n => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setArea(n)}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition-all ${area === n ? 'bg-ink text-white border-ink' : 'bg-white text-ink-500 border-ink-100 hover:border-ink-300'}`}
-                  >
+                  <button key={n} type="button" onClick={() => setArea(n)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
+                      area === n ? 'bg-ink text-white border-ink' : 'bg-white text-ink-500 border-ink-100 hover:border-ink-300'
+                    }`}>
                     {n}
                   </button>
                 ))}
               </div>
+              {touched.area && !area && (
+                <p className="mt-1.5 text-xs text-red-500">Please select your area.</p>
+              )}
             </div>
 
             {/* Rate */}
             <div>
               <label className="block text-sm font-medium text-ink mb-1.5">
-                <span className="flex items-center gap-1.5">
-                  <DollarSign className="w-3.5 h-3.5 text-ink-300" />
-                  Starting rate (CAD/hr)
-                </span>
+                Starting rate (CAD/hr) <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-300 text-sm">$</span>
                 <input
-                  type="number"
-                  min={50}
-                  max={1000}
-                  placeholder="150"
-                  value={rate}
-                  onChange={e => setRate(e.target.value)}
-                  onBlur={() => touch('rate')}
-                  className={`w-full border rounded-xl pl-8 pr-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:ring-2 transition-all ${touched.rate && !rate ? 'border-red-300 focus:ring-red-100' : 'border-ink-100 focus:border-ink focus:ring-ink/10'}`}
+                  type="number" min={50} max={1000} placeholder="150"
+                  value={rate} onChange={e => setRate(e.target.value)} onBlur={() => touch('rate')}
+                  className={`w-full border rounded-xl pl-8 pr-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:ring-2 transition-all ${
+                    touched.rate && !rate ? 'border-red-300 focus:ring-red-100' : 'border-ink-100 focus:border-ink focus:ring-ink/10'
+                  }`}
                 />
               </div>
-              <p className="mt-1 text-xs text-ink-300">Clients see this as your starting price. You negotiate the final rate directly.</p>
+              <p className="mt-1 text-xs text-ink-300">You negotiate the final rate directly — this is just your starting point.</p>
             </div>
 
-            {/* Years of experience in Edmonton */}
+            {/* Years of experience */}
             <div>
               <label className="block text-sm font-medium text-ink mb-1.5">
-                Years of photography experience in Edmonton
+                Years of photography experience in Edmonton <span className="text-red-500">*</span>
               </label>
               <div className="flex flex-wrap gap-2">
                 {[
                   { label: 'Just starting out', value: '0' },
-                  { label: '1–3 years', value: '2' },
-                  { label: '3–5 years', value: '4' },
-                  { label: '5–10 years', value: '7' },
-                  { label: '10+ years', value: '10' },
+                  { label: '1–3 years',          value: '2' },
+                  { label: '3–5 years',           value: '4' },
+                  { label: '5–10 years',          value: '7' },
+                  { label: '10+ years',           value: '10' },
                 ].map(opt => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setYearsExperience(opt.value)}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition-all ${yearsExperience === opt.value ? 'bg-ink text-white border-ink' : 'bg-white text-ink-500 border-ink-100 hover:border-ink-300'}`}
-                  >
+                  <button key={opt.value} type="button" onClick={() => setYearsExperience(opt.value)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
+                      yearsExperience === opt.value ? 'bg-ink text-white border-ink' : 'bg-white text-ink-500 border-ink-100 hover:border-ink-300'
+                    }`}>
                     {opt.label}
                   </button>
                 ))}
               </div>
-              <p className="mt-1.5 text-xs text-ink-300">
-                {yearsExperience === '0'
-                  ? '🌟 You\'ll receive a Rising Talent badge — showcasing your fresh perspective to clients.'
-                  : Number(yearsExperience) >= 3
-                  ? '✅ Once you connect your Google Business Profile, you\'ll be eligible for the Trusted Pro badge.'
-                  : yearsExperience
-                  ? '🌟 You\'ll receive a Rising Talent badge — keep building and the Trusted Pro badge awaits!'
-                  : 'This helps us show the right badge on your profile.'}
-              </p>
+              {touched.yearsExperience && !yearsExperience && (
+                <p className="mt-1.5 text-xs text-red-500">Please select your experience level.</p>
+              )}
+              {yearsExperience !== '' && (
+                <p className="mt-1.5 text-xs text-ink-400">
+                  {Number(yearsExperience) < 3
+                    ? '🌟 You\'ll start with the Rising Talent badge — upload 5+ portfolio photos to activate it.'
+                    : '✅ You\'re eligible for Trusted Pro — complete the trust questions in the next step.'}
+                </p>
+              )}
             </div>
           </div>
 
           <button
             type="button"
-            onClick={() => { touch('displayName'); touch('bio'); touch('rate'); if (step1Valid) setStep(2) }}
+            onClick={() => {
+              touch('displayName'); touch('bio'); touch('rate')
+              touch('area'); touch('yearsExperience')
+              if (step1Valid) setStep(2)
+            }}
             disabled={!step1Valid}
             className="w-full mt-8 bg-ink hover:bg-ink-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
           >
-            Next: Specialties
-            <ArrowRight className="w-4 h-4" />
+            Next: Specialties <ArrowRight className="w-4 h-4" />
           </button>
 
           <p className="text-center text-xs text-ink-300 mt-4">
@@ -287,7 +421,7 @@ function PhotographerOnboardingForm() {
               <Camera className="w-5 h-5 text-ink-400" />
             </div>
             <h1 className="font-serif text-3xl font-bold text-ink mb-2">What do you shoot?</h1>
-            <p className="text-ink-300 text-sm">Pick up to 5 specialties. These appear as filter tags on your profile.</p>
+            <p className="text-ink-300 text-sm">Pick up to 5 specialties. These appear as filter tags on your profile. <span className="text-red-500">*</span></p>
           </div>
 
           <div className="flex flex-wrap gap-2 mb-8">
@@ -295,19 +429,12 @@ function PhotographerOnboardingForm() {
               const selected = selectedSpecialties.includes(s)
               const maxed = selectedSpecialties.length >= 5 && !selected
               return (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => toggleSpecialty(s)}
-                  disabled={maxed}
+                <button key={s} type="button" onClick={() => toggleSpecialty(s)} disabled={maxed}
                   className={`text-sm px-4 py-2 rounded-full border-2 transition-all ${
-                    selected
-                      ? 'bg-ink text-white border-ink'
-                      : maxed
-                        ? 'bg-white text-ink-200 border-ink-100 cursor-not-allowed'
-                        : 'bg-white text-ink-500 border-ink-100 hover:border-ink-300'
-                  }`}
-                >
+                    selected ? 'bg-ink text-white border-ink'
+                    : maxed ? 'bg-white text-ink-200 border-ink-100 cursor-not-allowed'
+                    : 'bg-white text-ink-500 border-ink-100 hover:border-ink-300'
+                  }`}>
                   {s}
                 </button>
               )
@@ -329,19 +456,12 @@ function PhotographerOnboardingForm() {
             disabled={!step2Valid}
             className="w-full bg-ink hover:bg-ink-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
           >
-            Next: Trust score
-            <ArrowRight className="w-4 h-4" />
+            Next: Trust questions <ArrowRight className="w-4 h-4" />
           </button>
-
-          <p className="text-center text-xs text-ink-300 mt-4">
-            <button onClick={() => setStep(3)} className="underline underline-offset-2 hover:text-ink transition-colors">
-              Skip for now
-            </button>
-          </p>
         </div>
       )}
 
-      {/* ── Step 3: Trust score ───────────────────────────────────── */}
+      {/* ── Step 3: Trust questions ───────────────────────────────── */}
       {step === 3 && (
         <div>
           <button onClick={() => setStep(2)} className="inline-flex items-center gap-1.5 text-xs text-ink-400 hover:text-ink transition-colors mb-6">
@@ -352,99 +472,139 @@ function PhotographerOnboardingForm() {
             <div className="w-12 h-12 bg-ink-50 rounded-2xl flex items-center justify-center mb-4">
               <Shield className="w-5 h-5 text-ink-400" />
             </div>
-            <h1 className="font-serif text-3xl font-bold text-ink mb-2">Build your trust score</h1>
+            <h1 className="font-serif text-3xl font-bold text-ink mb-2">Trust questions</h1>
             <p className="text-ink-300 text-sm leading-relaxed">
-              Connect your social and review platforms so clients can see your real-world reputation. Each connection adds verified signal to your score — all optional, connect what you have.
+              These answers determine your badge on TrueNorth Frames. Answer honestly — we verify through your Google Business Profile connection.
             </p>
           </div>
 
-          {/* Platform connect cards */}
-          <div className="space-y-3 mb-6">
-            {[
-              {
-                platform: 'instagram',
-                label: 'Instagram',
-                desc: 'Followers · engagement rate · posting consistency',
-                gradient: 'from-pink-500 to-purple-600',
-                bg: 'from-pink-50 to-purple-50',
-                border: 'border-pink-100',
-                Icon: Instagram,
-                accountRequirement: 'Business or Creator account required',
-              },
-              {
-                platform: 'facebook',
-                label: 'Facebook Page',
-                desc: 'Page likes · reviews · account age',
-                gradient: 'from-blue-600 to-blue-400',
-                bg: 'from-blue-50 to-sky-50',
-                border: 'border-blue-100',
-                Icon: Facebook,
-                accountRequirement: 'Facebook Page required (not personal profile)',
-              },
-              {
-                platform: 'google',
-                label: 'Google Business',
-                desc: 'Review rating · review count · verified badge',
-                gradient: 'from-red-500 to-yellow-400',
-                bg: 'from-slate-50 to-white',
-                border: 'border-slate-100',
-                Icon: Globe,
-                isGoogle: true,
-                accountRequirement: null,
-              },
-            ].map(({ platform, label, desc, gradient, bg, border, Icon, isGoogle, accountRequirement }) => (
-              <a
-                key={platform}
-                href={`/api/oauth/${platform}?onboarding=1`}
-                className={`flex items-center gap-3 p-3.5 rounded-xl bg-gradient-to-r ${bg} border ${border} hover:shadow-sm transition-all group`}
-              >
-                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform`}>
-                  {isGoogle
-                    ? <span className="text-base font-black text-white leading-none">G</span>
-                    : <Icon className="w-5 h-5 text-white" />}
+          <div className="space-y-6">
+
+            {/* Q1: GBP */}
+            <div className="bg-white border border-ink-100 rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-9 h-9 bg-ink rounded-xl flex items-center justify-center flex-shrink-0">
+                  <span className="text-white font-black text-sm">G</span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-ink">{label}</p>
-                  <p className="text-xs text-ink-300 truncate">{desc}</p>
-                  {accountRequirement && (
-                    <p className="text-[10px] text-amber-600 font-medium mt-0.5 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                      {accountRequirement}
+                <div>
+                  <p className="font-semibold text-ink text-sm">Do you have a Google Business Profile?</p>
+                  <p className="text-xs text-ink-400 mt-0.5 leading-relaxed">
+                    A Google Business Profile is a free listing at <span className="font-medium">business.google.com</span> — separate from a personal Google account.
+                  </p>
+                </div>
+              </div>
+              <YesNo value={hasGbp} onChange={v => { setHasGbp(v); if (!v) { setHasGbpReviews(null) } }} />
+              {hasGbp === false && (
+                <div className="mt-3 flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-700 leading-relaxed">
+                    You can create one free at <strong>business.google.com</strong>. Connect it from your dashboard after signing up to unlock your trust score.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Q2: GBP reviews — only if they have GBP */}
+            {hasGbp === true && (
+              <div className="bg-white border border-ink-100 rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                <div className="flex items-start gap-3 mb-4">
+                  <div className="w-9 h-9 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-ink text-sm">Does your Google Business Profile have reviews?</p>
+                    <p className="text-xs text-ink-400 mt-0.5 leading-relaxed">
+                      Google reviews from clients on your GBP listing — not internal TrueNorth Frames reviews.
                     </p>
-                  )}
+                  </div>
                 </div>
-                <span className="text-xs font-semibold text-ink border border-ink-200 bg-white px-3 py-1.5 rounded-lg group-hover:bg-ink group-hover:text-white group-hover:border-ink transition-all flex-shrink-0">
-                  Connect
-                </span>
-              </a>
-            ))}
-          </div>
+                <YesNo
+                  value={hasGbpReviews}
+                  onChange={setHasGbpReviews}
+                  yesLabel="Yes, I have Google reviews"
+                  noLabel="Not yet"
+                />
+              </div>
+            )}
 
-          {/* Website */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-ink mb-1.5 flex items-center gap-1.5">
-              <Globe className="w-3.5 h-3.5 text-ink-300" />
-              Website
-              <span className="text-ink-300 font-normal">Optional</span>
-            </label>
-            <input
-              type="url"
-              placeholder="https://yoursite.com"
-              value={websiteUrl}
-              onChange={e => setWebsiteUrl(e.target.value)}
-              className="w-full border border-ink-100 rounded-xl px-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
-            />
-          </div>
+            {/* Q3: Website */}
+            <div className="bg-white border border-ink-100 rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-9 h-9 bg-ink-50 border border-ink-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Globe className="w-4 h-4 text-ink-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-ink text-sm">Do you have a photography website?</p>
+                  <p className="text-xs text-ink-400 mt-0.5">Your portfolio site, Squarespace, Wix, or any professional web presence.</p>
+                </div>
+              </div>
+              <YesNo value={hasWebsite} onChange={setHasWebsite} />
+              {hasWebsite === true && (
+                <div className="mt-3">
+                  <input
+                    type="url"
+                    placeholder="https://yoursite.com"
+                    value={websiteUrl}
+                    onChange={e => setWebsiteUrl(e.target.value)}
+                    className="w-full border border-ink-100 rounded-xl px-4 py-2.5 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
+                  />
+                </div>
+              )}
+            </div>
 
-          <div className="bg-ink-50 border border-ink-100 rounded-xl px-4 py-3 mb-6 flex items-start gap-2.5">
-            <Zap className="w-4 h-4 text-ink flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-ink-400 leading-relaxed">
-              Connecting a platform redirects you to authorise access, then brings you straight back here. You can connect more platforms anytime from the <strong>Trust Score</strong> tab in your dashboard.
-            </p>
+            {/* Google Business connect note */}
+            <div className="flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-2xl p-4">
+              <div className="w-8 h-8 bg-white border border-blue-200 rounded-xl flex items-center justify-center flex-shrink-0">
+                <span className="text-blue-600 font-black text-sm">G</span>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-blue-900 mb-0.5">Connect your Google Business Profile</p>
+                <p className="text-xs text-blue-700 leading-relaxed">
+                  After completing setup, go to your dashboard → <strong>Trust Score tab</strong> to connect your Google Business Profile via OAuth. This verifies your reviews and activates your trust score (75–100).
+                  You can reconnect at any time from the dashboard.
+                </p>
+              </div>
+            </div>
+
+            {/* ── Live badge preview ── */}
+            {(yearsExperience !== '' || hasGbp !== null || hasWebsite !== null) && (
+              <div className="rounded-2xl border-2 p-5 transition-all duration-300" style={{ borderColor: 'transparent', background: 'linear-gradient(white, white) padding-box, linear-gradient(135deg, #e5e7eb, #f3f4f6) border-box' }}>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-300 mb-3">Your badge preview</p>
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">{badgePreview.emoji}</span>
+                  <div>
+                    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full border ${badgePreview.color} ${badgePreview.textColor} ${badgePreview.borderColor}`}>
+                      {badgePreview.label}
+                    </span>
+                    <p className="text-xs text-ink-400 mt-2 leading-relaxed">{badgePreview.description}</p>
+                  </div>
+                </div>
+
+                {/* Trusted Pro checklist */}
+                {Number(yearsExperience) >= 3 && (
+                  <div className="mt-4 pt-4 border-t border-ink-50 space-y-2">
+                    <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wide">Trusted Pro requirements</p>
+                    {[
+                      { label: '3+ years Edmonton experience', done: Number(yearsExperience) >= 3 },
+                      { label: 'Google Business Profile',      done: hasGbp === true },
+                      { label: 'Google reviews on your GBP',   done: hasGbpReviews === true },
+                      { label: 'Website',                      done: hasWebsite === true },
+                    ].map(item => (
+                      <div key={item.label} className="flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${item.done ? 'bg-emerald-500' : 'bg-ink-100'}`}>
+                          {item.done && <CheckCircle2 className="w-3 h-3 text-white" />}
+                        </div>
+                        <span className={`text-xs ${item.done ? 'text-ink font-medium' : 'text-ink-400'}`}>{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {submitError && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mt-6">
               {submitError}
             </p>
           )}
@@ -452,31 +612,33 @@ function PhotographerOnboardingForm() {
           <button
             type="button"
             onClick={handleFinish}
-            disabled={submitting}
-            className="w-full bg-ink hover:bg-ink-800 disabled:opacity-60 text-white font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
+            disabled={submitting || !step3Valid}
+            className="w-full mt-6 bg-ink hover:bg-ink-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
           >
-            {submitting ? (
-              <><Spinner /> Building your profile…</>
-            ) : (
-              <>Go to my dashboard <ArrowRight className="w-4 h-4" /></>
-            )}
+            {submitting
+              ? <><Spinner /> Building your profile…</>
+              : <>Go to my dashboard <ArrowRight className="w-4 h-4" /></>
+            }
           </button>
 
-          <p className="text-center text-xs text-ink-300 mt-4">
-            <button type="button" onClick={handleFinish} className="underline underline-offset-2 hover:text-ink transition-colors">
-              Skip for now
-            </button>
-          </p>
+          <div className="flex items-center gap-2 mt-4 justify-center">
+            <Zap className="w-3.5 h-3.5 text-ink-300" />
+            <p className="text-xs text-ink-300">
+              You can connect your Google Business Profile and update these details anytime from your dashboard.
+            </p>
+          </div>
         </div>
       )}
     </div>
   )
 }
 
+// ─── Page shell ───────────────────────────────────────────────────────────────
+
 export default function PhotographerOnboardingPage() {
   return (
     <div className="min-h-screen bg-white flex">
-      {/* ── Left panel ─────────────────────────────────────────────── */}
+      {/* Left panel */}
       <div className="hidden lg:flex lg:w-[40%] flex-col justify-between p-10 bg-ink relative overflow-hidden">
         <div className="absolute inset-0 grid-pattern pointer-events-none" />
 
@@ -490,18 +652,18 @@ export default function PhotographerOnboardingPage() {
         <div className="relative z-10 space-y-5">
           <p className="text-ink-400 text-xs font-semibold uppercase tracking-[0.15em]">For photographers</p>
           <p className="font-serif text-2xl font-bold text-white leading-snug">
-            Your profile is your reputation. Let's make it count.
+            Your profile is your reputation.<br />Let's make it count.
           </p>
           <p className="text-ink-400 text-sm leading-relaxed">
-            A complete profile gets 3× more enquiries than an incomplete one. Takes about 5 minutes.
+            A complete profile gets 3× more enquiries. Takes about 5 minutes.
           </p>
 
           <div className="pt-2 space-y-3">
             {[
-              'Verified trust score from Instagram, Facebook & Google',
+              'Google Business Profile trust score (75–100)',
               'Portfolio gallery — up to 20 photos',
+              'Badges: Rising Talent or Trusted Pro',
               'Direct enquiries — no commission ever',
-              'Availability toggle for same-day bookings',
             ].map(item => (
               <div key={item} className="flex items-center gap-2.5">
                 <CheckCircle2 className="w-4 h-4 text-white/60 flex-shrink-0" />
@@ -514,7 +676,7 @@ export default function PhotographerOnboardingPage() {
         <p className="relative z-10 text-ink-600 text-xs">© {new Date().getFullYear()} TrueNorth Frames · Edmonton, AB</p>
       </div>
 
-      {/* ── Right panel ────────────────────────────────────────────── */}
+      {/* Right panel */}
       <div className="flex-1 flex items-start justify-center p-6 sm:p-10 overflow-y-auto">
         <div className="w-full max-w-lg py-6">
           <Suspense fallback={<div className="animate-pulse space-y-4"><div className="h-8 bg-ink-50 rounded-xl" /><div className="h-4 bg-ink-50 rounded-xl w-2/3" /></div>}>

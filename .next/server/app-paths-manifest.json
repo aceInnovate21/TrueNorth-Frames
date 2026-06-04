@@ -1,4 +1,7 @@
 {
-  "/api/portfolio-reel/route": "app/api/portfolio-reel/route.js",
-  "/photographers/page": "app/photographers/page.js"
+  "/onboarding/photographer/page": "app/onboarding/photographer/page.js",
+  "/(auth)/signup/page": "app/(auth)/signup/page.js",
+  "/photographers/[username]/page": "app/photographers/[username]/page.js",
+  "/(auth)/login/page": "app/(auth)/login/page.js",
+  "/dashboard/photographer/page": "app/dashboard/photographer/page.js"
 }
