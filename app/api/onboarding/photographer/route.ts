@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
   const {
     first_name, last_name, display_name, bio, location, rate,
     specialties = [], website_url, years_experience,
+    has_gbp, has_gbp_reviews, has_website,
   } = body
 
   if (!display_name?.trim()) return badRequest('display_name is required')
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
   const rateNum = parseFloat(rate)
   const rateDisplay = `$${rateNum.toFixed(0)} / hr`
 
-  // Upsert photographer_profiles
+  // Upsert photographer_profiles — set pending so admin must approve before going public
   const { data: profile, error: profileError } = await db
     .from('photographer_profiles')
     .upsert({
@@ -69,10 +70,12 @@ export async function POST(request: NextRequest) {
       bio: bio.trim().slice(0, 1200),
       location: location.trim(),
       rate_display: rateDisplay,
-      profile_status: 'approved',
-      approved_at: new Date().toISOString(),
+      profile_status: 'pending',
       ...(years_experience != null ? { years_experience: Number(years_experience) } : {}),
-      ...(website_url?.trim() ? { website_url: website_url.trim() } : {}),
+      website_url: website_url?.trim() || null,
+      ...(has_gbp != null ? { has_gbp_self_reported: has_gbp } : {}),
+      ...(has_gbp_reviews != null ? { has_gbp_reviews_self_reported: has_gbp_reviews } : {}),
+      ...(has_website != null ? { has_website_self_reported: has_website } : {}),
     }, { onConflict: 'user_id' })
     .select('id')
     .single()

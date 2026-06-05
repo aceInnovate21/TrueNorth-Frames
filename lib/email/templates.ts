@@ -1,251 +1,319 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // TrueNorth Frames — Email Templates
-// All emails share the same base layout (dark header, white body, clean footer).
-// Each template function returns { subject, html }.
+// Designed to render well in Gmail, Apple Mail, Outlook, and mobile clients.
+// No external images (broken without domain). Text-based logo only.
+// All templates return { subject, html }.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type EmailTemplateId =
   | 'welcome_client'
   | 'welcome_photographer'
-  | 'booking_received'          // → photographer: you got a new booking request
-  | 'booking_confirmed'         // → client: photographer approved
-  | 'booking_declined'          // → client: photographer declined
-  | 'booking_completed'         // → client: session marked complete, leave a review
-  | 'new_conversation'          // → photographer: client started a conversation
-  | 'review_received'           // → photographer: client left you a review
-  | 'review_reply'              // → client: photographer replied to your review
-  | 'support_ticket_created'    // → admin: new support ticket submitted
-  | 'support_ticket_resolved'   // → submitter: your ticket was resolved
-  | 'photographer_approved'     // → photographer: your profile was approved
-  | 'photographer_suspended'    // → photographer: your account was suspended
-  | 'review_removed'            // → photographer: a review was removed by admin
-  | 'review_dismissed'          // → photographer: a review flag was dismissed (review stays)
-  | 'booking_reminder_client'   // → client: session tomorrow reminder
-  | 'booking_reminder_photographer' // → photographer: session tomorrow reminder
+  | 'booking_received'
+  | 'booking_confirmed'
+  | 'booking_declined'
+  | 'booking_completed'
+  | 'booking_cancelled_by_client'      // → photographer: client cancelled
+  | 'booking_cancellation_confirmed'   // → client: photographer confirmed cancellation
+  | 'new_conversation'
+  | 'review_received'
+  | 'review_reply'
+  | 'support_ticket_created'
+  | 'support_ticket_resolved'
+  | 'photographer_approved'
+  | 'photographer_suspended'
+  | 'review_removed'
+  | 'review_dismissed'
+  | 'photographer_rejected'
+  | 'booking_reminder_client'
+  | 'booking_reminder_photographer'
 
 export type EmailPayload = Record<string, string | number | undefined | null>
 
-// ─── Shared layout ────────────────────────────────────────────────────────────
+// ─── Brand tokens ─────────────────────────────────────────────────────────────
 
-function base({
-  preheader,
-  body,
-}: {
+const BRAND = {
+  black:    '#111111',
+  offwhite: '#f8f8f7',
+  border:   '#e8e8e6',
+  muted:    '#888888',
+  faint:    '#cccccc',
+  green:    '#16a34a',
+  red:      '#dc2626',
+  amber:    '#d97706',
+  blue:     '#0284c7',
+  accent:   '#0ea5e9',   // sky-500 — the single brand accent used in header strip
+}
+
+// ─── Base layout ──────────────────────────────────────────────────────────────
+
+function base({ preheader, body, accentColor = BRAND.accent }: {
   preheader: string
   body: string
+  accentColor?: string
 }): string {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://truenorthframes.ca'
+
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>TrueNorth Frames</title>
-  <!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
+  <!--[if mso]>
+  <noscript><xml><o:OfficeDocumentSettings>
+    <o:PixelsPerInch>96</o:PixelsPerInch>
+  </o:OfficeDocumentSettings></xml></noscript>
+  <![endif]-->
+  <style>
+    @media only screen and (max-width:620px){
+      .card{ width:100%!important; border-radius:0!important; }
+      .body-cell{ padding:28px 20px!important; }
+      .footer-cell{ padding:20px!important; }
+      .cta-table{ width:100%!important; }
+      .cta-td{ width:100%!important; display:block!important; text-align:center!important; }
+      .info-label{ display:block!important; width:auto!important; padding-bottom:2px!important; }
+      .info-value{ display:block!important; width:auto!important; }
+    }
+  </style>
 </head>
-<body style="margin:0;padding:0;background:#f5f5f3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-  <!-- preheader -->
-  <div style="display:none;max-height:0;overflow:hidden;color:#f5f5f3;">${preheader}&nbsp;‌&nbsp;‌&nbsp;‌</div>
+<body style="margin:0;padding:0;background-color:#f4f4f2;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
 
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f5f5f3;">
-    <tr><td align="center" style="padding:32px 16px;">
+  <!-- Preheader (hidden preview text) -->
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;color:#f4f4f2;font-size:1px;line-height:1px;">
+    ${preheader}&nbsp;&#847;&nbsp;&#847;&nbsp;&#847;&nbsp;&#847;&nbsp;&#847;&nbsp;&#847;
+  </div>
 
-      <!-- Card -->
-      <table role="presentation" width="100%" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f4f4f2;">
+    <tr>
+      <td align="center" style="padding:32px 12px;">
 
-        <!-- Header -->
-        <tr>
-          <td style="background:#1a1a1a;padding:24px 36px;">
-            <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-              <tr>
-                <td style="vertical-align:middle;">
-                  <table role="presentation" cellspacing="0" cellpadding="0">
-                    <tr>
-                      <td style="vertical-align:middle;padding-right:12px;">
-                        <img src="${process.env.NEXT_PUBLIC_APP_URL}/logo.png" alt="TrueNorth Frames" width="36" height="36" style="display:block;border-radius:8px;" />
-                      </td>
-                      <td style="vertical-align:middle;">
-                        <div style="font-size:17px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;line-height:1.2;">TrueNorth Frames</div>
-                        <div style="font-size:11px;color:#888;letter-spacing:0.08em;text-transform:uppercase;margin-top:2px;">Edmonton's Photographer Marketplace</div>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
+        <!-- Card wrapper -->
+        <table role="presentation" class="card" cellspacing="0" cellpadding="0" border="0"
+          style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.07);">
 
-        <!-- Body -->
-        <tr>
-          <td style="padding:36px 36px 28px;">
-            ${body}
-          </td>
-        </tr>
+          <!-- ── Header ── -->
+          <tr>
+            <td style="background-color:${BRAND.black};padding:24px 36px 20px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td>
+                    <!-- Text-based logo — no broken images -->
+                    <div style="font-size:18px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;line-height:1;">
+                      TrueNorth<span style="color:${accentColor};">·</span>Frames
+                    </div>
+                    <div style="font-size:11px;color:#777777;letter-spacing:0.1em;text-transform:uppercase;margin-top:4px;">
+                      Edmonton's Photographer Marketplace
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
 
-        <!-- Footer -->
-        <tr>
-          <td style="background:#f9f9f8;border-top:1px solid #ebebeb;padding:20px 36px;text-align:center;">
-            <p style="margin:0 0 6px;font-size:12px;color:#999;">
-              TrueNorth Frames &middot; Edmonton, AB
-            </p>
-            <p style="margin:0;font-size:11px;color:#bbb;">
-              Questions? Email us at
-              <a href="mailto:support@truenorthframes.ca" style="color:#555;text-decoration:underline;">support@truenorthframes.ca</a>
-            </p>
-            <p style="margin:8px 0 0;font-size:11px;color:#ccc;">
-              You're receiving this because you have an account on TrueNorth Frames.
-            </p>
-          </td>
-        </tr>
+          <!-- Accent strip -->
+          <tr>
+            <td style="height:4px;background:linear-gradient(90deg,${accentColor} 0%,${accentColor}88 100%);font-size:0;line-height:0;">&nbsp;</td>
+          </tr>
 
-      </table>
-    </td></tr>
+          <!-- ── Body ── -->
+          <tr>
+            <td class="body-cell" style="padding:36px 40px 28px;">
+              ${body}
+            </td>
+          </tr>
+
+          <!-- ── Footer ── -->
+          <tr>
+            <td class="footer-cell" style="background-color:${BRAND.offwhite};border-top:1px solid ${BRAND.border};padding:24px 40px;text-align:center;">
+              <p style="margin:0 0 8px;font-size:13px;color:${BRAND.muted};line-height:1.5;">
+                <strong style="color:#444;">TrueNorth Frames</strong> &nbsp;·&nbsp; Edmonton, AB
+              </p>
+              <p style="margin:0 0 6px;font-size:12px;color:${BRAND.faint};line-height:1.5;">
+                Questions? &nbsp;<a href="mailto:support@truenorthframes.ca" style="color:#888;text-decoration:underline;">support@truenorthframes.ca</a>
+              </p>
+              <p style="margin:0;font-size:11px;color:#cccccc;line-height:1.5;">
+                You're receiving this because you have a TrueNorth Frames account. &nbsp;
+                <a href="${appUrl}/dashboard" style="color:#bbbbbb;text-decoration:underline;">Manage preferences</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+        <!-- /Card -->
+
+      </td>
+    </tr>
   </table>
+
 </body>
 </html>`
 }
 
-// ─── Reusable HTML snippets ───────────────────────────────────────────────────
+// ─── Reusable snippets ────────────────────────────────────────────────────────
 
 function h1(text: string) {
-  return `<h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#1a1a1a;letter-spacing:-0.4px;">${text}</h1>`
+  return `<h1 style="margin:0 0 6px;font-size:24px;font-weight:800;color:${BRAND.black};letter-spacing:-0.5px;line-height:1.2;">${text}</h1>`
 }
 
-function subtitle(text: string) {
-  return `<p style="margin:0 0 24px;font-size:14px;color:#888;line-height:1.5;">${text}</p>`
+function lead(text: string) {
+  return `<p style="margin:0 0 24px;font-size:15px;color:#666666;line-height:1.55;">${text}</p>`
 }
 
-function p(text: string) {
-  return `<p style="margin:0 0 16px;font-size:15px;color:#333;line-height:1.65;">${text}</p>`
+function p_(text: string) {
+  return `<p style="margin:0 0 16px;font-size:15px;color:#333333;line-height:1.65;">${text}</p>`
 }
 
-function cta(label: string, href: string) {
-  return `<table role="presentation" cellspacing="0" cellpadding="0" style="margin:24px 0 8px;">
+function divider() {
+  return `<div style="height:1px;background:${BRAND.border};margin:24px 0;font-size:0;line-height:0;">&nbsp;</div>`
+}
+
+// CTA button — full-width on mobile via class, inline otherwise
+function cta(label: string, href: string, color: string = BRAND.black) {
+  return `
+  <table role="presentation" class="cta-table" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0 8px;">
     <tr>
-      <td style="background:#1a1a1a;border-radius:10px;padding:14px 28px;">
-        <a href="${href}" style="font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;white-space:nowrap;">${label}</a>
+      <td class="cta-td" style="border-radius:10px;background-color:${color};">
+        <a href="${href}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;letter-spacing:-0.2px;">
+          ${label} &nbsp;→
+        </a>
       </td>
     </tr>
   </table>`
 }
 
+// Info box — stacked rows, mobile-safe (no percentage widths)
 function infoBox(rows: { label: string; value: string }[]) {
-  const inner = rows
-    .map(
-      (r) =>
-        `<tr>
-          <td style="padding:8px 16px;font-size:13px;color:#888;width:40%;vertical-align:top;">${r.label}</td>
-          <td style="padding:8px 16px;font-size:13px;color:#1a1a1a;font-weight:500;vertical-align:top;">${r.value}</td>
-        </tr>`
-    )
-    .join('<tr><td colspan="2" style="padding:0 16px;"><div style="height:1px;background:#f0f0f0;"></div></td></tr>')
+  const rowsHtml = rows.map(r => `
+    <tr>
+      <td style="padding:10px 16px;border-bottom:1px solid ${BRAND.border};">
+        <div class="info-label" style="font-size:11px;font-weight:600;color:#999999;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px;">${r.label}</div>
+        <div class="info-value" style="font-size:14px;color:${BRAND.black};font-weight:500;line-height:1.4;">${r.value}</div>
+      </td>
+    </tr>`).join('')
 
-  return `<table role="presentation" width="100%" style="border:1px solid #ebebeb;border-radius:10px;overflow:hidden;margin:20px 0;">
-    ${inner}
+  return `
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
+    style="border:1px solid ${BRAND.border};border-radius:10px;overflow:hidden;margin:20px 0;">
+    ${rowsHtml}
   </table>`
 }
 
-function divider() {
-  return `<div style="height:1px;background:#f0f0f0;margin:24px 0;"></div>`
-}
-
 function starRating(rating: number) {
-  const filled = Math.round(Math.max(0, Math.min(5, rating)))
+  const n = Math.round(Math.max(0, Math.min(5, rating)))
   const stars = Array.from({ length: 5 }, (_, i) =>
-    `<span style="font-size:18px;color:${i < filled ? '#f59e0b' : '#e5e7eb'};">★</span>`
-  ).join('')
-  return `<div style="margin:12px 0;">${stars}</div>`
+    `<span style="font-size:20px;color:${i < n ? '#f59e0b' : '#e5e7eb'};">&#9733;</span>`
+  ).join('&thinsp;')
+  return `<div style="margin:12px 0 16px;">${stars} <span style="font-size:14px;font-weight:600;color:#333;vertical-align:middle;margin-left:4px;">${rating}/5</span></div>`
 }
 
-function badge(text: string, color: string = '#1a1a1a') {
-  return `<span style="display:inline-block;background:${color}18;color:${color};font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;letter-spacing:0.04em;">${text.toUpperCase()}</span>`
+function alertBox(text: string, color: string = BRAND.blue) {
+  return `<div style="background:${color}11;border-left:3px solid ${color};border-radius:0 8px 8px 0;padding:14px 18px;margin:0 0 20px;font-size:14px;color:#333;line-height:1.6;">${text}</div>`
+}
+
+function quoteBlock(text: string) {
+  return `<div style="background:#f8f8f7;border-left:3px solid #dddddd;border-radius:0 8px 8px 0;padding:14px 18px;margin:0 0 20px;font-size:14px;color:#555555;line-height:1.65;font-style:italic;">&ldquo;${text}&rdquo;</div>`
+}
+
+function ul(items: string[]) {
+  const lis = items.map(i => `<li style="margin-bottom:6px;">${i}</li>`).join('')
+  return `<ul style="margin:0 0 20px;padding-left:22px;font-size:14px;color:#333333;line-height:1.7;">${lis}</ul>`
+}
+
+function badge(text: string, color: string = BRAND.black) {
+  return `<span style="display:inline-block;background:${color}18;color:${color};font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:0.05em;text-transform:uppercase;">${text}</span>`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Template definitions
+// Templates
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string; html: string }> = {
 
-  // ── Welcome — Client ────────────────────────────────────────────────────────
+  // ── Welcome — Client ──────────────────────────────────────────────────────
+
   welcome_client: (p) => ({
-    subject: `Welcome to TrueNorth Frames, ${p.firstName}!`,
+    subject: `Welcome to TrueNorth Frames, ${p.firstName}! 👋`,
     html: base({
-      preheader: `Find Edmonton's best photographers — completely free.`,
+      preheader: `Find Edmonton's best photographers — browsing and messaging is completely free.`,
       body: `
-        ${h1(`Welcome, ${p.firstName}! 👋`)}
-        ${subtitle('Your free TrueNorth Frames account is ready.')}
+        ${h1(`Welcome, ${p.firstName}!`)}
+        ${lead('Your TrueNorth Frames account is ready to go.')}
         ${divider()}
-        ${p_(`Browse our curated list of Edmonton photographers, send a message, and book a session — all at zero cost. No platform fees, ever.`)}
-        ${p_(`Here's what you can do right now:`)}
-        <ul style="margin:0 0 20px;padding-left:20px;font-size:14px;color:#333;line-height:2;">
-          <li>Browse verified photographers by specialty &amp; neighbourhood</li>
-          <li>Message photographers directly</li>
-          <li>Save your favourites for later</li>
-          <li>Request and manage bookings</li>
-        </ul>
-        ${cta('Browse Photographers', `${process.env.NEXT_PUBLIC_APP_URL}/photographers`)}
+        ${p_('Browse Edmonton photographers, message them directly, and book a session — all at zero cost. No platform fees, ever.')}
+        ${p_('Here\'s what you can do right now:')}
+        ${ul([
+          'Browse verified photographers by specialty &amp; neighbourhood',
+          'Message photographers directly — no middleman',
+          'Save your favourites for later',
+          'Request and manage bookings in one place',
+        ])}
+        ${cta('Browse Photographers', `${process.env.NEXT_PUBLIC_APP_URL}/photographers`, BRAND.green)}
         ${divider()}
-        ${p_(`Need help getting started? Reply to this email — we're a small Edmonton team and we actually read every message.`)}
+        ${p_('We\'re a small Edmonton team — if you ever need help, just reply to this email and a real person will get back to you.')}
       `,
     }),
   }),
 
-  // ── Welcome — Photographer ──────────────────────────────────────────────────
+  // ── Welcome — Photographer ────────────────────────────────────────────────
+
   welcome_photographer: (p) => ({
-    subject: `Your TrueNorth Frames application is under review`,
+    subject: `📸 We've received your profile, ${p.firstName} — under review now`,
     html: base({
-      preheader: `We've received your profile — our team will review it within 48 hours.`,
+      preheader: `Your TrueNorth Frames profile is under review. Here's what to do while you wait.`,
       body: `
         ${h1(`Thanks for joining, ${p.firstName}!`)}
-        ${subtitle('Your photographer profile is under review.')}
+        ${lead('Your photographer profile has been submitted and is under review.')}
         ${divider()}
-        ${p_(`We've received your profile and our team will review it within <strong>48 hours</strong>. You'll get an email as soon as it's approved and live on the marketplace.`)}
-        ${p_(`While you wait, you can still log in and complete your profile:`)}
-        <ul style="margin:0 0 20px;padding-left:20px;font-size:14px;color:#333;line-height:2;">
-          <li>Upload portfolio photos</li>
-          <li>Add your specialties &amp; pricing</li>
-          <li>Connect your Google Business Profile for a trust score</li>
-        </ul>
+        ${alertBox(`Our team will review your profile within <strong>1–2 business days</strong>. You'll get an email the moment it's approved and live on the marketplace.`, BRAND.blue)}
+        ${p_('While you wait, you can log in and get ahead:')}
+        ${ul([
+          'Upload your best portfolio photos (aim for 8–12)',
+          'Add your specialties and starting rate',
+          'Set your weekly availability',
+          'Connect your Google Business Profile to unlock your trust score',
+        ])}
         ${cta('Complete Your Profile', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer`)}
         ${divider()}
-        ${p_(`Questions about the review process? Email <a href="mailto:support@truenorthframes.ca" style="color:#1a1a1a;">support@truenorthframes.ca</a> — we respond within one business day.`)}
+        ${p_('Questions? Email <a href="mailto:support@truenorthframes.ca" style="color:#333;font-weight:600;">support@truenorthframes.ca</a> — we respond within one business day.')}
       `,
     }),
   }),
 
-  // ── Booking received (→ photographer) ──────────────────────────────────────
+  // ── Booking received (→ photographer) ────────────────────────────────────
+
   booking_received: (p) => ({
-    subject: `New booking request from ${p.clientName}`,
+    subject: `📅 New booking request from ${p.clientName}`,
     html: base({
-      preheader: `${p.clientName} wants to book a ${p.sessionType} session on ${p.date}.`,
+      preheader: `${p.clientName} wants to book a ${p.sessionType} session on ${p.date}. Respond within 24 hours.`,
       body: `
         ${h1('New Booking Request')}
-        ${subtitle(`You have a new request waiting for your response.`)}
+        ${lead('A client wants to book a session with you. Respond quickly — photographers who reply within 24 hours get significantly more bookings.')}
         ${divider()}
         ${infoBox([
           { label: 'Client',        value: String(p.clientName) },
           { label: 'Session type',  value: String(p.sessionType) },
-          { label: 'Date',          value: String(p.date) },
+          { label: 'Requested date',value: String(p.date) },
           { label: 'Location',      value: String(p.location ?? 'TBD') },
-          { label: 'Notes',         value: String(p.notes ?? 'None') },
+          { label: 'Notes',         value: String(p.notes ?? 'None provided') },
         ])}
-        ${p_(`Head to your dashboard to <strong>accept or decline</strong> this request. Clients appreciate a quick response — aim to reply within 24 hours.`)}
-        ${cta('View Booking Request', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer`)}
+        ${cta('Accept or Decline', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer?tab=requests`)}
         ${divider()}
-        ${p_(`If you have questions for the client, you can message them directly from your dashboard after viewing the request.`)}
+        ${p_('You can also message the client directly from your dashboard if you have questions before deciding.')}
       `,
     }),
   }),
 
-  // ── Booking confirmed (→ client) ────────────────────────────────────────────
+  // ── Booking confirmed (→ client) ──────────────────────────────────────────
+
   booking_confirmed: (p) => ({
-    subject: `Your booking with ${p.photographerName} is confirmed! 🎉`,
+    subject: `🎉 Booking confirmed with ${p.photographerName}!`,
     html: base({
-      preheader: `${p.photographerName} has accepted your booking for ${p.date}.`,
+      preheader: `${p.photographerName} has accepted your booking for ${p.date}. You're all set.`,
+      accentColor: BRAND.green,
       body: `
-        ${h1('Booking Confirmed!')}
-        ${subtitle(`Great news — your session is locked in.`)}
+        ${h1('Your Booking is Confirmed!')}
+        ${lead(`${p.photographerName} has accepted your request — you're all set for your session.`)}
         ${divider()}
         ${infoBox([
           { label: 'Photographer', value: String(p.photographerName) },
@@ -253,280 +321,353 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
           { label: 'Date',         value: String(p.date) },
           { label: 'Location',     value: String(p.location ?? 'TBD') },
         ])}
-        ${p_(`Your photographer may reach out with more details. You can also message them directly from your dashboard at any time.`)}
-        ${p.photographerNote ? p_(`<strong>Note from ${p.photographerName}:</strong> "${p.photographerNote}"`) : ''}
-        ${cta('View My Bookings', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/client`)}
+        ${p.photographerNote ? alertBox(`<strong>Note from ${p.photographerName}:</strong> ${p.photographerNote}`, BRAND.blue) : ''}
+        ${p_('Your photographer may reach out with more details. You can also message them anytime from your dashboard.')}
+        ${cta('View My Bookings', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/client`, BRAND.green)}
         ${divider()}
-        ${p_(`After your session, you'll be able to leave a review to help other Edmonton clients find great photographers.`)}
+        ${p_('After your session, you\'ll be able to leave a review — it helps other Edmonton clients find great photographers.')}
       `,
     }),
   }),
 
-  // ── Booking declined (→ client) ─────────────────────────────────────────────
+  // ── Booking declined (→ client) ───────────────────────────────────────────
+
   booking_declined: (p) => ({
     subject: `Booking update from ${p.photographerName}`,
     html: base({
-      preheader: `${p.photographerName} is unable to take your booking for ${p.date}.`,
+      preheader: `${p.photographerName} is unable to take your booking for ${p.date}. Browse other photographers.`,
       body: `
         ${h1('Booking Not Available')}
-        ${subtitle(`Unfortunately, ${p.photographerName} couldn't accept this request.`)}
+        ${lead(`Unfortunately, ${p.photographerName} couldn't accept your request for ${p.date}.`)}
         ${divider()}
         ${infoBox([
           { label: 'Photographer', value: String(p.photographerName) },
           { label: 'Date',         value: String(p.date) },
           { label: 'Session type', value: String(p.sessionType) },
         ])}
-        ${p.photographerNote ? p_(`<strong>Reason from ${p.photographerName}:</strong> "${p.photographerNote}"`) : p_(`No reason was provided.`)}
-        ${p_(`Don't worry — there are plenty of great photographers on TrueNorth Frames. Browse others with similar styles and availability.`)}
+        ${p.photographerNote
+          ? alertBox(`<strong>Message from ${p.photographerName}:</strong> ${p.photographerNote}`, BRAND.amber)
+          : p_('No reason was provided.')}
+        ${p_('Don\'t worry — there are many great photographers on TrueNorth Frames. Browse others with similar styles and availability.')}
         ${cta('Find Another Photographer', `${process.env.NEXT_PUBLIC_APP_URL}/photographers`)}
       `,
     }),
   }),
 
-  // ── Booking completed (→ client) ────────────────────────────────────────────
+  // ── Booking completed (→ client) ──────────────────────────────────────────
+
   booking_completed: (p) => ({
-    subject: `How was your session with ${p.photographerName}?`,
+    subject: `How was your session with ${p.photographerName}? ⭐`,
     html: base({
-      preheader: `Your session is complete — leave a review to help the Edmonton community.`,
+      preheader: `Your session is complete — leave a quick review to help the Edmonton photography community.`,
+      accentColor: BRAND.amber,
       body: `
         ${h1('Session Complete!')}
-        ${subtitle(`Hope you had an amazing shoot. 📸`)}
+        ${lead(`Hope you had an amazing shoot with ${p.photographerName} on ${p.date}. 📸`)}
         ${divider()}
-        ${p_(`Your session with <strong>${p.photographerName}</strong> on <strong>${p.date}</strong> has been marked as complete.`)}
-        ${p_(`Reviews help other Edmonton clients make great decisions — and they mean the world to independent photographers. Takes less than 60 seconds.`)}
-        ${cta('Leave a Review', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/client`)}
+        ${p_('Reviews help other Edmonton clients make great decisions — and they mean the world to independent photographers. It takes less than 60 seconds.')}
+        ${alertBox('Your review is visible on the photographer\'s public profile and helps build trust in the Edmonton community.', BRAND.amber)}
+        ${cta('Leave a Review', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/client`, BRAND.amber)}
         ${divider()}
-        ${p_(`If anything didn't go as expected, you can also contact our support team and we'll look into it.`)}
+        ${p_('If anything didn\'t go as expected, contact our support team and we\'ll look into it promptly.')}
       `,
     }),
   }),
 
-  // ── New conversation (→ photographer) ──────────────────────────────────────
+  // ── New conversation (→ photographer) ────────────────────────────────────
+
   new_conversation: (p) => ({
-    subject: `${p.clientName} sent you a message`,
+    subject: `💬 ${p.clientName} sent you a message`,
     html: base({
-      preheader: `A new client has reached out — reply to keep the conversation going.`,
+      preheader: `A new client has reached out — reply quickly to win the booking.`,
       body: `
-        ${h1(`New Message from ${p.clientName}`)}
-        ${subtitle(`A client wants to connect with you on TrueNorth Frames.`)}
+        ${h1(`Message from ${p.clientName}`)}
+        ${lead('A client wants to connect with you on TrueNorth Frames.')}
         ${divider()}
-        <div style="background:#f9f9f8;border-left:3px solid #1a1a1a;border-radius:0 8px 8px 0;padding:16px 20px;margin:0 0 24px;font-size:14px;color:#333;line-height:1.6;font-style:italic;">
-          "${p.messagePreview}"
-        </div>
-        ${p_(`Photographers who respond within a few hours get significantly more bookings. Head to your dashboard to reply.`)}
-        ${cta('Reply to Message', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer`)}
+        ${quoteBlock(String(p.messagePreview))}
+        ${p_('Photographers who respond within a few hours get significantly more bookings. Head to your dashboard to reply.')}
+        ${cta('Reply to Message', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer?tab=messages`)}
         ${divider()}
-        ${p_(`If this message seems inappropriate or is spam, you can report it from within the conversation.`)}
+        ${p_('If this message seems inappropriate or is spam, you can report it from within the conversation.')}
       `,
     }),
   }),
 
-  // ── Review received (→ photographer) ───────────────────────────────────────
+  // ── Review received (→ photographer) ─────────────────────────────────────
+
   review_received: (p) => ({
-    subject: `${p.clientName} left you a ${p.rating}★ review`,
+    subject: `⭐ ${p.clientName} left you a ${p.rating}-star review`,
     html: base({
-      preheader: `See what your client said about your work.`,
+      preheader: `See what your client said about your work — and reply to build your reputation.`,
+      accentColor: BRAND.amber,
       body: `
         ${h1('New Review')}
-        ${subtitle(`${p.clientName} reviewed your session on ${p.date}.`)}
+        ${lead(`${p.clientName} reviewed your session on ${p.date}.`)}
         ${divider()}
         ${starRating(Number(p.rating))}
-        ${p.reviewBody ? `<div style="background:#f9f9f8;border-radius:10px;padding:16px 20px;margin:0 0 24px;font-size:14px;color:#333;line-height:1.65;font-style:italic;">"${p.reviewBody}"</div>` : p_('No written review — rating only.')}
-        ${p_(`Responding to reviews shows professionalism and builds trust with future clients. You can reply from your dashboard.`)}
-        ${cta('View & Reply to Review', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer`)}
+        ${p.reviewBody ? quoteBlock(String(p.reviewBody)) : p_('Rating only — no written review.')}
+        ${p_('Responding to reviews shows professionalism and builds trust with future clients. You can reply directly from your dashboard.')}
+        ${cta('View & Reply to Review', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer?tab=reviews`)}
       `,
     }),
   }),
 
-  // ── Review reply (→ client) ─────────────────────────────────────────────────
+  // ── Review reply (→ client) ───────────────────────────────────────────────
+
   review_reply: (p) => ({
     subject: `${p.photographerName} replied to your review`,
     html: base({
-      preheader: `Your photographer responded to the review you left.`,
+      preheader: `Your photographer responded to the review you left — see what they said.`,
       body: `
         ${h1('Your Review Got a Reply')}
-        ${subtitle(`${p.photographerName} responded to your review.`)}
+        ${lead(`${p.photographerName} responded to your review.`)}
         ${divider()}
-        ${p_(`Your original review:`)}
-        <div style="background:#f9f9f8;border-radius:10px;padding:14px 18px;margin:0 0 16px;font-size:13px;color:#555;line-height:1.6;font-style:italic;">"${p.reviewBody}"</div>
+        ${p_('Your review:')}
+        ${quoteBlock(String(p.reviewBody))}
         ${p_(`<strong>${p.photographerName}'s reply:</strong>`)}
-        <div style="background:#f0f4ff;border-radius:10px;padding:14px 18px;margin:0 0 24px;font-size:14px;color:#1a1a1a;line-height:1.65;font-style:italic;">"${p.replyBody}"</div>
+        <div style="background:#f0f7ff;border-left:3px solid ${BRAND.blue};border-radius:0 8px 8px 0;padding:14px 18px;margin:0 0 24px;font-size:14px;color:#1a1a1a;line-height:1.65;font-style:italic;">&ldquo;${p.replyBody}&rdquo;</div>
         ${cta('View on TrueNorth Frames', `${process.env.NEXT_PUBLIC_APP_URL}/photographers/${p.photographerUsername}`)}
       `,
     }),
   }),
 
-  // ── Support ticket created (→ admin notification email) ────────────────────
+  // ── Support ticket created (→ admin) ──────────────────────────────────────
+
   support_ticket_created: (p) => ({
-    subject: `[Support #${p.ticketId?.toString().slice(0, 8)}] New ticket: ${p.subject}`,
+    subject: `[Support #${String(p.ticketId).slice(0, 8)}] ${p.subject}`,
     html: base({
-      preheader: `A new support ticket requires your attention.`,
+      preheader: `New support ticket from ${p.submitterName} — action required.`,
+      accentColor: BRAND.red,
       body: `
         ${h1('New Support Ticket')}
-        ${subtitle(`Submitted by ${p.submitterName} · ${p.category}`)}
+        ${badge('Action Required', BRAND.red)}
         ${divider()}
         ${infoBox([
-          { label: 'Ticket ID',   value: `#${String(p.ticketId).slice(0, 8)}` },
-          { label: 'Category',    value: String(p.category).replace(/_/g, ' ') },
-          { label: 'Submitted by',value: String(p.submitterName) },
-          { label: 'Role',        value: String(p.submitterRole) },
-          { label: 'Subject',     value: String(p.subject) },
+          { label: 'Ticket ID',    value: `#${String(p.ticketId).slice(0, 8)}` },
+          { label: 'Category',     value: String(p.category).replace(/_/g, ' ') },
+          { label: 'Submitted by', value: `${p.submitterName} (${p.submitterRole})` },
+          { label: 'Subject',      value: String(p.subject) },
         ])}
-        <div style="background:#f9f9f8;border-radius:10px;padding:14px 18px;margin:0 0 24px;font-size:14px;color:#333;line-height:1.65;">
-          ${String(p.description)}
-        </div>
-        ${cta('View in Admin Portal', `${process.env.NEXT_PUBLIC_APP_URL}/admin/support`)}
+        ${p_('<strong>Message:</strong>')}
+        ${quoteBlock(String(p.description))}
+        ${cta('View in Admin Portal', `${process.env.NEXT_PUBLIC_APP_URL}/admin/support`, BRAND.red)}
       `,
     }),
   }),
 
-  // ── Support ticket resolved (→ submitter) ───────────────────────────────────
+  // ── Support ticket resolved (→ submitter) ─────────────────────────────────
+
   support_ticket_resolved: (p) => ({
-    subject: `Your support ticket has been resolved`,
+    subject: `✅ Your support ticket has been resolved`,
     html: base({
       preheader: `We've resolved your support request — here's what happened.`,
+      accentColor: BRAND.green,
       body: `
         ${h1('Ticket Resolved')}
-        ${subtitle(`Support ticket #${String(p.ticketId).slice(0, 8)} · ${String(p.subject)}`)}
+        ${lead(`Support ticket #${String(p.ticketId).slice(0, 8)} — ${p.subject}`)}
         ${divider()}
         ${p_(`Hi ${p.firstName}, your support request has been reviewed and resolved by our team.`)}
         ${p.resolutionNote
-          ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin:0 0 24px;font-size:14px;color:#166534;line-height:1.65;">
-              <strong>Resolution:</strong><br/>${p.resolutionNote}
-            </div>`
-          : p_(`Our team has reviewed your ticket and taken appropriate action.`)
-        }
-        ${p_(`If you have further questions or the issue persists, don't hesitate to reach out again.`)}
-        ${cta('Back to Dashboard', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/${p.role === 'photographer' ? 'photographer' : 'client'}`)}
+          ? alertBox(`<strong>Resolution:</strong><br/>${p.resolutionNote}`, BRAND.green)
+          : p_('Our team has reviewed your ticket and taken appropriate action.')}
+        ${p_('If you have further questions or the issue persists, don\'t hesitate to reach out again — just reply to this email.')}
+        ${cta('Back to Dashboard', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/${p.role === 'photographer' ? 'photographer' : 'client'}`, BRAND.green)}
       `,
     }),
   }),
 
-  // ── Photographer approved (→ photographer) ──────────────────────────────────
+  // ── Photographer approved ─────────────────────────────────────────────────
+
   photographer_approved: (p) => ({
-    subject: `You're live on TrueNorth Frames! 🎉`,
+    subject: `🎉 You're live on TrueNorth Frames, ${p.firstName}!`,
     html: base({
-      preheader: `Your photographer profile has been approved — clients can now find you.`,
+      preheader: `Your photographer profile is approved — Edmonton clients can now find and book you.`,
+      accentColor: BRAND.green,
       body: `
         ${h1(`You're Live, ${p.firstName}!`)}
-        ${subtitle('Your TrueNorth Frames profile is now publicly visible.')}
+        ${lead('Your TrueNorth Frames profile has been approved and is publicly visible to Edmonton clients.')}
         ${divider()}
-        ${p_(`Congratulations — your profile has been reviewed and approved. Edmonton clients can now discover and contact you through the marketplace.`)}
-        ${p_(`A few things to do to maximise your bookings:`)}
-        <ul style="margin:0 0 20px;padding-left:20px;font-size:14px;color:#333;line-height:2;">
-          <li>Upload 6–12 of your best portfolio shots</li>
-          <li>Connect your Google Business Profile to unlock your trust score</li>
-          <li>Add clear pricing and availability details</li>
-          <li>Share your public profile link on social media</li>
-        </ul>
-        ${cta('View Your Public Profile', `${process.env.NEXT_PUBLIC_APP_URL}/photographers/${p.username}`)}
+        ${alertBox('Photographers with complete profiles get 3× more enquiries. Take 5 minutes to finish your setup.', BRAND.green)}
+        ${p_('A few things to do to maximise your bookings:')}
+        ${ul([
+          'Upload 8–12 of your best portfolio shots',
+          'Connect your Google Business Profile to unlock your trust score',
+          'Set clear pricing and weekly availability',
+          'Share your profile link on Instagram and Facebook',
+        ])}
+        ${cta('View Your Public Profile', `${process.env.NEXT_PUBLIC_APP_URL}/photographers/${p.username}`, BRAND.green)}
         ${divider()}
-        ${p_(`Your profile link: <a href="${process.env.NEXT_PUBLIC_APP_URL}/photographers/${p.username}" style="color:#1a1a1a;font-weight:500;">${process.env.NEXT_PUBLIC_APP_URL}/photographers/${p.username}</a>`)}
+        ${p_(`Your profile link: <a href="${process.env.NEXT_PUBLIC_APP_URL}/photographers/${p.username}" style="color:#333;font-weight:600;word-break:break-all;">${process.env.NEXT_PUBLIC_APP_URL}/photographers/${p.username}</a>`)}
       `,
     }),
   }),
 
-  // ── Photographer suspended (→ photographer) ─────────────────────────────────
+  // ── Photographer suspended ────────────────────────────────────────────────
+
   photographer_suspended: (p) => ({
-    subject: `Important notice regarding your TrueNorth Frames account`,
+    subject: `Important notice about your TrueNorth Frames account`,
     html: base({
       preheader: `Your account has been suspended — please contact us to resolve this.`,
+      accentColor: BRAND.red,
       body: `
         ${h1('Account Suspended')}
-        ${badge('Action Required', '#dc2626')}
+        ${badge('Action Required', BRAND.red)}
         ${divider()}
         ${p_(`Hi ${p.firstName}, your TrueNorth Frames account has been temporarily suspended.`)}
         ${p.reason
-          ? `${p_(`<strong>Reason:</strong> ${p.reason}`)}`
-          : p_(`Our team found activity on your account that requires review.`)
-        }
-        ${p_(`While suspended, your profile is hidden from the marketplace and you cannot receive new bookings. Existing conversations remain accessible.`)}
-        ${p_(`To appeal this decision or get more information, please email us directly.`)}
-        <table role="presentation" cellspacing="0" cellpadding="0" style="margin:24px 0 8px;">
-          <tr>
-            <td style="background:#1a1a1a;border-radius:10px;padding:14px 28px;">
-              <a href="mailto:support@truenorthframes.ca?subject=Account suspension appeal — ${encodeURIComponent(String(p.email))}" style="font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Contact Support</a>
-            </td>
-          </tr>
-        </table>
+          ? alertBox(`<strong>Reason:</strong> ${p.reason}`, BRAND.red)
+          : p_('Our team found activity on your account that requires review.')}
+        ${p_('While suspended, your profile is hidden from the marketplace and you cannot receive new booking requests. Existing conversations remain accessible.')}
+        ${p_('To appeal this decision or get more information, email us directly:')}
+        ${cta('Contact Support', `mailto:support@truenorthframes.ca?subject=Account suspension — ${encodeURIComponent(String(p.email))}`, BRAND.red)}
       `,
     }),
   }),
 
-  // ── Review removed by admin (→ photographer) ────────────────────────────────
+  // ── Review removed by admin (→ photographer) ──────────────────────────────
+
   review_removed: (p) => ({
     subject: `A review on your profile has been removed`,
     html: base({
-      preheader: `After investigation, we've removed a review that violated our policies.`,
+      preheader: `After investigation, we removed a review that violated our policies.`,
+      accentColor: BRAND.green,
       body: `
         ${h1('Review Removed')}
-        ${subtitle('A flagged review has been taken down from your profile.')}
+        ${lead('A flagged review has been taken down from your profile.')}
         ${divider()}
-        ${p_(`Hi ${p.firstName}, after reviewing the report you submitted, our team found that the review in question violated TrueNorth Frames' review policies.`)}
-        ${p_(`The review has been <strong>permanently removed</strong> from your public profile and will no longer appear or affect your ratings.`)}
-        ${p_(`Your trust score and rating averages will update at the next sync.`)}
-        ${cta('View Your Profile', `${process.env.NEXT_PUBLIC_APP_URL}/photographers/${p.username}`)}
+        ${p_(`Hi ${p.firstName}, after reviewing your report, our team found the review violated TrueNorth Frames' policies.`)}
+        ${alertBox('The review has been <strong>permanently removed</strong> from your public profile and will no longer affect your ratings. Your trust score will update at the next sync.', BRAND.green)}
+        ${cta('View Your Profile', `${process.env.NEXT_PUBLIC_APP_URL}/photographers/${p.username}`, BRAND.green)}
         ${divider()}
-        ${p_(`Thank you for helping keep TrueNorth Frames trustworthy. If you have any questions, reply to this email.`)}
+        ${p_('Thank you for helping keep TrueNorth Frames trustworthy. If you have any questions, reply to this email.')}
       `,
     }),
   }),
 
-  // ── Review flag dismissed (→ photographer) ──────────────────────────────────
+  // ── Review flag dismissed (→ photographer) ────────────────────────────────
+
   review_dismissed: (p) => ({
     subject: `Update on your review report`,
     html: base({
-      preheader: `Our team has reviewed your report and the review will remain on your profile.`,
+      preheader: `Our team reviewed your report — the review will remain on your profile.`,
       body: `
         ${h1('Review Report Update')}
-        ${subtitle('Our team has completed its review of your report.')}
+        ${lead('Our team has completed its review of your flagged report.')}
         ${divider()}
-        ${p_(`Hi ${p.firstName}, thank you for flagging a review on your profile. We take every report seriously and reviewed this one carefully.`)}
-        ${p_(`After investigation, our team determined the review does not violate our policies and it will <strong>remain on your profile</strong>.`)}
-        ${p_(`If you believe there are additional details we should consider, please contact our support team directly and we'll take another look.`)}
-        <table role="presentation" cellspacing="0" cellpadding="0" style="margin:24px 0 8px;">
-          <tr>
-            <td style="background:#1a1a1a;border-radius:10px;padding:14px 28px;">
-              <a href="mailto:support@truenorthframes.ca?subject=Review dispute — ${encodeURIComponent(String(p.username))}" style="font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Contact Support</a>
-            </td>
-          </tr>
-        </table>
+        ${p_(`Hi ${p.firstName}, thank you for flagging a review — we take every report seriously.`)}
+        ${alertBox('After careful investigation, our team determined the review does not violate our policies and it will <strong>remain on your profile</strong>.', BRAND.amber)}
+        ${p_('If you believe there are additional details we should consider, contact our support team directly and we\'ll take another look.')}
+        ${cta('Contact Support', `mailto:support@truenorthframes.ca?subject=Review dispute — ${encodeURIComponent(String(p.username))}`)}
       `,
     }),
   }),
 
-  // ── Booking reminder → client ───────────────────────────────────────────────
-  booking_reminder_client: (p) => ({
-    subject: `Reminder: your session with ${p.photographerName} is tomorrow`,
+  // ── Profile rejected ──────────────────────────────────────────────────────
+
+  photographer_rejected: (p) => ({
+    subject: `Your TrueNorth Frames profile needs a few updates`,
     html: base({
-      preheader: `Just a heads-up — your photography session is tomorrow.`,
+      preheader: `We couldn't approve your profile yet — here's exactly what to fix.`,
+      accentColor: BRAND.amber,
       body: `
-        ${h1('Session Tomorrow! 📸')}
-        ${subtitle(`Your booking with ${p.photographerName} is confirmed for tomorrow.`)}
+        ${h1('Profile Needs Some Work')}
+        ${lead('Your profile isn\'t quite ready yet — but your account is still active and you can fix it now.')}
+        ${divider()}
+        ${p_(`Hi ${p.firstName}, thank you for joining TrueNorth Frames. After reviewing your profile, our team wasn't able to approve it at this time.`)}
+        ${p.reason ? alertBox(`<strong>Reason from our team:</strong> ${p.reason}`, BRAND.amber) : ''}
+        ${p_('The most common reasons profiles aren\'t approved:')}
+        ${ul([
+          'Bio is too short or doesn\'t describe your photography work',
+          'No portfolio photos uploaded',
+          'Rate or location not set',
+          'Profile photo missing',
+        ])}
+        ${p_('Your account is still active. Log in, fix the issues, and your updated profile will be automatically reviewed within 1–2 business days.')}
+        ${cta('Fix My Profile', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer`, BRAND.amber)}
+        ${divider()}
+        ${p_('Questions? Just reply to this email — we\'ll help you get approved.')}
+      `,
+    }),
+  }),
+
+  // ── Booking cancelled by client (→ photographer) ─────────────────────────
+
+  booking_cancelled_by_client: (p) => ({
+    subject: `Booking cancelled by ${p.clientName}`,
+    html: base({
+      preheader: `${p.clientName} has cancelled their booking for ${p.date}.`,
+      accentColor: BRAND.amber,
+      body: `
+        ${h1('Booking Cancelled')}
+        ${lead(`${p.clientName} has cancelled their booking for ${p.date}.`)}
+        ${divider()}
+        ${infoBox([
+          { label: 'Client',       value: String(p.clientName) },
+          { label: 'Date',         value: String(p.date) },
+          { label: 'Session type', value: String(p.sessionType) },
+        ])}
+        ${p.reason ? alertBox(`<strong>Reason from client:</strong> ${p.reason}`, BRAND.amber) : ''}
+        ${p_('This time slot has been freed up on your availability calendar. No action required.')}
+        ${cta('View Your Calendar', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer?tab=availability`)}
+      `,
+    }),
+  }),
+
+  // ── Cancellation confirmed by photographer (→ client) ─────────────────────
+
+  booking_cancellation_confirmed: (p) => ({
+    subject: `Your cancellation request has been confirmed`,
+    html: base({
+      preheader: `${p.photographerName} has confirmed the cancellation of your session on ${p.date}.`,
+      body: `
+        ${h1('Cancellation Confirmed')}
+        ${lead(`${p.photographerName} has accepted your cancellation request.`)}
+        ${divider()}
+        ${infoBox([
+          { label: 'Photographer', value: String(p.photographerName) },
+          { label: 'Date',         value: String(p.date) },
+          { label: 'Session type', value: String(p.sessionType) },
+        ])}
+        ${p_('Your booking has been fully cancelled. If you\'d like to rebook or find another photographer, browse the marketplace anytime.')}
+        ${cta('Browse Photographers', `${process.env.NEXT_PUBLIC_APP_URL}/photographers`)}
+      `,
+    }),
+  }),
+
+  // ── Booking reminder → client ─────────────────────────────────────────────
+
+  booking_reminder_client: (p) => ({
+    subject: `📸 Reminder: your session with ${p.photographerName} is tomorrow`,
+    html: base({
+      preheader: `Just a heads-up — your photography session is tomorrow. Here are the details.`,
+      body: `
+        ${h1('Session Tomorrow!')}
+        ${lead(`Your booking with ${p.photographerName} is confirmed for tomorrow.`)}
         ${divider()}
         ${infoBox([
           { label: 'Photographer', value: String(p.photographerName) },
           { label: 'Date',         value: String(p.date) },
           { label: 'Time',         value: String(p.timeSlot) },
-          { label: 'Location',     value: String(p.location ?? 'TBD — check with your photographer') },
+          { label: 'Location',     value: String(p.location ?? 'TBD — confirm with your photographer') },
           { label: 'Session type', value: String(p.sessionType) },
         ])}
-        ${p_(`Have any last-minute questions? Message your photographer directly from your dashboard.`)}
-        ${cta('View Booking', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/client`)}
+        ${p_('Have last-minute questions? Message your photographer directly from your dashboard.')}
+        ${cta('View Booking Details', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/client`)}
         ${divider()}
-        ${p_(`After your session, you'll be able to leave a review. It takes less than a minute and makes a big difference for independent photographers.`)}
+        ${p_('After your session, please leave a review — it takes less than a minute and makes a real difference for independent photographers.')}
       `,
     }),
   }),
 
-  // ── Booking reminder → photographer ────────────────────────────────────────
+  // ── Booking reminder → photographer ──────────────────────────────────────
+
   booking_reminder_photographer: (p) => ({
-    subject: `Reminder: session with ${p.clientName} is tomorrow`,
+    subject: `📅 Reminder: session with ${p.clientName} is tomorrow`,
     html: base({
-      preheader: `You have a photography session booked for tomorrow.`,
+      preheader: `You have a photography session booked for tomorrow — here are the details.`,
       body: `
         ${h1('Session Tomorrow')}
-        ${subtitle(`Just a reminder about your booking for tomorrow.`)}
+        ${lead(`Just a reminder about your confirmed booking for tomorrow.`)}
         ${divider()}
         ${infoBox([
           { label: 'Client',       value: String(p.clientName) },
@@ -535,12 +676,13 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
           { label: 'Location',     value: String(p.location ?? 'TBD') },
           { label: 'Session type', value: String(p.sessionType) },
         ])}
-        ${p.clientNote ? p_(`<strong>Client note:</strong> "${p.clientNote}"`) : ''}
-        ${p_(`Need to reach your client? You can message them directly from your dashboard.`)}
-        ${cta('View Booking', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer`)}
+        ${p.clientNote ? quoteBlock(String(p.clientNote)) : ''}
+        ${p_('Need to reach your client? Message them directly from your dashboard.')}
+        ${cta('View Booking Details', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer?tab=requests`)}
       `,
     }),
   }),
+
 }
 
 // ─── Renderer ─────────────────────────────────────────────────────────────────
@@ -552,9 +694,4 @@ export function renderTemplate(
   const fn = TEMPLATES[templateId]
   if (!fn) throw new Error(`Unknown email template: ${templateId}`)
   return fn(payload)
-}
-
-// ─── Internal alias (avoids name collision with template p() helper) ──────────
-function p_(text: string) {
-  return `<p style="margin:0 0 16px;font-size:15px;color:#333;line-height:1.65;">${text}</p>`
 }

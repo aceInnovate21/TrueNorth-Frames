@@ -24,7 +24,7 @@ export async function GET(
       id, username, display_name, tagline, bio, location,
       avatar_url, cover_image_url, website_url, instagram_url,
       rate_display, rate_note, trust_score, native_avg_rating,
-      native_review_count, profile_view_count, years_experience, created_at,
+      native_review_count, profile_view_count, years_experience, completeness_score, created_at,
       contact_instagram_url, contact_facebook_url
     `)
     .eq('username', params.username)
@@ -77,21 +77,33 @@ export async function GET(
 
   // ── Badge signals for this profile ────────────────────────────────────────
   const gbpLink = (links ?? []).find((l: any) => l.platform === 'google')
-  const [{ count: platformReviewCount }, { count: completedBookings }] = await Promise.all([
+  const [
+    { count: platformReviewCount },
+    { count: completedBookings },
+    { data: gbpOAuthRow },
+  ] = await Promise.all([
     db.from('reviews').select('*', { count: 'exact', head: true })
       .eq('photographer_id', photographerId).eq('flag_status', 'none'),
     db.from('booking_requests').select('*', { count: 'exact', head: true })
       .eq('photographer_id', photographerId).eq('status', 'completed'),
+    db.from('platform_oauth_tokens').select('photographer_id')
+      .eq('photographer_id', photographerId).eq('platform', 'google').eq('is_active', true).maybeSingle(),
   ])
+
+  const accountAgeDays = profile.created_at
+    ? Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 86400))
+    : 0
+
   const badgeSignals: BadgeSignals = {
-    yearsExperience:     profile.years_experience ?? null,
-    hasGbp:              !!gbpLink,
-    hasWebsite:          !!(profile.website_url?.trim()),
-    hasGoogleReviews:    (gbpLink?.platform_review_count ?? 0) > 0,
-    portfolioPhotoCount: (portfolioPhotos ?? []).length,
-    platformReviewCount: platformReviewCount ?? 0,
-    completedBookings:   completedBookings   ?? 0,
-    trustScore:          Number(profile.trust_score ?? 0),
+    portfolioPhotoCount:  (portfolioPhotos ?? []).length,
+    platformReviewCount:  platformReviewCount ?? 0,
+    nativeAvgRating:      Number(profile.native_avg_rating ?? 0),
+    completedBookings:    completedBookings   ?? 0,
+    completenessScore:    Number(profile.completeness_score ?? 0),
+    accountAgeDays,
+    isGbpOAuthConnected:  !!gbpOAuthRow,
+    gbpReviewCount:       gbpLink?.platform_review_count ?? 0,
+    yearsExperience:      profile.years_experience ?? null,
     // Single-profile view — no cross-photographer ranking context
     isMostReviewed: false,
     isMostBooked:   false,

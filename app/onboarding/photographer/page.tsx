@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import {
-  ArrowRight, ArrowLeft, CheckCircle2, Camera, MapPin, DollarSign,
+  ArrowRight, ArrowLeft, CheckCircle2, Camera,
   User, Globe, Shield, Zap, AlertCircle, Star,
 } from 'lucide-react'
 
@@ -20,98 +20,44 @@ const EDMONTON_AREAS = [
   'West Edmonton', 'North Edmonton', 'South Edmonton',
 ]
 
-const STEPS = ['Account', 'Basics', 'Specialties', 'Trust', 'Done']
+const STEPS = ['Account', 'Basics', 'Specialties', 'Presence', 'Done']
 
-// ─── Badge preview logic (mirrors lib/badges.ts, simplified for onboarding) ──
+// ─── Badge ladder shown during onboarding ────────────────────────────────────
 
-type BadgePreview = {
-  emoji: string
-  label: string
-  description: string
-  color: string
-  textColor: string
-  borderColor: string
-}
-
-function computeOnboardingBadge({
-  yearsExperience,
-  hasGbp,
-  hasWebsite,
-  hasGbpReviews,
-}: {
-  yearsExperience: string
-  hasGbp: boolean | null
-  hasWebsite: boolean | null
-  hasGbpReviews: boolean | null
-}): BadgePreview {
-  const years = yearsExperience ? Number(yearsExperience) : null
-  const isSenior = years !== null && years >= 3
-  const isTrustedPro = isSenior && hasGbp === true && hasWebsite === true && hasGbpReviews === true
-
-  if (isTrustedPro) {
-    return {
-      emoji: '✅',
-      label: 'Trusted Pro',
-      description: '3+ years Edmonton experience, verified Google Business Profile with reviews, and a website.',
-      color: 'bg-emerald-50',
-      textColor: 'text-emerald-700',
-      borderColor: 'border-emerald-200',
-    }
-  }
-
-  if (isSenior && hasGbp === true && hasGbpReviews === true && hasWebsite !== true) {
-    return {
-      emoji: '✅',
-      label: 'Trusted Pro (almost)',
-      description: 'Add your website URL to unlock Trusted Pro. You\'re very close!',
-      color: 'bg-emerald-50',
-      textColor: 'text-emerald-700',
-      borderColor: 'border-emerald-200',
-    }
-  }
-
-  if (years !== null && years < 3) {
-    return {
-      emoji: '🌟',
-      label: 'Rising Talent',
-      description: 'Fresh perspective — upload 5+ portfolio photos to activate this badge.',
-      color: 'bg-amber-50',
-      textColor: 'text-amber-700',
-      borderColor: 'border-amber-200',
-    }
-  }
-
-  if (years === 0) {
-    return {
-      emoji: '🌟',
-      label: 'Rising Talent',
-      description: 'Just starting out — upload 5+ portfolio photos to activate this badge.',
-      color: 'bg-amber-50',
-      textColor: 'text-amber-700',
-      borderColor: 'border-amber-200',
-    }
-  }
-
-  if (isSenior) {
-    return {
-      emoji: '🌟',
-      label: 'Rising Talent → Trusted Pro',
-      description: 'Connect Google Business Profile with reviews + add your website to unlock Trusted Pro.',
-      color: 'bg-amber-50',
-      textColor: 'text-amber-700',
-      borderColor: 'border-amber-200',
-    }
-  }
-
-  return {
+const BADGE_LADDER = [
+  {
     emoji: '🆕',
     label: 'Newly Joined',
-    description: 'Complete your profile and upload photos to earn a badge.',
     color: 'bg-ink-50',
     textColor: 'text-ink-500',
     borderColor: 'border-ink-100',
-  }
-}
+    how: 'You start here — complete your profile to move up.',
+  },
+  {
+    emoji: '🌟',
+    label: 'Rising Talent',
+    color: 'bg-amber-50',
+    textColor: 'text-amber-700',
+    borderColor: 'border-amber-200',
+    how: 'Upload 5+ portfolio photos and reach 60% profile completeness.',
+  },
+  {
+    emoji: '🔵',
+    label: 'Verified Pro',
+    color: 'bg-blue-50',
+    textColor: 'text-blue-700',
+    borderColor: 'border-blue-200',
+    how: 'Connect your Google Business Profile via OAuth with at least 1 review.',
+  },
+  {
+    emoji: '✅',
+    label: 'Trusted Pro',
+    color: 'bg-emerald-50',
+    textColor: 'text-emerald-700',
+    borderColor: 'border-emerald-200',
+    how: 'Complete 3+ bookings and earn a platform rating of 4.0+ on TrueNorth Frames.',
+  },
+]
 
 // ─── Yes / No button pair ─────────────────────────────────────────────────────
 
@@ -185,18 +131,16 @@ function PhotographerOnboardingForm() {
 
   function touch(f: string) { setTouched(t => ({ ...t, [f]: true })) }
 
-  // Validations
+  // Validations — step 3 is always valid (presence questions are optional context)
   const step1Valid = displayName.trim() && bio.trim().length >= 20 && area && rate && yearsExperience !== ''
   const step2Valid = selectedSpecialties.length >= 1
-  const step3Valid = hasGbp !== null && hasWebsite !== null && (hasGbp ? hasGbpReviews !== null : true)
+  const step3Valid = true
 
   function toggleSpecialty(s: string) {
     setSelectedSpecialties(prev =>
       prev.includes(s) ? prev.filter(x => x !== s) : prev.length < 5 ? [...prev, s] : prev
     )
   }
-
-  const badgePreview = computeOnboardingBadge({ yearsExperience, hasGbp, hasWebsite, hasGbpReviews })
 
   async function handleFinish() {
     setSubmitting(true)
@@ -217,6 +161,7 @@ function PhotographerOnboardingForm() {
         years_experience: yearsExperience ? Number(yearsExperience) : null,
         has_gbp: hasGbp,
         has_gbp_reviews: hasGbpReviews,
+        has_website: hasWebsite,
       }),
     })
 
@@ -380,9 +325,7 @@ function PhotographerOnboardingForm() {
               )}
               {yearsExperience !== '' && (
                 <p className="mt-1.5 text-xs text-ink-400">
-                  {Number(yearsExperience) < 3
-                    ? '🌟 You\'ll start with the Rising Talent badge — upload 5+ portfolio photos to activate it.'
-                    : '✅ You\'re eligible for Trusted Pro — complete the trust questions in the next step.'}
+                  🆕 Everyone starts with <strong>Newly Joined</strong>. Upload 5+ portfolio photos and hit 60% profile completeness to earn <strong>Rising Talent</strong> — badges are earned automatically, not assigned.
                 </p>
               )}
             </div>
@@ -401,11 +344,6 @@ function PhotographerOnboardingForm() {
             Next: Specialties <ArrowRight className="w-4 h-4" />
           </button>
 
-          <p className="text-center text-xs text-ink-300 mt-4">
-            <Link href="/dashboard/photographer?fresh=1" className="underline underline-offset-2 hover:text-ink transition-colors">
-              Skip setup for now
-            </Link>
-          </p>
         </div>
       )}
 
@@ -461,7 +399,7 @@ function PhotographerOnboardingForm() {
         </div>
       )}
 
-      {/* ── Step 3: Trust questions ───────────────────────────────── */}
+      {/* ── Step 3: Online presence ───────────────────────────────── */}
       {step === 3 && (
         <div>
           <button onClick={() => setStep(2)} className="inline-flex items-center gap-1.5 text-xs text-ink-400 hover:text-ink transition-colors mb-6">
@@ -470,15 +408,15 @@ function PhotographerOnboardingForm() {
 
           <div className="mb-8">
             <div className="w-12 h-12 bg-ink-50 rounded-2xl flex items-center justify-center mb-4">
-              <Shield className="w-5 h-5 text-ink-400" />
+              <Globe className="w-5 h-5 text-ink-400" />
             </div>
-            <h1 className="font-serif text-3xl font-bold text-ink mb-2">Trust questions</h1>
+            <h1 className="font-serif text-3xl font-bold text-ink mb-2">Your online presence</h1>
             <p className="text-ink-300 text-sm leading-relaxed">
-              These answers determine your badge on TrueNorth Frames. Answer honestly — we verify through your Google Business Profile connection.
+              Tell us about your existing presence. This helps us set up your profile — you can connect everything properly from your dashboard.
             </p>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-5">
 
             {/* Q1: GBP */}
             <div className="bg-white border border-ink-100 rounded-2xl p-5" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
@@ -489,16 +427,16 @@ function PhotographerOnboardingForm() {
                 <div>
                   <p className="font-semibold text-ink text-sm">Do you have a Google Business Profile?</p>
                   <p className="text-xs text-ink-400 mt-0.5 leading-relaxed">
-                    A Google Business Profile is a free listing at <span className="font-medium">business.google.com</span> — separate from a personal Google account.
+                    A free listing at <span className="font-medium">business.google.com</span> — separate from a personal Google account.
                   </p>
                 </div>
               </div>
-              <YesNo value={hasGbp} onChange={v => { setHasGbp(v); if (!v) { setHasGbpReviews(null) } }} />
+              <YesNo value={hasGbp} onChange={v => { setHasGbp(v); if (!v) setHasGbpReviews(null) }} />
               {hasGbp === false && (
                 <div className="mt-3 flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5">
                   <AlertCircle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-700 leading-relaxed">
-                    You can create one free at <strong>business.google.com</strong>. Connect it from your dashboard after signing up to unlock your trust score.
+                    No problem — create one free at <strong>business.google.com</strong> and connect it from your dashboard later to unlock Verified Pro.
                   </p>
                 </div>
               )}
@@ -512,16 +450,14 @@ function PhotographerOnboardingForm() {
                     <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
                   </div>
                   <div>
-                    <p className="font-semibold text-ink text-sm">Does your Google Business Profile have reviews?</p>
-                    <p className="text-xs text-ink-400 mt-0.5 leading-relaxed">
-                      Google reviews from clients on your GBP listing — not internal TrueNorth Frames reviews.
-                    </p>
+                    <p className="font-semibold text-ink text-sm">Does your Google Business Profile have any reviews?</p>
+                    <p className="text-xs text-ink-400 mt-0.5">Client reviews on your GBP listing — not TrueNorth Frames reviews.</p>
                   </div>
                 </div>
                 <YesNo
                   value={hasGbpReviews}
                   onChange={setHasGbpReviews}
-                  yesLabel="Yes, I have Google reviews"
+                  yesLabel="Yes, I have reviews"
                   noLabel="Not yet"
                 />
               </div>
@@ -535,72 +471,58 @@ function PhotographerOnboardingForm() {
                 </div>
                 <div>
                   <p className="font-semibold text-ink text-sm">Do you have a photography website?</p>
-                  <p className="text-xs text-ink-400 mt-0.5">Your portfolio site, Squarespace, Wix, or any professional web presence.</p>
+                  <p className="text-xs text-ink-400 mt-0.5">Portfolio site, Squarespace, Wix, or any professional web presence.</p>
                 </div>
               </div>
-              <YesNo value={hasWebsite} onChange={setHasWebsite} />
+              <YesNo value={hasWebsite} onChange={v => { setHasWebsite(v); if (!v) setWebsiteUrl('') }} />
               {hasWebsite === true && (
-                <div className="mt-3">
+                <div className="mt-3 space-y-1">
                   <input
                     type="url"
                     placeholder="https://yoursite.com"
                     value={websiteUrl}
                     onChange={e => setWebsiteUrl(e.target.value)}
-                    className="w-full border border-ink-100 rounded-xl px-4 py-2.5 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
+                    className={`w-full border rounded-xl px-4 py-2.5 text-sm text-ink placeholder-ink-200 outline-none focus:ring-2 transition-all ${
+                      !websiteUrl.trim() ? 'border-amber-300 focus:border-amber-400 focus:ring-amber-100' : 'border-ink-100 focus:border-ink focus:ring-ink/10'
+                    }`}
                   />
+                  {!websiteUrl.trim() && (
+                    <p className="text-xs text-amber-600">Add your URL so it appears on your profile — you can update it later from the dashboard.</p>
+                  )}
                 </div>
               )}
             </div>
+          </div>
 
-            {/* Google Business connect note */}
-            <div className="flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-2xl p-4">
-              <div className="w-8 h-8 bg-white border border-blue-200 rounded-xl flex items-center justify-center flex-shrink-0">
-                <span className="text-blue-600 font-black text-sm">G</span>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-blue-900 mb-0.5">Connect your Google Business Profile</p>
-                <p className="text-xs text-blue-700 leading-relaxed">
-                  After completing setup, go to your dashboard → <strong>Trust Score tab</strong> to connect your Google Business Profile via OAuth. This verifies your reviews and activates your trust score (75–100).
-                  You can reconnect at any time from the dashboard.
-                </p>
-              </div>
+          {/* ── Badge ladder — how badges are earned ── */}
+          <div className="mt-8 rounded-2xl border border-ink-100 overflow-hidden">
+            <div className="px-5 py-3 bg-ink-50 border-b border-ink-100">
+              <p className="text-xs font-semibold text-ink-400 uppercase tracking-wider">How badges work on TrueNorth Frames</p>
             </div>
-
-            {/* ── Live badge preview ── */}
-            {(yearsExperience !== '' || hasGbp !== null || hasWebsite !== null) && (
-              <div className="rounded-2xl border-2 p-5 transition-all duration-300" style={{ borderColor: 'transparent', background: 'linear-gradient(white, white) padding-box, linear-gradient(135deg, #e5e7eb, #f3f4f6) border-box' }}>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-300 mb-3">Your badge preview</p>
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl">{badgePreview.emoji}</span>
-                  <div>
-                    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full border ${badgePreview.color} ${badgePreview.textColor} ${badgePreview.borderColor}`}>
-                      {badgePreview.label}
-                    </span>
-                    <p className="text-xs text-ink-400 mt-2 leading-relaxed">{badgePreview.description}</p>
+            <div className="divide-y divide-ink-50">
+              {BADGE_LADDER.map((b, i) => (
+                <div key={b.label} className="flex items-start gap-3 px-5 py-3.5">
+                  <span className="text-lg flex-shrink-0 mt-0.5">{b.emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${b.color} ${b.textColor} ${b.borderColor}`}>
+                        {b.label}
+                      </span>
+                      {i === 0 && <span className="text-[10px] text-ink-300 font-medium">Starting point</span>}
+                      {i === BADGE_LADDER.length - 1 && <span className="text-[10px] text-emerald-600 font-medium">Top tier</span>}
+                    </div>
+                    <p className="text-xs text-ink-400 leading-snug">{b.how}</p>
                   </div>
                 </div>
+              ))}
+            </div>
+          </div>
 
-                {/* Trusted Pro checklist */}
-                {Number(yearsExperience) >= 3 && (
-                  <div className="mt-4 pt-4 border-t border-ink-50 space-y-2">
-                    <p className="text-[10px] font-semibold text-ink-300 uppercase tracking-wide">Trusted Pro requirements</p>
-                    {[
-                      { label: '3+ years Edmonton experience', done: Number(yearsExperience) >= 3 },
-                      { label: 'Google Business Profile',      done: hasGbp === true },
-                      { label: 'Google reviews on your GBP',   done: hasGbpReviews === true },
-                      { label: 'Website',                      done: hasWebsite === true },
-                    ].map(item => (
-                      <div key={item.label} className="flex items-center gap-2">
-                        <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${item.done ? 'bg-emerald-500' : 'bg-ink-100'}`}>
-                          {item.done && <CheckCircle2 className="w-3 h-3 text-white" />}
-                        </div>
-                        <span className={`text-xs ${item.done ? 'text-ink font-medium' : 'text-ink-400'}`}>{item.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+          <div className="mt-5 flex items-start gap-2.5 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+            <Shield className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-blue-700 leading-relaxed">
+              Badges are computed automatically from verified data — Google OAuth, portfolio uploads, and completed bookings. You can't game them, and clients trust that.
+            </p>
           </div>
 
           {submitError && (
@@ -612,19 +534,19 @@ function PhotographerOnboardingForm() {
           <button
             type="button"
             onClick={handleFinish}
-            disabled={submitting || !step3Valid}
+            disabled={submitting}
             className="w-full mt-6 bg-ink hover:bg-ink-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
           >
             {submitting
               ? <><Spinner /> Building your profile…</>
-              : <>Go to my dashboard <ArrowRight className="w-4 h-4" /></>
+              : <>Complete setup <ArrowRight className="w-4 h-4" /></>
             }
           </button>
 
           <div className="flex items-center gap-2 mt-4 justify-center">
             <Zap className="w-3.5 h-3.5 text-ink-300" />
             <p className="text-xs text-ink-300">
-              You can connect your Google Business Profile and update these details anytime from your dashboard.
+              Connect your Google Business Profile anytime from your dashboard to start earning badges.
             </p>
           </div>
         </div>

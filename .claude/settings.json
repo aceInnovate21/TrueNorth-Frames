@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(grep -n \"^          </>$\\\\|^          \\)}\" \"/Users/yogesh/Desktop/ACE/Development/TrueNorth Frames/app/\\(auth\\)/signup/page.tsx\")",
-      "Bash(vercel --prod)"
+      "Bash(vercel --prod)",
+      "Bash(git rm *)"
     ]
   }
 }

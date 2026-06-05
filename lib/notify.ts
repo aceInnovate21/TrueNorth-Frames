@@ -16,6 +16,8 @@ type NotificationType =
   | 'review_received'
   | 'review_reply'
   | 'trust_score_updated'
+  | 'welcome'
+  | 'profile_approved'
 
 interface NotifyParams {
   db: any

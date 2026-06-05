@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, notFound, serverError } from '@/lib/api-helpers'
+import { queueEmail } from '@/lib/email/client'
 
 // POST /api/client/bookings/[id]/cancel
 export async function POST(
@@ -52,6 +53,53 @@ export async function POST(
       reason: reason.trim(),
     })
   }
+
+  // Email the photographer about the cancellation
+  try {
+    const { data: fullBooking } = await db
+      .from('booking_requests')
+      .select('occasion, requested_date, location_note, photographer_id')
+      .eq('id', params.id)
+      .single()
+
+    const { data: clientUser } = await db
+      .from('users')
+      .select('full_name')
+      .eq('id', user.id)
+      .single()
+
+    if (fullBooking) {
+      const { data: photProfile } = await db
+        .from('photographer_profiles')
+        .select('user_id, display_name')
+        .eq('id', fullBooking.photographer_id)
+        .single()
+
+      if (photProfile) {
+        const { data: photUser } = await db
+          .from('users')
+          .select('email')
+          .eq('id', photProfile.user_id)
+          .single()
+
+        if (photUser?.email) {
+          const dateLabel = fullBooking.requested_date
+            ? new Date(fullBooking.requested_date).toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' })
+            : 'your session'
+          await queueEmail({
+            to: photUser.email,
+            templateId: 'booking_cancelled_by_client',
+            payload: {
+              clientName:  clientUser?.full_name ?? 'The client',
+              sessionType: fullBooking.occasion,
+              date:        dateLabel,
+              reason:      reason.trim(),
+            },
+          })
+        }
+      }
+    }
+  } catch { /* best-effort — never block the cancellation */ }
 
   return NextResponse.json({ success: true, new_status: newStatus })
 }

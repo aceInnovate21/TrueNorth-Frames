@@ -11,7 +11,7 @@ import {
   Eye, AlertCircle, Shield, ImagePlus, X, Send, Calendar,
   Clock, ChevronLeft, DollarSign, Save, Settings, ExternalLink,
   Package, Users, HelpCircle, GripVertical, ChevronDown, ChevronUp,
-  ChevronsUp, ChevronsDown,
+  ChevronsUp, ChevronsDown, LogOut,
   Plus, Pencil, Trash2, Paperclip, FileText, Play,
   FolderPlus, FolderOpen, Video, Image as ImageIcon,
   Facebook, RefreshCw, Link2, UserPlus, Search,
@@ -22,6 +22,8 @@ import { ReviewManager } from '@/components/review-manager'
 import { PhotographerConnections, GroupChat, type Group, type GroupMessage } from '@/components/photographer-connections'
 import { Inbox } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { computeBadge, computeBadgeProgress, type BadgeSignals } from '@/lib/badges'
+import { PhotographerBadge } from '@/components/photographer-badge'
 
 // ─── FAQ types & seed ─────────────────────────────────────────────────────────
 
@@ -57,6 +59,7 @@ interface PortfolioPhoto {
 }
 interface PortfolioVideo {
   id: string; src: string; title: string; duration_seconds: number | null; storage_asset_id: string
+  tags: string[]; video_taken_month: number | null; video_taken_year: number | null
 }
 interface PortfolioAlbum {
   id: string; title: string; photos: PortfolioPhoto[]; videos: PortfolioVideo[]
@@ -130,7 +133,7 @@ function BookingRequestsTab({
   setRequests: React.Dispatch<React.SetStateAction<BookingRequest[]>>
   setBookedDates: React.Dispatch<React.SetStateAction<Record<string, DayStatus>>>
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>
-  setActiveTab: React.Dispatch<React.SetStateAction<DashboardTab>>
+  setActiveTab: (tab: DashboardTab) => void
   expandedId?: string | null
   setExpandedId?: React.Dispatch<React.SetStateAction<string | null>>
 }) {
@@ -678,6 +681,17 @@ interface ProfileData {
   avatarUrl: string
   coverImageUrl: string
   trustScore: number
+  // Badge signal fields — populated from profile API
+  completenessScore: number
+  nativeAvgRating: number
+  nativeReviewCount: number
+  yearsExperience: number | null
+  portfolioPhotoCount: number
+  completedBookings: number
+  isGbpOAuthConnected: boolean
+  gbpReviewCount: number
+  accountAgeDays: number
+  profileStatus: string
 }
 
 interface Message {
@@ -719,15 +733,18 @@ const EDMONTON_AREAS = [
 
 // ─── Completion scoring ───────────────────────────────────────────────────────
 
-function computeScore(p: ProfileData) {
+function computeScore(p: ProfileData & { faqCount?: number }) {
   const sections = [
-    { key: 'name',        label: 'Display name',         done: !!p.displayName,              weight: 10, tab: 'settings',   cta: 'Add your name' },
-    { key: 'bio',         label: 'Bio written',           done: p.bio.length >= 20,           weight: 15, tab: 'settings',   cta: 'Write your bio' },
-    { key: 'area',        label: 'Location set',          done: !!p.area,                     weight: 10, tab: 'settings',   cta: 'Set your area' },
-    { key: 'rate',        label: 'Rate added',            done: !!p.rate,                     weight: 10, tab: 'settings',   cta: 'Add your rate' },
-    { key: 'specialties', label: 'Specialties chosen',    done: p.specialties.length > 0,     weight: 15, tab: 'settings',   cta: 'Pick specialties' },
-    { key: 'trust',       label: 'Trust score connected', done: Number(p.trustScore ?? 0) > 0, weight: 25, tab: 'trust',     cta: 'Connect platforms' },
-    { key: 'portfolio',   label: 'Portfolio photos',      done: p.hasPortfolio,               weight: 15, tab: 'portfolio',  cta: 'Upload photos' },
+    { key: 'name',         label: 'Display name',          done: !!p.displayName,                weight: 10, tab: 'settings',      cta: 'Add your name' },
+    { key: 'bio',          label: 'Bio written',            done: p.bio.length >= 20,             weight: 10, tab: 'settings',      cta: 'Write your bio' },
+    { key: 'area',         label: 'Location set',           done: !!p.area,                       weight: 5,  tab: 'settings',      cta: 'Set your area' },
+    { key: 'rate',         label: 'Rate added',             done: !!p.rate,                       weight: 5,  tab: 'settings',      cta: 'Add your rate' },
+    { key: 'avatar',       label: 'Profile photo',          done: !!p.avatarUrl,                  weight: 10, tab: 'settings',      cta: 'Upload photo' },
+    { key: 'specialties',  label: 'Specialties chosen',     done: p.specialties.length > 0,       weight: 10, tab: 'settings',      cta: 'Pick specialties' },
+    { key: 'portfolio',    label: 'Portfolio photos',        done: p.hasPortfolio,                 weight: 15, tab: 'portfolio',     cta: 'Upload photos' },
+    { key: 'availability', label: 'Availability set',        done: p.availabilitySet,              weight: 10, tab: 'availability',  cta: 'Set availability' },
+    { key: 'faq',          label: 'At least 1 FAQ added',   done: (p.faqCount ?? 0) > 0,          weight: 5,  tab: 'faq',           cta: 'Add a FAQ' },
+    { key: 'trust',        label: 'Trust score connected',  done: Number(p.trustScore ?? 0) > 0,  weight: 20, tab: 'trust',         cta: 'Connect GBP' },
   ]
   const earned = sections.filter(s => s.done).reduce((a, s) => a + s.weight, 0)
   const total = sections.reduce((a, s) => a + s.weight, 0)
@@ -2673,6 +2690,7 @@ function ProfileSettingsTab({ profile, setProfile }: {
         rate_amount: local.rate || null,
         rate_unit: local.rateUnit,
         website_url: local.websiteUrl.trim(),
+        years_experience: local.yearsExperience,
       }
     } else if (key === 'specialties') {
       body = { section: 'specialties', specialties: local.specialties }
@@ -2966,6 +2984,32 @@ function ProfileSettingsTab({ profile, setProfile }: {
             </div>
           </div>
 
+          {/* Years of experience */}
+          <div>
+            <label className="block text-sm font-medium text-ink mb-2">Years of photography experience</label>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: 'Just starting out', value: 0 },
+                { label: '1–3 years',          value: 2 },
+                { label: '3–5 years',          value: 4 },
+                { label: '5–10 years',         value: 7 },
+                { label: '10+ years',          value: 10 },
+              ].map(opt => (
+                <button key={opt.value} type="button"
+                  onClick={() => setLocal(l => ({ ...l, yearsExperience: opt.value }))}
+                  className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
+                    local.yearsExperience === opt.value
+                      ? 'bg-ink text-white border-ink'
+                      : 'bg-white text-ink-500 border-ink-100 hover:border-ink-300'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-ink-300">Used for badge eligibility — select the range that best describes your experience.</p>
+          </div>
+
         </div>
 
         <div className="flex justify-end mt-5"><SaveBtn section="basics" /></div>
@@ -3104,7 +3148,6 @@ function ProfileSettingsTab({ profile, setProfile }: {
 
 function DangerZone() {
   const router = useRouter()
-  const [showSignOut, setShowSignOut] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
   const [confirmText, setConfirmText] = useState('')
   const [deleting, setDeleting] = useState(false)
@@ -3129,30 +3172,25 @@ function DangerZone() {
     <>
       <div className="bg-white rounded-2xl p-6 border border-red-100" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
         <h2 className="font-semibold text-ink mb-1">Danger zone</h2>
-        <p className="text-xs text-ink-300 mb-4">These actions are permanent and cannot be undone.</p>
-        <div className="flex gap-3 flex-wrap">
-          <button onClick={() => setShowDelete(true)} className="text-sm font-medium text-red-600 border border-red-200 px-4 py-2 rounded-xl hover:bg-red-50 transition-colors">
-            Delete account
-          </button>
-          <button onClick={() => setShowSignOut(true)} className="text-sm font-medium text-ink-400 border border-ink-100 px-4 py-2 rounded-xl hover:bg-ink-50 transition-colors">
-            Sign out
-          </button>
-        </div>
+        <p className="text-xs text-ink-300 mb-4">This action is permanent and cannot be undone.</p>
+        <button onClick={() => setShowDelete(true)} className="text-sm font-medium text-red-600 border border-red-200 px-4 py-2 rounded-xl hover:bg-red-50 transition-colors">
+          Delete account
+        </button>
       </div>
 
-      {/* Sign out modal */}
-      {showSignOut && (
+      {/* Removed sign-out modal — sign out is now in the avatar dropdown in the nav */}
+      {false && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-float-xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-ink-50">
               <p className="font-semibold text-ink">Sign out</p>
-              <button onClick={() => setShowSignOut(false)} className="text-ink-300 hover:text-ink"><X className="w-4 h-4" /></button>
+              <button className="text-ink-300 hover:text-ink"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-5 py-4">
               <p className="text-sm text-ink-500 leading-relaxed">Are you sure you want to sign out of your TrueNorth Frames account?</p>
             </div>
             <div className="px-5 py-4 border-t border-ink-50 flex gap-3">
-              <button onClick={() => setShowSignOut(false)} className="flex-1 text-sm font-medium border border-ink-100 rounded-xl py-2.5 hover:bg-ink-50 text-ink-400 transition-colors">Cancel</button>
+              <button className="flex-1 text-sm font-medium border border-ink-100 rounded-xl py-2.5 hover:bg-ink-50 text-ink-400 transition-colors">Cancel</button>
               <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }} className="flex-1 text-sm font-semibold bg-ink text-white rounded-xl py-2.5 hover:bg-ink-800 transition-colors">Sign out</button>
             </div>
           </div>
@@ -3809,10 +3847,80 @@ function NotifPanel({
   )
 }
 
+// ─── Avatar dropdown ─────────────────────────────────────────────────────────
+
+function AvatarMenu({ avatarUrl, displayName, onSettings }: {
+  avatarUrl: string
+  displayName: string
+  onSettings: () => void
+}) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [])
+
+  async function handleSignOut() {
+    setOpen(false)
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
+  return (
+    <div className="relative ml-1" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1.5 rounded-full focus:outline-none focus:ring-2 focus:ring-ink/20"
+        aria-label="Account menu"
+      >
+        {avatarUrl ? (
+          <img src={avatarUrl} alt="Profile" className="w-8 h-8 rounded-full object-cover" />
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-ink flex items-center justify-center">
+            <span className="text-white text-xs font-bold">
+              {displayName ? displayName[0].toUpperCase() : 'P'}
+            </span>
+          </div>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-10 w-48 bg-white rounded-2xl border border-ink-100 py-1.5 z-50" style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}>
+          {displayName && (
+            <div className="px-4 py-2 border-b border-ink-50 mb-1">
+              <p className="text-xs font-semibold text-ink truncate">{displayName}</p>
+              <p className="text-[10px] text-ink-400">Photographer</p>
+            </div>
+          )}
+          <button
+            onClick={() => { setOpen(false); onSettings() }}
+            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-ink-600 hover:bg-ink-50 transition-colors text-left"
+          >
+            <Settings className="w-3.5 h-3.5 text-ink-400" /> Settings
+          </button>
+          <button
+            onClick={handleSignOut}
+            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-ink-600 hover:bg-ink-50 transition-colors text-left"
+          >
+            <LogOut className="w-3.5 h-3.5 text-ink-400" /> Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 function PhotographerDashboardInner() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const isFresh = searchParams.get('fresh') === '1'
   const tabParam = searchParams.get('tab') as DashboardTab | null
   const trustConnected = searchParams.get('trust_connected') as string | null
@@ -3835,6 +3943,16 @@ function PhotographerDashboardInner() {
     avatarUrl: '',
     coverImageUrl: '',
     trustScore: 0,
+    completenessScore: 0,
+    nativeAvgRating: 0,
+    nativeReviewCount: 0,
+    yearsExperience: null,
+    portfolioPhotoCount: 0,
+    completedBookings: 0,
+    isGbpOAuthConnected: false,
+    gbpReviewCount: 0,
+    accountAgeDays: 0,
+    profileStatus: 'pending',
   })
 
   // Load real profile from DB on mount
@@ -3844,18 +3962,28 @@ function PhotographerDashboardInner() {
       .then(data => {
         setProfile(prev => ({
           ...prev,
-          displayName: data.display_name ?? '',
-          bio: data.bio ?? '',
-          area: data.location ?? '',
-          rate: data.rate_amount ?? '',
-          rateUnit: data.rate_unit ?? 'hr',
-          specialties: data.specialties ?? [],
-          websiteUrl: data.website_url ?? '',
-          contactInstagram: data.contact_instagram_url ?? '',
-          contactFacebook: data.contact_facebook_url ?? '',
-          avatarUrl: data.avatar_url ?? '',
-          coverImageUrl: data.cover_image_url ?? '',
-          trustScore: 0,
+          displayName:         data.display_name ?? '',
+          bio:                 data.bio ?? '',
+          area:                data.location ?? '',
+          rate:                data.rate_amount ?? '',
+          rateUnit:            data.rate_unit ?? 'hr',
+          specialties:         data.specialties ?? [],
+          websiteUrl:          data.website_url ?? '',
+          contactInstagram:    data.contact_instagram_url ?? '',
+          contactFacebook:     data.contact_facebook_url ?? '',
+          avatarUrl:           data.avatar_url ?? '',
+          coverImageUrl:       data.cover_image_url ?? '',
+          trustScore:          0,
+          completenessScore:   data.completeness_score ?? 0,
+          nativeAvgRating:     data.native_avg_rating ?? 0,
+          nativeReviewCount:   data.native_review_count ?? 0,
+          yearsExperience:     data.years_experience ?? null,
+          portfolioPhotoCount: data.portfolio_photo_count ?? 0,
+          completedBookings:   data.completed_bookings ?? 0,
+          isGbpOAuthConnected: data.is_gbp_oauth_connected ?? false,
+          gbpReviewCount:      data.gbp_review_count ?? 0,
+          accountAgeDays:      data.account_age_days ?? 0,
+          profileStatus:       data.profile_status ?? 'pending',
         }))
       })
       .catch(() => {/* keep empty defaults */})
@@ -3900,6 +4028,7 @@ function PhotographerDashboardInner() {
         if (!data) return
         if (data.weekly) {
           const schedule: WeeklySchedule = {}
+          let hasSlots = false
           for (const [day, slots] of Object.entries(data.weekly as Record<string, any[]>)) {
             schedule[Number(day)] = {
               slots: slots.map((s: any) => ({
@@ -3910,8 +4039,10 @@ function PhotographerDashboardInner() {
                 maxClients: 1,
               })),
             }
+            if (slots.length > 0) hasSlots = true
           }
           setWeeklySchedule(schedule)
+          if (hasSlots) setProfile(prev => ({ ...prev, availabilitySet: true }))
         }
         if (Array.isArray(data.day_statuses)) {
           const overrides: Record<string, DayStatus> = {}
@@ -4077,6 +4208,9 @@ function PhotographerDashboardInner() {
   const [savedCaption, setSavedCaption] = useState<string | null>(null)
   const [editingVideoTitle, setEditingVideoTitle] = useState<{ videoId: string; isStandalone: boolean; albumId?: string } | null>(null)
   const [videoTitleDraft, setVideoTitleDraft] = useState('')
+  const [videoTagsDraft, setVideoTagsDraft] = useState<string[]>([])
+  const [videoMonthDraft, setVideoMonthDraft] = useState<string>('')
+  const [videoYearDraft, setVideoYearDraft] = useState<string>('')
   const [savingVideoTitle, setSavingVideoTitle] = useState(false)
   const [savedVideoTitle, setSavedVideoTitle] = useState<string | null>(null)
   const [previewLightbox, setPreviewLightbox] = useState<{ photos: { id: string; src: string; caption: string }[]; idx: number } | null>(null)
@@ -4179,12 +4313,25 @@ function PhotographerDashboardInner() {
   async function saveVideoTitle() {
     if (!editingVideoTitle) return
     setSavingVideoTitle(true)
-    const res = await fetch('/api/photographer/videos', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingVideoTitle.videoId, title: videoTitleDraft }) })
+    const month = parseInt(videoMonthDraft) || null
+    const year  = parseInt(videoYearDraft)  || null
+    const res = await fetch('/api/photographer/videos', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editingVideoTitle.videoId,
+        title: videoTitleDraft,
+        tags: videoTagsDraft,
+        video_taken_month: month,
+        video_taken_year:  year,
+      }),
+    })
     if (res.ok) {
+      const updated = { title: videoTitleDraft, tags: videoTagsDraft, video_taken_month: month, video_taken_year: year }
       if (editingVideoTitle.isStandalone) {
-        setStandaloneVideos(prev => prev.map(v => v.id === editingVideoTitle.videoId ? { ...v, title: videoTitleDraft } : v))
+        setStandaloneVideos(prev => prev.map(v => v.id === editingVideoTitle.videoId ? { ...v, ...updated } : v))
       } else if (editingVideoTitle.albumId) {
-        setPortfolioAlbums(prev => prev.map(a => a.id !== editingVideoTitle.albumId ? a : { ...a, videos: a.videos.map(v => v.id === editingVideoTitle.videoId ? { ...v, title: videoTitleDraft } : v) }))
+        setPortfolioAlbums(prev => prev.map(a => a.id !== editingVideoTitle.albumId ? a : { ...a, videos: a.videos.map(v => v.id === editingVideoTitle.videoId ? { ...v, ...updated } : v) }))
       }
       setSavedVideoTitle(editingVideoTitle.videoId)
       setTimeout(() => setSavedVideoTitle(null), 2000)
@@ -4397,12 +4544,46 @@ function PhotographerDashboardInner() {
     standalonePhotos.length > 0 ||
     standaloneVideos.length > 0
 
-  const { sections, pct } = computeScore({ ...profile, hasPortfolio })
+  // Ref for the main content area — used to scroll to top on mobile tab switch
+  const mainContentRef = useRef<HTMLDivElement>(null)
+
+  // Unified tab switcher — updates state, URL, and scrolls to top on mobile
+  function switchTab(tab: DashboardTab) {
+    setActiveTab(tab)
+    const params = new URLSearchParams(window.location.search)
+    params.set('tab', tab)
+    // Replace so back button doesn't loop through every tab click
+    router.replace(`/dashboard/photographer?${params.toString()}`, { scroll: false })
+    // Scroll the main content column to top (critical on mobile)
+    if (mainContentRef.current) {
+      mainContentRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  const { sections, pct } = computeScore({ ...profile, hasPortfolio, faqCount: faqs.length })
   const incomplete = sections.filter(s => !s.done)
   const unreadCount = messages.filter(m => m.unread).length
   const groupUnreadCount = groups.reduce((acc, g) => acc + (g.unread ?? 0), 0)
   const totalUnreadMessages = unreadCount + groupUnreadCount
   const scoreColor = pct >= 80 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-500' : 'text-red-500'
+
+  // Badge computation — uses live portfolio count from portfolio tab if loaded, else profile API value
+  const livePortfolioCount = totalPortfolioPhotos(portfolioAlbums) + standalonePhotos.length
+  const badgeSignals: BadgeSignals = {
+    portfolioPhotoCount:  livePortfolioCount > 0 ? livePortfolioCount : profile.portfolioPhotoCount,
+    platformReviewCount:  profile.nativeReviewCount,
+    nativeAvgRating:      profile.nativeAvgRating,
+    completedBookings:    profile.completedBookings,
+    completenessScore:    profile.completenessScore,
+    accountAgeDays:       profile.accountAgeDays,
+    isGbpOAuthConnected:  profile.isGbpOAuthConnected,
+    gbpReviewCount:       profile.gbpReviewCount,
+    yearsExperience:      profile.yearsExperience,
+  }
+  const currentBadge   = computeBadge(badgeSignals)
+  const badgeProgress  = computeBadgeProgress(badgeSignals)
 
   const pendingBookings = bookingRequests.filter(r => r.status === 'pending').length
 
@@ -4450,16 +4631,12 @@ function PhotographerDashboardInner() {
                 pollIntervalMs={30000}
               />
 
-              {/* Avatar */}
-              {profile.avatarUrl ? (
-                <img src={profile.avatarUrl} alt="Profile" className="w-8 h-8 rounded-full object-cover ml-1" />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-ink flex items-center justify-center ml-1">
-                  <span className="text-white text-xs font-bold">
-                    {profile.displayName ? profile.displayName[0].toUpperCase() : 'P'}
-                  </span>
-                </div>
-              )}
+              {/* Avatar dropdown */}
+              <AvatarMenu
+                avatarUrl={profile.avatarUrl}
+                displayName={profile.displayName}
+                onSettings={() => switchTab('settings')}
+              />
             </div>
           </div>
         </div>
@@ -4468,8 +4645,21 @@ function PhotographerDashboardInner() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-        {/* Welcome banner */}
-        {isFresh && !welcomeDismissed && (
+        {/* Pending review banner — shown whenever profile_status is pending */}
+        {profile.profileStatus === 'pending' && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 mb-6 flex items-start gap-3">
+            <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Your profile is under review</p>
+              <p className="text-xs text-amber-700 leading-relaxed mt-0.5">
+                You won't appear in client searches until approved — usually within 1–2 business days. Use this time to upload portfolio photos, set your packages, and connect your Google Business Profile to hit the ground running.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Welcome banner — only for approved photographers on first login */}
+        {isFresh && !welcomeDismissed && profile.profileStatus === 'approved' && (
           <div className="bg-ink rounded-2xl p-5 mb-6 flex items-start justify-between gap-4 relative overflow-hidden">
             <div className="absolute inset-0 grid-pattern pointer-events-none opacity-50" />
             <div className="relative z-10">
@@ -4489,14 +4679,14 @@ function PhotographerDashboardInner() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
           {/* ── Main column ─────────────────────────────────────────── */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-6" ref={mainContentRef}>
 
             {/* Tab bar — scrollable on mobile */}
             <div className="flex gap-1 bg-white rounded-xl p-1 border border-ink-100 overflow-x-auto scrollbar-hide" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
               {tabs.map(tab => (
                 <button
                   key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
+                  onClick={() => switchTab(tab.key)}
                   className={`flex-none whitespace-nowrap text-sm font-medium py-2 px-3 rounded-lg transition-all ${
                     activeTab === tab.key ? 'bg-ink text-white' : 'text-ink-400 hover:text-ink'
                   }`}
@@ -4509,31 +4699,107 @@ function PhotographerDashboardInner() {
             {/* ── Overview ─────────────────────────────────────────── */}
             {activeTab === 'overview' && (
               <div className="space-y-5">
-                {/* Stats */}
+
+                {/* ── Badge + stats row ── */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {[
-                    { label: 'Profile views', value: '—', change: 'Coming soon', icon: Eye },
-                    { label: 'Messages', value: String(messages.length + groups.length), change: `${totalUnreadMessages} unread`, icon: MessageSquare },
-                    { label: 'Trust score', value: '—', change: 'No reviews yet', icon: Star },
-                    { label: 'Response rate', value: '—', change: 'No activity yet', icon: Zap },
-                  ].map(s => {
-                    const Icon = s.icon
-                    return (
-                      <div key={s.label} className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
-                        <Icon className="w-4 h-4 text-ink-300 mb-2" />
-                        <p className="font-bold text-ink text-xl">{s.value}</p>
-                        <p className="text-ink-400 text-xs mt-0.5">{s.label}</p>
-                        <p className="text-ink-300 text-[10px] mt-1">{s.change}</p>
-                      </div>
-                    )
-                  })}
+                  {/* Badge card — spans 2 cols on mobile, 1 on sm+ */}
+                  <div className="col-span-2 sm:col-span-1 bg-white rounded-2xl p-4 flex flex-col gap-2" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-300">Your badge</p>
+                    <PhotographerBadge badge={currentBadge} size="md" />
+                    {badgeProgress.next && (
+                      <p className="text-[10px] text-ink-400 leading-snug mt-0.5">
+                        Next: <span className="font-medium text-ink-600">{badgeProgress.next.replace('_', ' ')}</span>
+                      </p>
+                    )}
+                    {!badgeProgress.next && (
+                      <p className="text-[10px] text-emerald-600 font-medium mt-0.5">Top tier ✓</p>
+                    )}
+                  </div>
+
+                  {/* Messages */}
+                  <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+                    <MessageSquare className="w-4 h-4 text-ink-300 mb-2" />
+                    <p className="font-bold text-ink text-xl">{messages.length + groups.length}</p>
+                    <p className="text-ink-400 text-xs mt-0.5">Messages</p>
+                    <p className="text-ink-300 text-[10px] mt-1">{totalUnreadMessages > 0 ? `${totalUnreadMessages} unread` : 'All read'}</p>
+                  </div>
+
+                  {/* Rating */}
+                  <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+                    <Star className="w-4 h-4 text-ink-300 mb-2" />
+                    <p className="font-bold text-ink text-xl">
+                      {profile.nativeAvgRating > 0 ? profile.nativeAvgRating.toFixed(1) : '—'}
+                    </p>
+                    <p className="text-ink-400 text-xs mt-0.5">Avg rating</p>
+                    <p className="text-ink-300 text-[10px] mt-1">
+                      {profile.nativeReviewCount > 0 ? `${profile.nativeReviewCount} review${profile.nativeReviewCount !== 1 ? 's' : ''}` : 'No reviews yet'}
+                    </p>
+                  </div>
+
+                  {/* Bookings */}
+                  <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+                    <Zap className="w-4 h-4 text-ink-300 mb-2" />
+                    <p className="font-bold text-ink text-xl">{profile.completedBookings}</p>
+                    <p className="text-ink-400 text-xs mt-0.5">Completed bookings</p>
+                    <p className="text-ink-300 text-[10px] mt-1">
+                      {profile.completedBookings >= 3 ? 'Trusted Pro eligible' : `${3 - profile.completedBookings} more for Trusted Pro`}
+                    </p>
+                  </div>
                 </div>
 
-                {/* Completion card — inline in overview */}
+                {/* ── Online presence at-a-glance ── */}
+                <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-semibold text-ink-400 uppercase tracking-wider">Online presence</p>
+                    <button onClick={() => switchTab('settings')} className="text-xs text-ink-400 hover:text-ink flex items-center gap-1 transition-colors">
+                      Edit <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {/* Website */}
+                    {profile.websiteUrl ? (
+                      <a href={profile.websiteUrl} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-ink-50 text-ink-600 hover:bg-ink-100 transition-colors border border-ink-100">
+                        <Globe className="w-3 h-3" /> Website
+                      </a>
+                    ) : (
+                      <button onClick={() => switchTab('settings')}
+                        className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-dashed border-ink-200 text-ink-300 hover:border-ink-400 hover:text-ink-500 transition-colors">
+                        <Globe className="w-3 h-3" /> Add website
+                      </button>
+                    )}
+                    {/* Instagram */}
+                    {profile.contactInstagram ? (
+                      <a href={`https://instagram.com/${profile.contactInstagram}`} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-pink-50 text-pink-600 hover:bg-pink-100 transition-colors border border-pink-100">
+                        <Instagram className="w-3 h-3" /> @{profile.contactInstagram}
+                      </a>
+                    ) : (
+                      <button onClick={() => switchTab('settings')}
+                        className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-dashed border-ink-200 text-ink-300 hover:border-ink-400 hover:text-ink-500 transition-colors">
+                        <Instagram className="w-3 h-3" /> Add Instagram
+                      </button>
+                    )}
+                    {/* Facebook */}
+                    {profile.contactFacebook ? (
+                      <a href={`https://facebook.com/${profile.contactFacebook}`} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors border border-blue-100">
+                        <Facebook className="w-3 h-3" /> @{profile.contactFacebook}
+                      </a>
+                    ) : (
+                      <button onClick={() => switchTab('settings')}
+                        className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-dashed border-ink-200 text-ink-300 hover:border-ink-400 hover:text-ink-500 transition-colors">
+                        <Facebook className="w-3 h-3" /> Add Facebook
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Profile completion card ── */}
                 <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
                   <div className="flex items-center justify-between mb-4">
                     <p className="font-semibold text-ink text-sm">Profile completion</p>
-                    <button onClick={() => setActiveTab('settings')} className="text-xs text-ink-400 hover:text-ink flex items-center gap-1 transition-colors">
+                    <button onClick={() => switchTab('settings')} className="text-xs text-ink-400 hover:text-ink flex items-center gap-1 transition-colors">
                       Edit profile <ChevronRight className="w-3 h-3" />
                     </button>
                   </div>
@@ -4544,7 +4810,7 @@ function PhotographerDashboardInner() {
                         {pct >= 80 ? 'Great profile!' : pct >= 50 ? 'Getting there' : 'Just starting'}
                       </p>
                       <p className="text-ink-300 text-xs mt-1 leading-relaxed">
-                        {pct >= 80 ? 'You appear in client searches.' : `${incomplete.length} item${incomplete.length !== 1 ? 's' : ''} left`}
+                        {pct >= 80 ? 'You appear in client searches.' : `${incomplete.length} item${incomplete.length !== 1 ? 's' : ''} left to complete`}
                       </p>
                     </div>
                   </div>
@@ -4556,16 +4822,82 @@ function PhotographerDashboardInner() {
                         </div>
                         <span className={`text-xs flex-1 ${s.done ? 'text-ink-300 line-through' : 'text-ink-500'}`}>{s.label}</span>
                         {!s.done && (
-                          <button
-                            onClick={() => setActiveTab(s.tab as DashboardTab)}
-                            className="text-[10px] text-ink font-medium hover:underline"
-                          >
-                            Add →
+                          <button onClick={() => switchTab(s.tab as DashboardTab)} className="text-[10px] text-ink font-medium hover:underline">
+                            {s.cta} →
                           </button>
                         )}
                       </div>
                     ))}
                   </div>
+                </div>
+
+                {/* ── Badge progress card ── */}
+                <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="font-semibold text-ink text-sm">Badge progress</p>
+                    <PhotographerBadge badge={currentBadge} size="sm" />
+                  </div>
+
+                  {/* Ladder */}
+                  {[
+                    { type: 'newly_joined',  emoji: '🆕', label: 'Newly Joined',  color: 'bg-ink-100',     text: 'text-ink-500' },
+                    { type: 'rising_talent', emoji: '🌟', label: 'Rising Talent', color: 'bg-amber-400',   text: 'text-white' },
+                    { type: 'verified_pro',  emoji: '🔵', label: 'Verified Pro',  color: 'bg-blue-500',    text: 'text-white' },
+                    { type: 'trusted_pro',   emoji: '✅', label: 'Trusted Pro',   color: 'bg-emerald-500', text: 'text-white' },
+                  ].map((tier, i) => {
+                    const isCurrentOrBelow = (
+                      currentBadge.type === 'newly_joined'  ? i <= 0 :
+                      currentBadge.type === 'rising_talent' ? i <= 1 :
+                      currentBadge.type === 'verified_pro'  ? i <= 2 : true
+                    )
+                    const isCurrent = tier.type === currentBadge.type ||
+                      (currentBadge.type === 'most_reviewed' || currentBadge.type === 'most_booked')
+                    return (
+                      <div key={tier.type} className="flex items-center gap-3 mb-2 last:mb-0">
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-xs transition-all ${isCurrentOrBelow ? tier.color : 'bg-ink-100'}`}>
+                          <span>{tier.emoji}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-semibold ${isCurrentOrBelow ? 'text-ink' : 'text-ink-300'}`}>{tier.label}</span>
+                            {isCurrent && tier.type === currentBadge.type && (
+                              <span className="text-[9px] font-bold uppercase tracking-wide text-white bg-ink px-1.5 py-0.5 rounded-full">Current</span>
+                            )}
+                          </div>
+                        </div>
+                        {isCurrentOrBelow && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />}
+                      </div>
+                    )
+                  })}
+
+                  {/* What's needed to reach next badge */}
+                  {badgeProgress.next && badgeProgress.remaining.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-ink-50">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-400 mb-2">
+                        To reach {badgeProgress.next.replace(/_/g, ' ')}:
+                      </p>
+                      <div className="space-y-1.5">
+                        {badgeProgress.remaining.map((item, i) => (
+                          <div key={i} className="flex items-start gap-2">
+                            <div className="w-1 h-1 rounded-full bg-ink-300 flex-shrink-0 mt-1.5" />
+                            <p className="text-xs text-ink-500 leading-snug">{item}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => switchTab(badgeProgress.next === 'rising_talent' ? 'portfolio' : 'trust')}
+                        className="mt-3 text-xs font-semibold text-ink hover:underline flex items-center gap-1"
+                      >
+                        Get started <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+
+                  {!badgeProgress.next && (
+                    <div className="mt-4 pt-4 border-t border-ink-50 text-center">
+                      <p className="text-xs text-emerald-600 font-semibold">You've reached the top tier — great work!</p>
+                    </div>
+                  )}
                 </div>
 
               </div>
@@ -4617,7 +4949,7 @@ function PhotographerDashboardInner() {
                     setRequests={setBookingRequests}
                     setBookedDates={setBookedDates}
                     setMessages={setMessages}
-                    setActiveTab={setActiveTab}
+                    setActiveTab={switchTab}
                     expandedId={expandedRequestId}
                     setExpandedId={setExpandedRequestId}
                   />
@@ -4633,7 +4965,7 @@ function PhotographerDashboardInner() {
                   bookings={bookingRequests}
                   bookedDates={bookedDates}
                   setBookedDates={setBookedDates}
-                  onSelectBooking={(req) => { setActiveTab('requests') }}
+                  onSelectBooking={(req) => { switchTab('requests') }}
                 />
 
                 {/* Time-slot scheduler */}
@@ -4893,19 +5225,65 @@ function PhotographerDashboardInner() {
                     </div>
                   )}
 
-                  {/* Video title modal */}
+                  {/* Video edit modal — title, tags, month, year */}
                   {editingVideoTitle && (
                     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-                      <div className="bg-white rounded-2xl w-full max-w-sm p-5" style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
-                        <p className="text-sm font-semibold text-ink mb-3">Edit video title</p>
-                        <input type="text" value={videoTitleDraft} onChange={e => setVideoTitleDraft(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') saveVideoTitle() }}
-                          placeholder="Add a title…" autoFocus maxLength={120}
-                          className="w-full border border-ink-100 rounded-xl px-3.5 py-2.5 text-sm text-ink outline-none focus:border-ink transition-all mb-3" />
-                        <div className="flex gap-2">
+                      <div className="bg-white rounded-2xl w-full max-w-sm p-5 space-y-4" style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+                        <p className="text-sm font-semibold text-ink">Edit video details</p>
+
+                        {/* Title */}
+                        <div>
+                          <label className="text-xs font-medium text-ink-400 mb-1 block">Title</label>
+                          <input type="text" value={videoTitleDraft} onChange={e => setVideoTitleDraft(e.target.value)}
+                            placeholder="Add a title…" autoFocus maxLength={120}
+                            className="w-full border border-ink-100 rounded-xl px-3.5 py-2.5 text-sm text-ink outline-none focus:border-ink transition-all" />
+                        </div>
+
+                        {/* Tags */}
+                        <div>
+                          <label className="text-xs font-medium text-ink-400 mb-1.5 block">Tags</label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {PHOTO_TAG_OPTIONS.map(tag => {
+                              const selected = videoTagsDraft.includes(tag)
+                              return (
+                                <button key={tag} type="button"
+                                  onClick={() => setVideoTagsDraft(prev => selected ? prev.filter(t => t !== tag) : prev.length < 10 ? [...prev, tag] : prev)}
+                                  className={`text-[11px] px-2.5 py-1 rounded-full border transition-all ${selected ? 'bg-ink text-white border-ink' : 'bg-white text-ink-500 border-ink-100 hover:border-ink-300'}`}>
+                                  {tag}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Month + Year */}
+                        <div className="flex gap-3">
+                          <div className="flex-1">
+                            <label className="text-xs font-medium text-ink-400 mb-1 block">Month filmed</label>
+                            <select value={videoMonthDraft} onChange={e => setVideoMonthDraft(e.target.value)}
+                              className="w-full border border-ink-100 rounded-xl px-3 py-2 text-sm text-ink outline-none focus:border-ink bg-white">
+                              <option value="">Month</option>
+                              {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, i) => (
+                                <option key={m} value={String(i + 1)}>{m}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-xs font-medium text-ink-400 mb-1 block">Year filmed</label>
+                            <select value={videoYearDraft} onChange={e => setVideoYearDraft(e.target.value)}
+                              className="w-full border border-ink-100 rounded-xl px-3 py-2 text-sm text-ink outline-none focus:border-ink bg-white">
+                              <option value="">Year</option>
+                              {Array.from({ length: new Date().getFullYear() - 1999 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                                <option key={y} value={String(y)}>{y}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 pt-1">
                           <button onClick={saveVideoTitle} disabled={savingVideoTitle}
                             className="flex-1 bg-ink text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-ink-800 transition-colors disabled:opacity-50">
-                            {savingVideoTitle ? 'Saving…' : 'Save title'}
+                            {savingVideoTitle ? 'Saving…' : 'Save'}
                           </button>
                           <button onClick={() => setEditingVideoTitle(null)}
                             className="flex-1 border border-ink-100 text-ink-400 text-sm font-medium py-2.5 rounded-xl hover:bg-ink-50 transition-colors">Cancel</button>
@@ -5083,7 +5461,7 @@ function PhotographerDashboardInner() {
                                     <X className="w-3.5 h-3.5 text-white" />
                                   </button>
                                 </div>
-                                <button onClick={() => { setEditingVideoTitle({ videoId: video.id, isStandalone: false, albumId: openAlbum.id }); setVideoTitleDraft(video.title || '') }}
+                                <button onClick={() => { setEditingVideoTitle({ videoId: video.id, isStandalone: false, albumId: openAlbum.id }); setVideoTitleDraft(video.title || ''); setVideoTagsDraft(video.tags ?? []); setVideoMonthDraft(video.video_taken_month ? String(video.video_taken_month) : ''); setVideoYearDraft(video.video_taken_year ? String(video.video_taken_year) : '') }}
                                   className="w-full text-left px-3 py-2">
                                   {video.title ? (
                                     <p className="text-xs text-ink-300 truncate hover:text-white transition-colors">{video.title}</p>
@@ -5239,7 +5617,7 @@ function PhotographerDashboardInner() {
                                     <X className="w-3.5 h-3.5 text-white" />
                                   </button>
                                 </div>
-                                <button onClick={() => { setEditingVideoTitle({ videoId: video.id, isStandalone: true }); setVideoTitleDraft(video.title || '') }}
+                                <button onClick={() => { setEditingVideoTitle({ videoId: video.id, isStandalone: true }); setVideoTitleDraft(video.title || ''); setVideoTagsDraft(video.tags ?? []); setVideoMonthDraft(video.video_taken_month ? String(video.video_taken_month) : ''); setVideoYearDraft(video.video_taken_year ? String(video.video_taken_year) : '') }}
                                   className="w-full text-left px-3 py-2">
                                   {video.title ? (
                                     <p className="text-xs text-ink-300 truncate hover:text-white transition-colors">{video.title}</p>
@@ -5429,7 +5807,7 @@ function PhotographerDashboardInner() {
                     </div>
                     <span className={`text-xs flex-1 ${s.done ? 'text-ink-300 line-through' : 'text-ink-500'}`}>{s.label}</span>
                     {!s.done && (
-                      <button onClick={() => setActiveTab(s.tab as DashboardTab)} className="text-[10px] text-ink font-medium hover:underline flex-shrink-0">
+                      <button onClick={() => switchTab(s.tab as DashboardTab)} className="text-[10px] text-ink font-medium hover:underline flex-shrink-0">
                         Add →
                       </button>
                     )}
@@ -5438,7 +5816,7 @@ function PhotographerDashboardInner() {
               </div>
               {incomplete.length > 0 && (
                 <button
-                  onClick={() => setActiveTab(incomplete[0].tab as DashboardTab)}
+                  onClick={() => switchTab(incomplete[0].tab as DashboardTab)}
                   className="w-full bg-ink hover:bg-ink-800 text-white text-sm font-semibold py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors"
                 >
                   Complete profile <ArrowRight className="w-3.5 h-3.5" />
@@ -5451,13 +5829,13 @@ function PhotographerDashboardInner() {
               <p className="font-semibold text-ink text-sm mb-3">Quick actions</p>
               <div className="space-y-1">
                 {[
-                  { label: 'Upload portfolio', onClick: () => setActiveTab('portfolio'), href: null, icon: ImagePlus, badge: null },
-                  { label: pendingBookings > 0 ? `Booking requests (${pendingBookings})` : 'Booking requests', onClick: () => setActiveTab('requests'), href: null, icon: Inbox, badge: pendingBookings > 0 ? pendingBookings : null },
-                  { label: 'Set availability', onClick: () => setActiveTab('availability'), href: null, icon: Calendar, badge: null },
-                  { label: 'Packages & pricing', onClick: () => setActiveTab('packages'), href: null, icon: Package, badge: null },
-                  { label: 'Manage reviews', onClick: () => setActiveTab('reviews'), href: null, icon: Star, badge: null },
-                  { label: 'Photographer network', onClick: () => setActiveTab('network'), href: null, icon: Users, badge: null },
-                  { label: 'Profile settings', onClick: () => setActiveTab('settings'), href: null, icon: Settings, badge: null },
+                  { label: 'Upload portfolio', onClick: () => switchTab('portfolio'), href: null, icon: ImagePlus, badge: null },
+                  { label: pendingBookings > 0 ? `Booking requests (${pendingBookings})` : 'Booking requests', onClick: () => switchTab('requests'), href: null, icon: Inbox, badge: pendingBookings > 0 ? pendingBookings : null },
+                  { label: 'Set availability', onClick: () => switchTab('availability'), href: null, icon: Calendar, badge: null },
+                  { label: 'Packages & pricing', onClick: () => switchTab('packages'), href: null, icon: Package, badge: null },
+                  { label: 'Manage reviews', onClick: () => switchTab('reviews'), href: null, icon: Star, badge: null },
+                  { label: 'Photographer network', onClick: () => switchTab('network'), href: null, icon: Users, badge: null },
+                  { label: 'Profile settings', onClick: () => switchTab('settings'), href: null, icon: Settings, badge: null },
                   { label: 'View public profile', onClick: () => {}, href: '/photographers/your-profile', icon: Eye, badge: null },
                 ].map(action => {
                   const Icon = action.icon
@@ -5494,7 +5872,7 @@ function PhotographerDashboardInner() {
                     Profiles with a connected trust score get 3× more enquiries from clients.
                   </p>
                   <button
-                    onClick={() => setActiveTab(incomplete[0].tab as DashboardTab)}
+                    onClick={() => switchTab(incomplete[0].tab as DashboardTab)}
                     className="inline-flex items-center gap-1.5 text-xs font-semibold text-white hover:text-ink-200 transition-colors"
                   >
                     Do it now <ArrowRight className="w-3.5 h-3.5" />

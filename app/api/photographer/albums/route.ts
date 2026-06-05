@@ -31,7 +31,7 @@ export async function GET() {
       .eq('photographer_id', photographerId)
       .order('sort_order', { ascending: true }),
     db.from('portfolio_videos')
-      .select('id, album_id, title, sort_order, duration_seconds, storage_asset_id')
+      .select('id, album_id, title, sort_order, duration_seconds, storage_asset_id, tags, video_taken_month, video_taken_year')
       .eq('photographer_id', photographerId)
       .order('sort_order', { ascending: true }),
   ])
@@ -90,6 +90,9 @@ export async function GET() {
       duration_seconds: v.duration_seconds,
       storage_asset_id: v.storage_asset_id,
       src: assetKeyMap[v.storage_asset_id] ? `${r2Base}/${assetKeyMap[v.storage_asset_id]}` : '',
+      tags: v.tags ?? [],
+      video_taken_month: v.video_taken_month ?? null,
+      video_taken_year:  v.video_taken_year  ?? null,
     }))
     return { id: a.id, title: a.title, sort_order: a.sort_order, is_published: a.is_published, photos: albumPhotos, videos: albumVideos }
   })
@@ -112,6 +115,9 @@ export async function GET() {
       duration_seconds: v.duration_seconds,
       storage_asset_id: v.storage_asset_id,
       src: assetKeyMap[v.storage_asset_id] ? `${r2Base}/${assetKeyMap[v.storage_asset_id]}` : '',
+      tags: v.tags ?? [],
+      video_taken_month: v.video_taken_month ?? null,
+      video_taken_year:  v.video_taken_year  ?? null,
     })),
   })
 }

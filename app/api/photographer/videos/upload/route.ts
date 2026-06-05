@@ -33,6 +33,10 @@ export async function POST(request: NextRequest) {
   const file = formData.get('file') as File | null
   const albumId = (formData.get('album_id') as string | null) || null
   const title = (formData.get('title') as string | null)?.trim() || null
+  const tagsRaw = (formData.get('tags') as string | null) || ''
+  const tags: string[] = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean).slice(0, 10) : []
+  const videoTakenMonth = parseInt(formData.get('video_taken_month') as string) || null
+  const videoTakenYear  = parseInt(formData.get('video_taken_year')  as string) || null
 
   if (!file) return badRequest('file is required')
   if (!file.type.startsWith('video/')) return badRequest('Only video files are allowed')
@@ -112,13 +116,16 @@ export async function POST(request: NextRequest) {
     storage_asset_id: asset.id,
     title: title?.slice(0, PLATFORM_CONFIG.max_video_title_length) || null,
     sort_order: sortOrder,
+    tags: tags.length > 0 ? tags : [],
+    ...(videoTakenMonth && videoTakenMonth >= 1 && videoTakenMonth <= 12 ? { video_taken_month: videoTakenMonth } : {}),
+    ...(videoTakenYear && videoTakenYear >= 2000 && videoTakenYear <= 2100 ? { video_taken_year: videoTakenYear } : {}),
   }
   if (albumId) insertData.album_id = albumId
 
   const { data: video, error: videoError } = await db
     .from('portfolio_videos')
     .insert(insertData)
-    .select('id, title, sort_order, storage_asset_id')
+    .select('id, title, sort_order, storage_asset_id, tags, video_taken_month, video_taken_year')
     .single()
 
   if (videoError || !video) {
@@ -140,5 +147,8 @@ export async function POST(request: NextRequest) {
     title: video.title ?? '',
     duration_seconds: null,
     storage_asset_id: asset.id,
+    tags: video.tags ?? [],
+    video_taken_month: video.video_taken_month ?? null,
+    video_taken_year:  video.video_taken_year  ?? null,
   })
 }

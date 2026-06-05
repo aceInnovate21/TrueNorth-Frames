@@ -18,12 +18,15 @@ export async function PATCH(request: NextRequest) {
   if (!photographerId) return notFound('Photographer profile not found')
 
   const body = await request.json()
-  const { id, title, sort_order } = body
+  const { id, title, sort_order, tags, video_taken_month, video_taken_year } = body
   if (!id) return badRequest('id is required')
 
   const updates: Record<string, unknown> = {}
   if (title !== undefined) updates.title = title?.trim().slice(0, PLATFORM_CONFIG.max_video_title_length) || null
   if (sort_order !== undefined) updates.sort_order = sort_order
+  if (tags !== undefined) updates.tags = Array.isArray(tags) ? tags.slice(0, 10) : []
+  if (video_taken_month !== undefined) updates.video_taken_month = video_taken_month || null
+  if (video_taken_year !== undefined) updates.video_taken_year = video_taken_year || null
 
   const { error } = await db
     .from('portfolio_videos')

@@ -21,9 +21,10 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo   = searchParams.get('redirect') ?? null
-  const wasDeleted   = searchParams.get('deleted') === '1'
-  const wasVerified  = searchParams.get('verified') === '1'
-  const verifyFailed = searchParams.get('error') === 'verification_failed'
+  const wasDeleted    = searchParams.get('deleted') === '1'
+  const wasVerified   = searchParams.get('verified') === '1'
+  const verifyFailed  = searchParams.get('error') === 'verification_failed'
+  const wasRejected   = searchParams.get('error') === 'rejected'
   const [role, setRole] = useState<Role | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -78,14 +79,14 @@ function LoginForm() {
       return
     }
 
-    // Fetch role + account_status in one query
+    // Fetch role, account_status, and photographer profile_status in one pass
     const { data: userData } = await supabase
       .from('users')
       .select('role, account_status')
       .eq('id', data.user.id)
       .single() as { data: { role: string; account_status: string } | null; error: unknown }
 
-    // Suspended / banned / deactivated — sign out immediately and show clear message
+    // Suspended / banned / deactivated — sign out immediately
     if (userData?.account_status === 'suspended' || userData?.account_status === 'banned' || userData?.account_status === 'deactivated') {
       await supabase.auth.signOut()
       setLoading(false)
@@ -107,7 +108,25 @@ function LoginForm() {
       return
     }
 
-    // If there's a redirect param (e.g., from booking flow), go there instead
+    // Rejected photographers cannot log in — sign them out immediately
+    if (userData?.role === 'photographer') {
+      const { data: profileData } = await (supabase as any)
+        .from('photographer_profiles')
+        .select('profile_status')
+        .eq('user_id', data.user.id)
+        .maybeSingle()
+
+      if (profileData?.profile_status === 'rejected') {
+        await supabase.auth.signOut()
+        setLoading(false)
+        setErrors({ form: 'Your profile was not approved. Please check your email for details on what needs to be fixed, then sign up again or contact support@truenorthframes.ca.' })
+        setShake(true)
+        setTimeout(() => setShake(false), 500)
+        return
+      }
+    }
+
+    // Pending photographers go to their dashboard to keep building their profile
     if (redirectTo) {
       router.push(redirectTo)
     } else {
@@ -202,6 +221,16 @@ function LoginForm() {
             <div className="flex items-start gap-2.5 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 mb-5">
               <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-emerald-700 leading-snug">Email verified! Sign in below to get started.</p>
+            </div>
+          )}
+
+          {/* Rejected photographer — session killed by middleware */}
+          {wasRejected && (
+            <div className="flex items-start gap-2.5 bg-red-50 border border-red-100 rounded-xl px-4 py-3 mb-5">
+              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700 leading-snug">
+                Your photographer profile was not approved. Check your email for details on what needs to be fixed. Questions? Contact <strong>support@truenorthframes.ca</strong>.
+              </p>
             </div>
           )}
 

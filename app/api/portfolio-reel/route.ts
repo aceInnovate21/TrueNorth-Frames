@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
   // ── 1. Approved photographers ─────────────────────────────────────────────
   const { data: profiles } = await db
     .from('photographer_profiles')
-    .select('id, username, display_name, location, avatar_url, trust_score, native_avg_rating, native_review_count, years_experience, website_url, profile_status')
+    .select('id, username, display_name, location, avatar_url, trust_score, native_avg_rating, native_review_count, years_experience, website_url, completeness_score, created_at, profile_status')
     .eq('profile_status', 'approved')
 
   if (!profiles || profiles.length === 0) {
@@ -143,18 +143,20 @@ export async function GET(request: NextRequest) {
 
   // ── 8. Badge signals for photographers in this page ───────────────────────
   const pagePhotographerIds = pageItems.map(i => i.photographerId).filter((id, idx, arr) => arr.indexOf(id) === idx)
-  const [{ data: gbpLinks }, { data: platformReviews }, { data: completedBookings }] = await Promise.all([
+  const [{ data: gbpLinks }, { data: gbpOAuthRows }, { data: platformReviews }, { data: completedBookings }] = await Promise.all([
     db.from('external_platform_links').select('photographer_id, platform_review_count').eq('platform', 'google').in('photographer_id', pagePhotographerIds),
+    db.from('platform_oauth_tokens').select('photographer_id').eq('platform', 'google').eq('is_active', true).in('photographer_id', pagePhotographerIds),
     db.from('reviews').select('photographer_id').in('photographer_id', pagePhotographerIds).eq('flag_status', 'none'),
     db.from('booking_requests').select('photographer_id').in('photographer_id', pagePhotographerIds).eq('status', 'completed'),
   ])
 
-  const gbpMap: Record<string, boolean>          = {}
-  const platformReviewMap: Record<string, number> = {}
-  const bookingMap: Record<string, number>        = {}
-  for (const r of gbpLinks ?? [])         gbpMap[r.photographer_id] = (r.platform_review_count ?? 0) > 0
-  for (const r of platformReviews ?? [])  platformReviewMap[r.photographer_id] = (platformReviewMap[r.photographer_id] ?? 0) + 1
-  for (const r of completedBookings ?? []) bookingMap[r.photographer_id] = (bookingMap[r.photographer_id] ?? 0) + 1
+  const gbpReviewCountMap: Record<string, number>  = {}
+  const gbpOAuthSet        = new Set((gbpOAuthRows ?? []).map((r: any) => r.photographer_id as string))
+  const platformReviewMap: Record<string, number>  = {}
+  const bookingMap: Record<string, number>         = {}
+  for (const r of gbpLinks ?? [])          gbpReviewCountMap[r.photographer_id] = r.platform_review_count ?? 0
+  for (const r of platformReviews ?? [])   platformReviewMap[r.photographer_id] = (platformReviewMap[r.photographer_id] ?? 0) + 1
+  for (const r of completedBookings ?? []) bookingMap[r.photographer_id]        = (bookingMap[r.photographer_id] ?? 0) + 1
 
   const profileMap: Record<string, any> = {}
   for (const p of profiles) profileMap[p.id] = p
@@ -174,17 +176,21 @@ export async function GET(request: NextRequest) {
     if (photos.length === 0) return null
 
     const totalPhotos = [...(byPhotographer[item.photographerId]?.standalone ?? []), ...Object.values(byPhotographer[item.photographerId]?.byAlbum ?? {}).flat()]
+    const accountAgeDays = profile.created_at
+      ? Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 86400))
+      : 0
     const signals: BadgeSignals = {
-      yearsExperience:     profile.years_experience ?? null,
-      hasGbp:              !!gbpMap[item.photographerId],
-      hasWebsite:          !!(profile.website_url?.trim()),
-      hasGoogleReviews:    gbpMap[item.photographerId] ?? false,
-      portfolioPhotoCount: totalPhotos.length,
-      platformReviewCount: platformReviewMap[item.photographerId] ?? 0,
-      completedBookings:   bookingMap[item.photographerId]        ?? 0,
-      trustScore:          Number(profile.trust_score ?? 0),
-      isMostReviewed:      false,
-      isMostBooked:        false,
+      portfolioPhotoCount:  totalPhotos.length,
+      platformReviewCount:  platformReviewMap[item.photographerId] ?? 0,
+      nativeAvgRating:      Number(profile.native_avg_rating ?? 0),
+      completedBookings:    bookingMap[item.photographerId]        ?? 0,
+      completenessScore:    Number(profile.completeness_score      ?? 0),
+      accountAgeDays,
+      isGbpOAuthConnected:  gbpOAuthSet.has(item.photographerId),
+      gbpReviewCount:       gbpReviewCountMap[item.photographerId] ?? 0,
+      yearsExperience:      profile.years_experience ?? null,
+      isMostReviewed:       false,
+      isMostBooked:         false,
     }
 
     return {

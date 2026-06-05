@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   // ── Fetch approved profiles ──────────────────────────────────────────────
   let profileQuery = db
     .from('photographer_profiles')
-    .select('id, username, display_name, tagline, bio, location, avatar_url, cover_image_url, rate_display, trust_score, native_avg_rating, native_review_count, years_experience, website_url, created_at', { count: 'exact' })
+    .select('id, username, display_name, tagline, bio, location, avatar_url, cover_image_url, rate_display, trust_score, native_avg_rating, native_review_count, years_experience, website_url, completeness_score, created_at', { count: 'exact' })
     .eq('profile_status', 'approved')
 
   // Text search across name, bio, location
@@ -131,28 +131,31 @@ export async function GET(request: NextRequest) {
 
   const filteredIds = filtered.map((p: any) => p.id)
 
-  // ── Badge signals: portfolio counts, GBP, platform reviews, bookings ─────
+  // ── Badge signals: portfolio counts, GBP OAuth, platform reviews, bookings ─
   const [
     { data: portfolioCounts },
     { data: gbpLinks },
+    { data: gbpOAuthRows },
     { data: platformReviews },
     { data: completedBookingsRows },
   ] = await Promise.all([
-    // Distinct photo count per photographer
     db.from('portfolio_photos')
       .select('photographer_id')
       .in('photographer_id', filteredIds),
-    // GBP connection
     db.from('external_platform_links')
-      .select('photographer_id, platform_review_count, is_oauth_connected')
+      .select('photographer_id, platform_review_count')
       .eq('platform', 'google')
       .in('photographer_id', filteredIds),
-    // Native platform reviews
+    // OAuth connection is the verified signal — not the self-reported link
+    db.from('platform_oauth_tokens')
+      .select('photographer_id')
+      .eq('platform', 'google')
+      .eq('is_active', true)
+      .in('photographer_id', filteredIds),
     db.from('reviews')
       .select('photographer_id')
       .in('photographer_id', filteredIds)
       .eq('flag_status', 'none'),
-    // Completed bookings
     db.from('booking_requests')
       .select('photographer_id')
       .in('photographer_id', filteredIds)
@@ -165,10 +168,12 @@ export async function GET(request: NextRequest) {
     photoCountMap[row.photographer_id] = (photoCountMap[row.photographer_id] ?? 0) + 1
   }
 
-  const gbpMap: Record<string, { hasReviews: boolean }> = {}
+  const gbpReviewCountMap: Record<string, number> = {}
   for (const row of gbpLinks ?? []) {
-    gbpMap[row.photographer_id] = { hasReviews: (row.platform_review_count ?? 0) > 0 }
+    gbpReviewCountMap[row.photographer_id] = row.platform_review_count ?? 0
   }
+
+  const gbpOAuthSet = new Set((gbpOAuthRows ?? []).map((r: any) => r.photographer_id as string))
 
   const platformReviewCountMap: Record<string, number> = {}
   for (const row of platformReviews ?? []) {
@@ -180,7 +185,7 @@ export async function GET(request: NextRequest) {
     completedBookingMap[row.photographer_id] = (completedBookingMap[row.photographer_id] ?? 0) + 1
   }
 
-  // Build signal list for ranking
+  // Build signal list for cross-marketplace ranking
   const signalList = filtered.map((p: any) => ({
     id: p.id,
     platformReviewCount: platformReviewCountMap[p.id] ?? 0,
@@ -190,21 +195,26 @@ export async function GET(request: NextRequest) {
   const mostReviewedIds = getMostReviewedIds(signalList)
   const mostBookedIds   = getMostBookedIds(signalList)
 
+  const now = Date.now()
+
   const photographers = filtered.map((p: any) => {
-    const specialties = specialtyMap[p.id] ?? []
-    const gbp = gbpMap[p.id]
+    const specialties    = specialtyMap[p.id] ?? []
+    const accountAgeDays = p.created_at
+      ? Math.floor((now - new Date(p.created_at).getTime()) / (1000 * 86400))
+      : 0
 
     const signals: BadgeSignals = {
-      yearsExperience:     p.years_experience ?? null,
-      hasGbp:              !!gbp,
-      hasWebsite:          !!(p.website_url?.trim()),
-      hasGoogleReviews:    gbp?.hasReviews ?? false,
-      portfolioPhotoCount: photoCountMap[p.id] ?? 0,
-      platformReviewCount: platformReviewCountMap[p.id] ?? 0,
-      completedBookings:   completedBookingMap[p.id]   ?? 0,
-      trustScore:          Number(p.trust_score ?? 0),
-      isMostReviewed:      mostReviewedIds.has(p.id),
-      isMostBooked:        mostBookedIds.has(p.id),
+      portfolioPhotoCount:  photoCountMap[p.id]         ?? 0,
+      platformReviewCount:  platformReviewCountMap[p.id] ?? 0,
+      nativeAvgRating:      Number(p.native_avg_rating   ?? 0),
+      completedBookings:    completedBookingMap[p.id]    ?? 0,
+      completenessScore:    Number(p.completeness_score  ?? 0),
+      accountAgeDays,
+      isGbpOAuthConnected:  gbpOAuthSet.has(p.id),
+      gbpReviewCount:       gbpReviewCountMap[p.id]      ?? 0,
+      yearsExperience:      p.years_experience           ?? null,
+      isMostReviewed:       mostReviewedIds.has(p.id),
+      isMostBooked:         mostBookedIds.has(p.id),
     }
 
     const badge = computeBadge(signals)

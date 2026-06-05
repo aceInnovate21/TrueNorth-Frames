@@ -193,6 +193,16 @@ export async function PATCH(request: NextRequest) {
             templateId: 'booking_completed',
             payload: { photographerName, date: dateLabel },
           })
+        } else if (status === 'cancelled') {
+          await queueEmail({
+            to: clientUser.email,
+            templateId: 'booking_cancellation_confirmed',
+            payload: {
+              photographerName,
+              sessionType: booking.occasion,
+              date: dateLabel,
+            },
+          })
         }
       }
     }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
 import { queueEmail } from '@/lib/email/client'
+import { notify } from '@/lib/notify'
 
 // GET /api/admin/accounts?role=client|photographer&q=search&page=1
 export async function GET(request: NextRequest) {
@@ -70,7 +71,7 @@ export async function PATCH(request: NextRequest) {
       .eq('user_id', user_id)
     if (error) return serverError('Failed to approve photographer')
 
-    // Email photographer
+    // Email + in-app notification for photographer
     try {
       const { data: photProfile } = await db
         .from('photographer_profiles').select('display_name, username').eq('user_id', user_id).single()
@@ -84,6 +85,15 @@ export async function PATCH(request: NextRequest) {
           payload: { firstName, username: photProfile?.username ?? '' },
         })
       }
+      // In-app notification
+      await notify({
+        db,
+        userId: user_id,
+        type: 'profile_approved',
+        title: "You're live on TrueNorth Frames! 🎉",
+        body: 'Your profile has been approved and is now visible to clients. Complete your portfolio and connect your Google Business Profile to stand out.',
+        expiresInDays: 30,
+      })
     } catch { /* best-effort */ }
 
   } else if (action === 'suspend') {
@@ -112,10 +122,35 @@ export async function PATCH(request: NextRequest) {
       .eq('id', user_id)
     if (error) return serverError('Failed to unsuspend account')
   } else if (action === 'reject_photographer') {
+    const { reason } = body
     const { error } = await db.from('photographer_profiles')
-      .update({ profile_status: 'rejected' })
+      .update({
+        profile_status: 'rejected',
+        ...(reason?.trim() ? { status_note: reason.trim() } : {}),
+      })
       .eq('user_id', user_id)
     if (error) return serverError('Failed to reject photographer')
+
+    // Immediately invalidate all active sessions for this user.
+    // Next request they make, the middleware will catch profile_status=rejected and kill the cookie.
+    // This also revokes any refresh tokens so they cannot re-authenticate silently.
+    try {
+      await db.auth.admin.signOut(user_id, 'global')
+    } catch { /* non-fatal — middleware handles any lingering sessions */ }
+
+    // Email photographer with rejection reason
+    try {
+      const { data: photUser } = await db
+        .from('users').select('email, full_name').eq('id', user_id).single()
+      if (photUser?.email) {
+        const firstName = (photUser.full_name ?? 'there').split(' ')[0]
+        await queueEmail({
+          to: photUser.email,
+          templateId: 'photographer_rejected',
+          payload: { firstName, reason: reason?.trim() || null },
+        })
+      }
+    } catch { /* best-effort */ }
   } else {
     return badRequest('Invalid action')
   }

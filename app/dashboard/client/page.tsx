@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { NotificationCentre } from '@/components/notification-centre'
 import {
@@ -682,10 +682,73 @@ function SupportWidget() {
   )
 }
 
+// ─── Client avatar dropdown ───────────────────────────────────────────────────
+
+function ClientAvatarMenu({ initials, fullName, loading }: { initials: string; fullName: string; loading: boolean }) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [])
+
+  async function handleSignOut() {
+    setOpen(false)
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="focus:outline-none focus:ring-2 focus:ring-ink/20 rounded-xl"
+        aria-label="Account menu"
+      >
+        {loading ? (
+          <div className="w-9 h-9 rounded-xl bg-ink-100 animate-pulse" />
+        ) : (
+          <div className="w-9 h-9 rounded-xl bg-ink flex items-center justify-center text-white text-[11px] font-bold">
+            {initials}
+          </div>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-11 w-48 bg-white rounded-2xl border border-ink-100 py-1.5 z-50" style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}>
+          {fullName && (
+            <div className="px-4 py-2 border-b border-ink-50 mb-1">
+              <p className="text-xs font-semibold text-ink truncate">{fullName}</p>
+              <p className="text-[10px] text-ink-400">Client</p>
+            </div>
+          )}
+          <Link href="/dashboard/client/edit"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-ink-600 hover:bg-ink-50 transition-colors">
+            <Settings className="w-3.5 h-3.5 text-ink-400" /> Settings
+          </Link>
+          <button
+            onClick={handleSignOut}
+            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-ink-600 hover:bg-ink-50 transition-colors text-left"
+          >
+            <LogOut className="w-3.5 h-3.5 text-ink-400" /> Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────
 
 export default function ClientDashboard() {
   // ── State ────────────────────────────────────────────────────────────────
+  const router = useRouter()
   const [profile, setProfile] = useState<ClientProfile | null>(null)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -889,29 +952,12 @@ export default function ClientDashboard() {
               pollIntervalMs={30000}
             />
 
-            {/* Avatar + name */}
-            <div className="flex items-center gap-2">
-              {loadingProfile ? (
-                <div className="w-9 h-9 rounded-xl bg-ink-100 animate-pulse" />
-              ) : (
-                <div className="w-9 h-9 rounded-xl bg-ink flex items-center justify-center text-white text-[11px] font-bold">
-                  {initials}
-                </div>
-              )}
-              <div className="hidden sm:block">
-                {loadingProfile ? (
-                  <div className="space-y-1 animate-pulse">
-                    <div className="h-3 bg-ink-100 rounded w-20" />
-                    <div className="h-2.5 bg-ink-100 rounded w-16" />
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-ink text-xs font-semibold leading-tight">{firstName} {lastName}</p>
-                    <p className="text-ink-300 text-[10px]">{city}</p>
-                  </>
-                )}
-              </div>
-            </div>
+            {/* Avatar dropdown */}
+            <ClientAvatarMenu
+              initials={initials}
+              fullName={profile?.full_name ?? ''}
+              loading={loadingProfile}
+            />
           </div>
         </div>
       </div>
@@ -1403,7 +1449,7 @@ export default function ClientDashboard() {
                     <Settings className="w-4 h-4" />
                     Account settings
                   </Link>
-                  <button onClick={() => setShowSignOut(true)} className="flex items-center gap-2.5 text-ink-300 hover:text-ink text-sm transition-colors py-1 w-full text-left">
+                  <button onClick={async () => { await supabase.auth.signOut(); router.push('/login') }} className="flex items-center gap-2.5 text-ink-300 hover:text-ink text-sm transition-colors py-1 w-full text-left">
                     <LogOut className="w-4 h-4" />
                     Sign out
                   </button>

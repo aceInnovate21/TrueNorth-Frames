@@ -22,68 +22,83 @@ export async function GET() {
 
   const db = adminDb as any
 
-  // Try with new contact columns first; fall back to base select if columns don't exist yet
-  let profileResult = await db
+  const { data: profile, error: profileError } = await db
     .from('photographer_profiles')
-    .select('id, username, display_name, bio, location, rate_display, website_url, instagram_url, avatar_url, cover_image_url, contact_instagram_url, contact_facebook_url')
+    .select('id, username, display_name, bio, location, rate_display, website_url, instagram_url, avatar_url, cover_image_url, contact_instagram_url, contact_facebook_url, completeness_score, native_avg_rating, native_review_count, years_experience, created_at, profile_status')
     .eq('user_id', user.id)
     .single()
 
-  if (profileResult.error && profileResult.error.code !== 'PGRST116') {
-    // Columns may not exist yet — retry with minimal set
-    profileResult = await db
-      .from('photographer_profiles')
-      .select('id, username, display_name, bio, location, rate_display, website_url, instagram_url, avatar_url, cover_image_url')
-      .eq('user_id', user.id)
-      .single()
-    if (profileResult.error && profileResult.error.code !== 'PGRST116') {
-      return serverError('Failed to load profile')
-    }
+  if (profileError && profileError.code !== 'PGRST116') {
+    return serverError('Failed to load profile')
   }
-
-  const { data: profile } = profileResult
 
   const photographerId = profile?.id ?? null
 
   let specialties: string[] = []
   let linksMap: Record<string, string> = {}
+  let gbpReviewCount = 0
+  let isGbpOAuthConnected = false
+  let portfolioPhotoCount = 0
+  let completedBookings = 0
 
   if (photographerId) {
-    const { data: specialtyRows } = await db
-      .from('photographer_specialties')
-      .select('specialty')
-      .eq('photographer_id', photographerId)
+    const [
+      { data: specialtyRows },
+      { data: linkRows },
+      { data: gbpLink },
+      { data: oauthRow },
+      { data: photoRows },
+      { count: bookingCount },
+    ] = await Promise.all([
+      db.from('photographer_specialties').select('specialty').eq('photographer_id', photographerId),
+      db.from('external_platform_links').select('platform, profile_url').eq('photographer_id', photographerId),
+      db.from('external_platform_links').select('platform_review_count').eq('photographer_id', photographerId).eq('platform', 'google').maybeSingle(),
+      db.from('platform_oauth_tokens').select('photographer_id').eq('photographer_id', photographerId).eq('platform', 'google').eq('is_active', true).maybeSingle(),
+      db.from('portfolio_photos').select('id').eq('photographer_id', photographerId),
+      db.from('booking_requests').select('*', { count: 'exact', head: true }).eq('photographer_id', photographerId).eq('status', 'completed'),
+    ])
 
     specialties = (specialtyRows ?? []).map((s: { specialty: string }) => s.specialty)
-
-    const { data: linkRows } = await db
-      .from('external_platform_links')
-      .select('platform, profile_url')
-      .eq('photographer_id', photographerId)
-
-    for (const link of linkRows ?? []) {
-      linksMap[link.platform] = link.profile_url
-    }
+    for (const link of linkRows ?? []) linksMap[link.platform] = link.profile_url
+    gbpReviewCount = gbpLink?.platform_review_count ?? 0
+    isGbpOAuthConnected = !!oauthRow
+    portfolioPhotoCount = (photoRows ?? []).length
+    completedBookings = bookingCount ?? 0
   }
 
   const { amount, unit } = parseRateDisplay(profile?.rate_display ?? null)
 
+  const accountAgeDays = profile?.created_at
+    ? Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 86400))
+    : 0
+
   return NextResponse.json({
-    username: profile?.username ?? '',
-    display_name: profile?.display_name ?? '',
-    bio: profile?.bio ?? '',
-    location: profile?.location ?? '',
-    rate_amount: amount,
-    rate_unit: unit,
-    website_url: profile?.website_url ?? '',
-    avatar_url: profile?.avatar_url ?? '',
-    cover_image_url: profile?.cover_image_url ?? '',
+    username:              profile?.username ?? '',
+    display_name:          profile?.display_name ?? '',
+    bio:                   profile?.bio ?? '',
+    location:              profile?.location ?? '',
+    rate_amount:           amount,
+    rate_unit:             unit,
+    website_url:           profile?.website_url ?? '',
+    avatar_url:            profile?.avatar_url ?? '',
+    cover_image_url:       profile?.cover_image_url ?? '',
     specialties,
-    google_url: linksMap['google'] ?? '',
-    instagram_url: profile?.instagram_url ?? linksMap['instagram'] ?? '',
-    yelp_url: linksMap['yelp'] ?? '',
+    google_url:            linksMap['google'] ?? '',
+    instagram_url:         profile?.instagram_url ?? linksMap['instagram'] ?? '',
+    yelp_url:              linksMap['yelp'] ?? '',
     contact_instagram_url: profile?.contact_instagram_url ?? '',
-    contact_facebook_url: profile?.contact_facebook_url ?? '',
+    contact_facebook_url:  profile?.contact_facebook_url ?? '',
+    // Badge signal data
+    completeness_score:    Number(profile?.completeness_score ?? 0),
+    native_avg_rating:     Number(profile?.native_avg_rating ?? 0),
+    native_review_count:   profile?.native_review_count ?? 0,
+    years_experience:      profile?.years_experience ?? null,
+    profile_status:        profile?.profile_status ?? 'pending',
+    portfolio_photo_count: portfolioPhotoCount,
+    completed_bookings:    completedBookings,
+    is_gbp_oauth_connected: isGbpOAuthConnected,
+    gbp_review_count:      gbpReviewCount,
+    account_age_days:      accountAgeDays,
   })
 }
 
@@ -106,7 +121,7 @@ export async function PATCH(request: NextRequest) {
   const photographerId = profile.id
 
   if (section === 'basics') {
-    const { display_name, bio, location, rate_amount, rate_unit, website_url } = body
+    const { display_name, bio, location, rate_amount, rate_unit, website_url, years_experience } = body
 
     if (!display_name?.trim()) return badRequest('display_name is required')
 
@@ -127,6 +142,7 @@ export async function PATCH(request: NextRequest) {
         location: location?.trim() || null,
         rate_display: rateDisplay,
         website_url: website_url?.trim() || null,
+        ...(years_experience != null ? { years_experience: Number(years_experience) } : {}),
         updated_at: new Date().toISOString(),
       })
       .eq('id', photographerId)

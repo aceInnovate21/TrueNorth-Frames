@@ -11,8 +11,10 @@ export async function GET() {
     .from('notifications')
     .select('id, type, title, body, read_at, entity_type, entity_id, created_at')
     .eq('user_id', user.id)
+    .or('expires_at.is.null,expires_at.gt.' + new Date().toISOString())
+    .order('read_at', { ascending: true, nullsFirst: true })
     .order('created_at', { ascending: false })
-    .limit(20)
+    .limit(50)
 
   if (error) return serverError('Failed to load notifications')
 

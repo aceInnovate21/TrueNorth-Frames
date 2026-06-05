@@ -12,14 +12,56 @@ const ROLE_ROUTES: Record<string, string> = {
   '/admin': 'admin',
 }
 
-async function getUserRole(userId: string): Promise<string | null> {
+interface UserInfo {
+  role: string | null
+  photographerStatus: string | null  // 'draft' | 'pending' | 'approved' | 'rejected' | 'suspended' | 'banned'
+}
+
+async function getUserInfo(userId: string): Promise<UserInfo> {
   const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } }
-  )
-  const { data } = await (admin as any).from('users').select('role').eq('id', userId).single()
-  return data?.role ?? null
+  ) as any
+  const { data: userData } = await admin.from('users').select('role').eq('id', userId).single()
+  const role = userData?.role ?? null
+
+  let photographerStatus: string | null = null
+  if (role === 'photographer') {
+    const { data: profileData } = await admin
+      .from('photographer_profiles')
+      .select('profile_status')
+      .eq('user_id', userId)
+      .maybeSingle()
+    photographerStatus = profileData?.profile_status ?? null
+  }
+
+  return { role, photographerStatus }
+}
+
+async function getUserRole(userId: string): Promise<string | null> {
+  const { role } = await getUserInfo(userId)
+  return role
+}
+
+// Returns a response that clears the Supabase auth cookies, effectively signing the user out server-side.
+// The client will be redirected to /login with a reason param.
+function forceSignOut(request: NextRequest, reason: string): NextResponse {
+  const url = request.nextUrl.clone()
+  url.pathname = '/login'
+  url.searchParams.set('error', reason)
+
+  const response = NextResponse.redirect(url)
+
+  // Clear all Supabase session cookies
+  const cookiesToClear = ['sb-access-token', 'sb-refresh-token']
+  request.cookies.getAll().forEach(({ name }) => {
+    if (name.startsWith('sb-') || cookiesToClear.includes(name)) {
+      response.cookies.set(name, '', { maxAge: 0, path: '/' })
+    }
+  })
+
+  return response
 }
 
 export async function middleware(request: NextRequest) {
@@ -83,31 +125,44 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Authenticated on auth page → redirect to their dashboard
-  if (isAuthPage && user) {
-    const role = await getUserRole(user.id)
-    const dest = role === 'photographer'
-      ? '/dashboard/photographer'
-      : role === 'admin'
-      ? '/admin'
-      : '/dashboard/client'
-    const url = request.nextUrl.clone()
-    url.pathname = dest
-    return NextResponse.redirect(url)
-  }
+  // Authenticated user — check for rejected photographers before anything else.
+  // A rejected photographer should not have an active session anywhere.
+  if (user) {
+    const { role, photographerStatus } = await getUserInfo(user.id)
 
-  // Role gate — wrong role gets redirected to their correct dashboard
-  if (user && isProtected) {
-    const matchedRoute = Object.keys(ROLE_ROUTES).find(p => pathname.startsWith(p))
-    if (matchedRoute) {
-      const role = await getUserRole(user.id)
-      if (role && role !== ROLE_ROUTES[matchedRoute]) {
+    if (role === 'photographer' && photographerStatus === 'rejected') {
+      // Kill their session and bounce to login with an error message
+      return forceSignOut(request, 'rejected')
+    }
+
+    // Authenticated on auth page → redirect to correct dashboard
+    if (isAuthPage) {
+      let dest: string
+      if (role === 'photographer') {
+        // pending and approved both go to the dashboard — pending sees a banner there
+        dest = '/dashboard/photographer'
+      } else if (role === 'admin') {
+        dest = '/admin'
+      } else {
+        dest = '/dashboard/client'
+      }
+      const url = request.nextUrl.clone()
+      url.pathname = dest
+      return NextResponse.redirect(url)
+    }
+
+    // Role gate — wrong role gets redirected to their correct dashboard
+    if (isProtected) {
+      const matchedRoute = Object.keys(ROLE_ROUTES).find(p => pathname.startsWith(p))
+      if (matchedRoute && role !== ROLE_ROUTES[matchedRoute]) {
         const url = request.nextUrl.clone()
-        url.pathname = role === 'photographer'
-          ? '/dashboard/photographer'
-          : role === 'admin'
-          ? '/admin'
-          : '/dashboard/client'
+        if (role === 'photographer') {
+          url.pathname = '/dashboard/photographer'
+        } else if (role === 'admin') {
+          url.pathname = '/admin'
+        } else {
+          url.pathname = '/dashboard/client'
+        }
         return NextResponse.redirect(url)
       }
     }
