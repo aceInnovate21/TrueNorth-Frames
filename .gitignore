@@ -5,3 +5,6 @@ dist
 .DS_Store
 *.tsbuildinfo
 .vercel
+
+# Next.js build output and cache — never commit these
+.next/
