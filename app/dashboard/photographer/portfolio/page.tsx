@@ -2,11 +2,11 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   ArrowLeft, ImagePlus, X, Star, CheckCircle2, AlertCircle,
   ChevronRight, FolderPlus, Pencil, Trash2, Video, Play,
-  FolderOpen, Image as ImageIcon, Plus,
+  FolderOpen, Image as ImageIcon, Plus, Upload, CheckCheck,
 } from 'lucide-react'
 import { PLATFORM_CONFIG } from '@/lib/platform-config'
 
@@ -20,6 +20,15 @@ const MAX_PHOTO_MB         = MAX_PHOTO_BYTES / 1024 / 1024
 const MAX_VIDEO_MB         = MAX_VIDEO_BYTES / 1024 / 1024
 const MAX_ALBUM_NAME       = PLATFORM_CONFIG.max_album_name_length
 const MAX_CAPTION          = PLATFORM_CONFIG.max_photo_caption_length
+const MAX_VIDEO_TITLE      = PLATFORM_CONFIG.max_video_title_length
+
+const MONTHS = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December',
+]
+
+const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo']
+const ACCEPTED_VIDEO_EXT   = '.mp4,.mov,.avi'
 
 interface PortfolioPhoto {
   id: string
@@ -35,6 +44,9 @@ interface PortfolioVideo {
   title: string
   duration_seconds: number | null
   storage_asset_id: string
+  tags: string[]
+  video_taken_month: number | null
+  video_taken_year: number | null
 }
 
 interface Album {
@@ -44,20 +56,58 @@ interface Album {
   videos: PortfolioVideo[]
 }
 
+// ─── Upload state ─────────────────────────────────────────────────────────────
+
+type VideoUploadPhase = 'idle' | 'uploading' | 'metadata' | 'saving' | 'done'
+
+interface VideoUploadState {
+  phase: VideoUploadPhase
+  progress: number          // 0–100 during 'uploading'
+  error: string | null
+  // filled once upload completes, used in metadata step
+  assetId: string | null
+  key: string | null
+  fileName: string | null
+}
+
+const INITIAL_UPLOAD_STATE: VideoUploadState = {
+  phase: 'idle', progress: 0, error: null,
+  assetId: null, key: null, fileName: null,
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 function totalPhotos(albums: Album[]) { return albums.reduce((n, a) => n + a.photos.length, 0) }
 function totalVideos(albums: Album[]) { return albums.reduce((n, a) => n + a.videos.length, 0) }
 
-async function uploadPhoto(file: File, albumId: string): Promise<{ id: string; src: string; caption: string; isCover: boolean; storage_asset_id: string } | null> {
+async function uploadPhoto(
+  file: File, albumId: string
+): Promise<{ id: string; src: string; caption: string; isCover: boolean; storage_asset_id: string } | null> {
   const form = new FormData()
   form.append('file', file)
   form.append('album_id', albumId)
   const res = await fetch('/api/photographer/photos/upload', { method: 'POST', body: form })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    console.error('[photo upload]', res.status, err)
-    return null
-  }
+  if (!res.ok) { console.error('[photo upload]', res.status, await res.json().catch(() => ({}))); return null }
   return res.json()
+}
+
+// XHR-based upload so we get real upload progress
+function xhrUpload(url: string, file: File, contentType: string, onProgress: (pct: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', url)
+    xhr.setRequestHeader('Content-Type', contentType)
+    xhr.upload.addEventListener('progress', e => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
+    })
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve()
+      else reject(new Error(`R2 upload failed: ${xhr.status}`))
+    })
+    xhr.addEventListener('error', () => reject(new Error('Network error during upload')))
+    xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')))
+    xhr.send(file)
+  })
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -138,31 +188,113 @@ function PhotoCard({ photo, onRemove, onSetCover, onEditCaption, isSaved }: {
   )
 }
 
+function VideoCard({ video, onRemove }: { video: PortfolioVideo; onRemove: () => void }) {
+  const [hovered, setHovered] = useState(false)
+  const label = [
+    video.title || null,
+    video.video_taken_month && video.video_taken_year
+      ? `${MONTHS[video.video_taken_month - 1]} ${video.video_taken_year}`
+      : null,
+  ].filter(Boolean).join(' · ')
+
+  return (
+    <div
+      className="relative bg-black rounded-2xl overflow-hidden group"
+      style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div className="relative aspect-video">
+        <video
+          src={video.src}
+          className="w-full h-full object-cover"
+          preload="metadata"
+          muted
+          playsInline
+        />
+        {/* Play overlay */}
+        <div className={`absolute inset-0 flex items-center justify-center transition-opacity ${hovered ? 'opacity-100' : 'opacity-80'}`}>
+          <div className="w-10 h-10 bg-white/90 rounded-full flex items-center justify-center shadow-lg">
+            <Play className="w-4 h-4 text-ink fill-ink ml-0.5" />
+          </div>
+        </div>
+        {/* Delete button */}
+        <button
+          onClick={e => { e.stopPropagation(); onRemove() }}
+          className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+        >
+          <X className="w-3.5 h-3.5 text-white" />
+        </button>
+        {/* Tags badge */}
+        {video.tags?.length > 0 && (
+          <div className="absolute bottom-2 left-2 flex flex-wrap gap-1">
+            {video.tags.slice(0, 2).map(tag => (
+              <span key={tag} className="bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full">{tag}</span>
+            ))}
+            {video.tags.length > 2 && (
+              <span className="bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full">+{video.tags.length - 2}</span>
+            )}
+          </div>
+        )}
+      </div>
+      {label && (
+        <div className="px-3 py-2">
+          <p className="text-xs text-ink-400 truncate">{label}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Video upload progress overlay ────────────────────────────────────────────
+
+function UploadProgressBar({ progress }: { progress: number }) {
+  return (
+    <div className="w-full bg-ink-100 rounded-full h-2 overflow-hidden">
+      <div
+        className="bg-ink h-2 rounded-full transition-all duration-300"
+        style={{ width: `${progress}%` }}
+      />
+    </div>
+  )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function PortfolioPage() {
-  const [albums, setAlbums] = useState<Album[]>([])
-  const [loading, setLoading] = useState(true)
+  const [albums, setAlbums]           = useState<Album[]>([])
+  const [loading, setLoading]         = useState(true)
   const [openAlbumId, setOpenAlbumId] = useState<string | null>(null)
 
   const [albumModal, setAlbumModal] = useState<{ mode: 'create' | 'rename'; albumId?: string } | null>(null)
   const [albumDraft, setAlbumDraft] = useState('')
 
   const [editingCaption, setEditingCaption] = useState<{ albumId: string; photoId: string } | null>(null)
-  const [captionDraft, setCaptionDraft] = useState('')
-  const [savingCaption, setSavingCaption] = useState(false)
-  const [savedCaption, setSavedCaption] = useState<string | null>(null)
+  const [captionDraft, setCaptionDraft]     = useState('')
+  const [savingCaption, setSavingCaption]   = useState(false)
+  const [savedCaption, setSavedCaption]     = useState<string | null>(null)
 
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const [uploading, setUploading] = useState(false)
+  const [photoError, setPhotoError] = useState<string | null>(null)
+  const [uploading, setUploading]   = useState(false)
+
+  // Video upload state machine
+  const [videoUpload, setVideoUpload] = useState<VideoUploadState>(INITIAL_UPLOAD_STATE)
+
+  // Metadata form (filled after upload completes)
+  const [videoTitle, setVideoTitle]   = useState('')
+  const [videoTagInput, setVideoTagInput] = useState('')
+  const [videoTags, setVideoTags]     = useState<string[]>([])
+  const [videoMonth, setVideoMonth]   = useState<number | ''>('')
+  const [videoYear, setVideoYear]     = useState<number | ''>('')
+  const [savingMeta, setSavingMeta]   = useState(false)
 
   const photoInputRef = useRef<HTMLInputElement>(null)
+  const videoInputRef = useRef<HTMLInputElement>(null)
 
   const openAlbum = openAlbumId ? albums.find(a => a.id === openAlbumId) ?? null : null
-  const totalP = totalPhotos(albums)
-  const totalV = totalVideos(albums)
+  const totalP    = totalPhotos(albums)
+  const totalV    = totalVideos(albums)
 
-  // Load albums from DB
   useEffect(() => {
     fetch('/api/photographer/albums')
       .then(r => r.json())
@@ -171,7 +303,7 @@ export default function PortfolioPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  // ─── Album actions ──────────────────────────────────────────────────────────
+  // ─── Album actions ────────────────────────────────────────────────────────
 
   async function commitAlbumModal() {
     const title = albumDraft.trim()
@@ -208,33 +340,34 @@ export default function PortfolioPage() {
     }
   }
 
-  // ─── Photo upload ───────────────────────────────────────────────────────────
+  // ─── Photo upload ─────────────────────────────────────────────────────────
 
   async function handlePhotoFiles(files: FileList | null) {
     if (!files || !openAlbumId) return
-    setUploadError(null)
+
     const all = Array.from(files).filter(f => f.type.startsWith('image/'))
     const oversized = all.filter(f => f.size > MAX_PHOTO_BYTES)
-    if (oversized.length > 0) {
-      setUploadError(`${oversized.map(f => f.name).join(', ')} exceed the ${MAX_PHOTO_MB} MB limit.`)
+    if (oversized.length) {
+      setPhotoError(`${oversized.map(f => f.name).join(', ')} exceed the ${MAX_PHOTO_MB} MB limit.`)
       return
     }
     if (totalP + all.length > MAX_PHOTOS_TOTAL) {
-      setUploadError(`Portfolio limit is ${MAX_PHOTOS_TOTAL} photos. You have ${MAX_PHOTOS_TOTAL - totalP} slot(s) remaining.`)
+      setPhotoError(`Portfolio limit is ${MAX_PHOTOS_TOTAL} photos. You have ${MAX_PHOTOS_TOTAL - totalP} slot(s) remaining.`)
       return
     }
 
+    setPhotoError(null)
     setUploading(true)
     for (const file of all) {
       const photo = await uploadPhoto(file, openAlbumId)
-      if (!photo) {
-        setUploadError(`Failed to upload ${file.name}. Try again.`)
-        continue
-      }
-      setAlbums(prev => prev.map(a => a.id === openAlbumId ? {
-        ...a,
-        photos: [...a.photos, { ...photo, isCover: a.photos.length === 0 }],
-      } : a))
+      if (!photo) { setPhotoError(`Failed to upload ${file.name}. Try again.`); continue }
+      setAlbums(prev => prev.map(a => {
+        if (a.id !== openAlbumId) return a
+        const photos = a.photos.length === 0
+          ? [{ ...photo, isCover: true }]
+          : [...a.photos, { ...photo, isCover: false }]
+        return { ...a, photos }
+      }))
     }
     setUploading(false)
     if (photoInputRef.current) photoInputRef.current.value = ''
@@ -279,6 +412,133 @@ export default function PortfolioPage() {
     setSavingCaption(false)
   }
 
+  // ─── Video upload — presigned R2 ──────────────────────────────────────────
+
+  function resetVideoUpload() {
+    setVideoUpload(INITIAL_UPLOAD_STATE)
+    setVideoTitle('')
+    setVideoTagInput('')
+    setVideoTags([])
+    setVideoMonth('')
+    setVideoYear('')
+    if (videoInputRef.current) videoInputRef.current.value = ''
+  }
+
+  async function handleVideoFile(file: File) {
+    if (!openAlbumId) return
+
+    // Client-side guards
+    if (!ACCEPTED_VIDEO_TYPES.includes(file.type)) {
+      setVideoUpload(s => ({ ...s, error: 'Only MP4, MOV, and AVI files are supported.' }))
+      return
+    }
+    if (file.size > MAX_VIDEO_BYTES) {
+      setVideoUpload(s => ({ ...s, error: `Video exceeds the ${MAX_VIDEO_MB} MB limit. Please trim or export at a lower resolution.` }))
+      return
+    }
+
+    const albumVideos = openAlbum?.videos.length ?? 0
+    if (albumVideos >= MAX_VIDEOS_PER_ALBUM) {
+      setVideoUpload(s => ({ ...s, error: `This album already has the maximum of ${MAX_VIDEOS_PER_ALBUM} videos.` }))
+      return
+    }
+    if (totalV >= MAX_VIDEOS_TOTAL) {
+      setVideoUpload(s => ({ ...s, error: `You've reached the maximum of ${MAX_VIDEOS_TOTAL} videos across all albums.` }))
+      return
+    }
+
+    setVideoUpload({ phase: 'uploading', progress: 0, error: null, assetId: null, key: null, fileName: file.name })
+
+    try {
+      // Step 1: get presigned URL + register orphan asset
+      const presignRes = await fetch('/api/storage/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entity_type: 'portfolio_video', content_type: file.type, size_bytes: file.size }),
+      })
+      if (!presignRes.ok) {
+        const err = await presignRes.json().catch(() => ({}))
+        throw new Error(err.error ?? 'Failed to get upload URL')
+      }
+      const { upload_url, key, asset_id } = await presignRes.json()
+
+      // Step 2: upload directly to R2 with progress
+      await xhrUpload(upload_url, file, file.type, pct =>
+        setVideoUpload(s => ({ ...s, progress: pct }))
+      )
+
+      // Step 3: move to metadata step
+      setVideoUpload(s => ({ ...s, phase: 'metadata', progress: 100, assetId: asset_id, key }))
+
+    } catch (err: any) {
+      setVideoUpload(s => ({ ...s, phase: 'idle', error: err.message ?? 'Upload failed. Please try again.' }))
+    }
+  }
+
+  function handleVideoTagKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if ((e.key === 'Enter' || e.key === ',') && videoTagInput.trim()) {
+      e.preventDefault()
+      const tag = videoTagInput.trim().toLowerCase()
+      if (!videoTags.includes(tag) && videoTags.length < 10) {
+        setVideoTags(prev => [...prev, tag])
+      }
+      setVideoTagInput('')
+    }
+    if (e.key === 'Backspace' && !videoTagInput && videoTags.length > 0) {
+      setVideoTags(prev => prev.slice(0, -1))
+    }
+  }
+
+  async function saveVideoMetadata() {
+    if (!openAlbumId || !videoUpload.assetId || !videoUpload.key) return
+    setSavingMeta(true)
+    setVideoUpload(s => ({ ...s, phase: 'saving' }))
+
+    try {
+      const res = await fetch('/api/photographer/videos/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          asset_id:          videoUpload.assetId,
+          key:               videoUpload.key,
+          album_id:          openAlbumId,
+          title:             videoTitle.trim() || null,
+          tags:              videoTags,
+          video_taken_month: videoMonth || null,
+          video_taken_year:  videoYear  || null,
+        }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error ?? 'Failed to save video')
+      }
+
+      const newVideo: PortfolioVideo = await res.json()
+      setAlbums(prev => prev.map(a =>
+        a.id !== openAlbumId ? a : { ...a, videos: [...a.videos, newVideo] }
+      ))
+      setVideoUpload(s => ({ ...s, phase: 'done' }))
+      setTimeout(() => resetVideoUpload(), 1800)
+
+    } catch (err: any) {
+      setVideoUpload(s => ({ ...s, phase: 'metadata', error: err.message ?? 'Failed to save. Try again.' }))
+    } finally {
+      setSavingMeta(false)
+    }
+  }
+
+  async function removeVideo(albumId: string, videoId: string) {
+    const res = await fetch(`/api/photographer/videos?id=${videoId}`, { method: 'DELETE' })
+    if (res.ok) {
+      setAlbums(prev => prev.map(a =>
+        a.id !== albumId ? a : { ...a, videos: a.videos.filter(v => v.id !== videoId) }
+      ))
+    }
+  }
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+
   if (loading) {
     return (
       <div className="min-h-screen bg-ink-50 flex items-center justify-center">
@@ -293,7 +553,7 @@ export default function PortfolioPage() {
   return (
     <div className="min-h-screen bg-ink-50">
 
-      {/* Album / Rename Modal */}
+      {/* ── Album / Rename modal ──────────────────────────────────────────── */}
       {albumModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6" style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
@@ -301,13 +561,10 @@ export default function PortfolioPage() {
               {albumModal.mode === 'create' ? 'New album' : 'Rename album'}
             </h3>
             <input
-              type="text"
-              value={albumDraft}
+              type="text" value={albumDraft}
               onChange={e => setAlbumDraft(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') commitAlbumModal() }}
-              placeholder="Album name…"
-              autoFocus
-              maxLength={MAX_ALBUM_NAME}
+              placeholder="Album name…" autoFocus maxLength={MAX_ALBUM_NAME}
               className="w-full border border-ink-100 rounded-xl px-3.5 py-2.5 text-sm text-ink outline-none focus:border-ink transition-all mb-4"
             />
             <div className="flex gap-2">
@@ -324,19 +581,16 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      {/* Caption modal */}
+      {/* ── Caption modal ─────────────────────────────────────────────────── */}
       {editingCaption && openAlbum && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl w-full max-w-sm p-5" style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
             <p className="text-sm font-semibold text-ink mb-3">Edit caption</p>
             <input
-              type="text"
-              value={captionDraft}
+              type="text" value={captionDraft}
               onChange={e => setCaptionDraft(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') saveCaption() }}
-              placeholder="Add a caption…"
-              autoFocus
-              maxLength={MAX_CAPTION}
+              placeholder="Add a caption…" autoFocus maxLength={MAX_CAPTION}
               className="w-full border border-ink-100 rounded-xl px-3.5 py-2.5 text-sm text-ink outline-none focus:border-ink transition-all mb-3"
             />
             <div className="flex gap-2">
@@ -353,7 +607,141 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      {/* Nav */}
+      {/* ── Video upload modal (uploading + metadata + done) ──────────────── */}
+      {videoUpload.phase !== 'idle' && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6" style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }}>
+
+            {/* Uploading */}
+            {videoUpload.phase === 'uploading' && (
+              <>
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 bg-ink-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <Upload className="w-5 h-5 text-ink-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-ink text-sm">Uploading video…</p>
+                    <p className="text-ink-400 text-xs truncate">{videoUpload.fileName}</p>
+                  </div>
+                  <span className="ml-auto font-bold text-ink text-sm tabular-nums">{videoUpload.progress}%</span>
+                </div>
+                <UploadProgressBar progress={videoUpload.progress} />
+                <p className="text-ink-300 text-xs mt-3">
+                  Going directly to Cloudflare R2 — do not close this tab.
+                </p>
+              </>
+            )}
+
+            {/* Metadata */}
+            {(videoUpload.phase === 'metadata' || videoUpload.phase === 'saving') && (
+              <>
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <p className="font-semibold text-ink text-sm">Video uploaded</p>
+                    <p className="text-ink-400 text-xs mt-0.5">Add details to help clients find your work</p>
+                  </div>
+                  <div className="w-8 h-8 bg-emerald-50 rounded-full flex items-center justify-center">
+                    <CheckCheck className="w-4 h-4 text-emerald-600" />
+                  </div>
+                </div>
+
+                {videoUpload.error && (
+                  <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2.5 mb-4">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    {videoUpload.error}
+                  </div>
+                )}
+
+                {/* Title */}
+                <label className="block text-xs font-medium text-ink-500 mb-1">Title <span className="text-ink-200">(optional)</span></label>
+                <input
+                  type="text" value={videoTitle}
+                  onChange={e => setVideoTitle(e.target.value)}
+                  placeholder="e.g. Summer wedding highlight reel"
+                  maxLength={MAX_VIDEO_TITLE}
+                  className="w-full border border-ink-100 rounded-xl px-3.5 py-2.5 text-sm text-ink outline-none focus:border-ink transition-all mb-4"
+                />
+
+                {/* Tags */}
+                <label className="block text-xs font-medium text-ink-500 mb-1">Tags <span className="text-ink-200">(optional · press Enter to add)</span></label>
+                <div className="flex flex-wrap gap-1.5 border border-ink-100 rounded-xl px-3 py-2 mb-1 focus-within:border-ink transition-all min-h-[42px]">
+                  {videoTags.map(tag => (
+                    <span key={tag} className="inline-flex items-center gap-1 bg-ink-50 text-ink text-xs px-2 py-0.5 rounded-full">
+                      {tag}
+                      <button onClick={() => setVideoTags(prev => prev.filter(t => t !== tag))} className="hover:text-red-500 transition-colors">
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    type="text" value={videoTagInput}
+                    onChange={e => setVideoTagInput(e.target.value)}
+                    onKeyDown={handleVideoTagKeyDown}
+                    placeholder={videoTags.length === 0 ? 'wedding, portrait, outdoor…' : ''}
+                    className="flex-1 min-w-[120px] text-sm text-ink outline-none bg-transparent"
+                    disabled={videoTags.length >= 10}
+                  />
+                </div>
+                <p className="text-ink-200 text-xs mb-4">{videoTags.length}/10 tags</p>
+
+                {/* Month + Year */}
+                <div className="grid grid-cols-2 gap-3 mb-5">
+                  <div>
+                    <label className="block text-xs font-medium text-ink-500 mb-1">Month <span className="text-ink-200">(optional)</span></label>
+                    <select
+                      value={videoMonth}
+                      onChange={e => setVideoMonth(e.target.value ? Number(e.target.value) : '')}
+                      className="w-full border border-ink-100 rounded-xl px-3 py-2.5 text-sm text-ink outline-none focus:border-ink transition-all bg-white"
+                    >
+                      <option value="">Month</option>
+                      {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-ink-500 mb-1">Year <span className="text-ink-200">(optional)</span></label>
+                    <input
+                      type="number" value={videoYear}
+                      onChange={e => setVideoYear(e.target.value ? Number(e.target.value) : '')}
+                      placeholder="2024" min={2000} max={new Date().getFullYear()}
+                      className="w-full border border-ink-100 rounded-xl px-3.5 py-2.5 text-sm text-ink outline-none focus:border-ink transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveVideoMetadata}
+                    disabled={savingMeta}
+                    className="flex-1 bg-ink text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-ink-800 transition-colors disabled:opacity-50"
+                  >
+                    {savingMeta ? 'Saving…' : 'Save video'}
+                  </button>
+                  <button
+                    onClick={resetVideoUpload}
+                    disabled={savingMeta}
+                    className="border border-ink-100 text-ink-400 text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-ink-50 transition-colors disabled:opacity-40"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Done */}
+            {videoUpload.phase === 'done' && (
+              <div className="text-center py-4">
+                <div className="w-12 h-12 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <CheckCheck className="w-6 h-6 text-emerald-600" />
+                </div>
+                <p className="font-semibold text-ink text-sm">Video added to your portfolio</p>
+                <p className="text-ink-300 text-xs mt-1">It will appear on your public profile immediately.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Nav ───────────────────────────────────────────────────────────── */}
       <nav className="sticky top-0 z-40 bg-white border-b border-ink-100">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -392,7 +780,7 @@ export default function PortfolioPage() {
             <div className="flex items-start justify-between mb-6">
               <div>
                 <h1 className="font-serif text-2xl font-bold text-ink mb-1">Portfolio</h1>
-                <p className="text-ink-300 text-sm">Up to {MAX_ALBUMS} albums · {MAX_PHOTOS_TOTAL} photos ({MAX_PHOTO_MB} MB each)</p>
+                <p className="text-ink-300 text-sm">Up to {MAX_ALBUMS} albums · {MAX_PHOTOS_TOTAL} photos · {MAX_VIDEOS_TOTAL} videos</p>
               </div>
               {albums.length < MAX_ALBUMS && (
                 <button onClick={() => { setAlbumDraft(''); setAlbumModal({ mode: 'create' }) }}
@@ -448,71 +836,132 @@ export default function PortfolioPage() {
           </>
         )}
 
-        {/* ── Album detail ────────────────────────────────────────────────── */}
+        {/* ── Album detail ─────────────────────────────────────────────────── */}
         {openAlbum && (
           <>
+            {/* Hidden file inputs */}
             <input ref={photoInputRef} type="file" accept="image/*" multiple className="hidden"
               onChange={e => handlePhotoFiles(e.target.files)} />
+            <input ref={videoInputRef} type="file" accept={ACCEPTED_VIDEO_EXT} className="hidden"
+              onChange={e => { if (e.target.files?.[0]) handleVideoFile(e.target.files[0]) }} />
 
             <div className="flex items-start justify-between mb-6">
               <div>
                 <h1 className="font-serif text-2xl font-bold text-ink mb-1">{openAlbum.title}</h1>
-                <p className="text-ink-300 text-sm">{openAlbum.photos.length} photos</p>
+                <p className="text-ink-300 text-sm">
+                  {openAlbum.photos.length} photo{openAlbum.photos.length !== 1 ? 's' : ''} · {openAlbum.videos.length} video{openAlbum.videos.length !== 1 ? 's' : ''}
+                </p>
               </div>
-              {totalP < MAX_PHOTOS_TOTAL && (
-                <button onClick={() => photoInputRef.current?.click()} disabled={uploading}
-                  className="flex items-center gap-1.5 bg-ink text-white text-xs font-semibold px-3 py-2 rounded-xl hover:bg-ink-800 transition-colors disabled:opacity-50">
-                  {uploading ? (
-                    <><svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg> Uploading…</>
-                  ) : (
-                    <><ImagePlus className="w-3.5 h-3.5" /> Add photos</>
-                  )}
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {openAlbum.videos.length < MAX_VIDEOS_PER_ALBUM && totalV < MAX_VIDEOS_TOTAL && (
+                  <button
+                    onClick={() => { resetVideoUpload(); videoInputRef.current?.click() }}
+                    disabled={videoUpload.phase !== 'idle'}
+                    className="flex items-center gap-1.5 border border-ink-100 text-ink text-xs font-semibold px-3 py-2 rounded-xl hover:bg-ink-50 transition-colors disabled:opacity-40"
+                  >
+                    <Video className="w-3.5 h-3.5" /> Add video
+                  </button>
+                )}
+                {totalP < MAX_PHOTOS_TOTAL && (
+                  <button onClick={() => photoInputRef.current?.click()} disabled={uploading}
+                    className="flex items-center gap-1.5 bg-ink text-white text-xs font-semibold px-3 py-2 rounded-xl hover:bg-ink-800 transition-colors disabled:opacity-50">
+                    {uploading ? (
+                      <><svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg> Uploading…</>
+                    ) : (
+                      <><ImagePlus className="w-3.5 h-3.5" /> Add photos</>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
 
-            {uploadError && (
+            {/* Photo error */}
+            {photoError && (
               <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3 mb-5">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                {uploadError}
-                <button onClick={() => setUploadError(null)} className="ml-auto"><X className="w-3.5 h-3.5" /></button>
+                {photoError}
+                <button onClick={() => setPhotoError(null)} className="ml-auto"><X className="w-3.5 h-3.5" /></button>
               </div>
             )}
 
-            {openAlbum.photos.length === 0 ? (
+            {/* Video error (when idle) */}
+            {videoUpload.phase === 'idle' && videoUpload.error && (
+              <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3 mb-5">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {videoUpload.error}
+                <button onClick={() => setVideoUpload(s => ({ ...s, error: null }))} className="ml-auto"><X className="w-3.5 h-3.5" /></button>
+              </div>
+            )}
+
+            {/* ── Photos grid ──────────────────────────────────────────────── */}
+            {openAlbum.photos.length === 0 && openAlbum.videos.length === 0 ? (
               <div onClick={() => photoInputRef.current?.click()}
                 className="border-2 border-dashed border-ink-200 rounded-2xl p-12 text-center cursor-pointer hover:border-ink-400 hover:bg-ink-50 transition-all mb-6">
                 <div className="w-12 h-12 bg-ink-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
                   <ImagePlus className="w-6 h-6 text-ink-400" />
                 </div>
                 <p className="font-semibold text-ink text-sm mb-1">Click to upload photos</p>
-                <p className="text-ink-300 text-xs">JPG, PNG, WEBP · max {MAX_PHOTO_MB} MB per photo</p>
+                <p className="text-ink-300 text-xs">JPG, PNG, WEBP · max {MAX_PHOTO_MB} MB each</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {openAlbum.photos.map(photo => (
-                  <PhotoCard
-                    key={photo.id}
-                    photo={photo}
-                    onRemove={() => removePhoto(openAlbum.id, photo.id)}
-                    onSetCover={() => setCover(openAlbum.id, photo.id)}
-                    onEditCaption={() => { setEditingCaption({ albumId: openAlbum.id, photoId: photo.id }); setCaptionDraft(photo.caption) }}
-                    isSaved={savedCaption === photo.id}
-                  />
-                ))}
-                {totalP < MAX_PHOTOS_TOTAL && (
-                  <button onClick={() => photoInputRef.current?.click()}
-                    className="aspect-square border-2 border-dashed border-ink-200 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-ink-400 hover:bg-ink-50 transition-all">
-                    <Plus className="w-6 h-6 text-ink-300" />
-                    <span className="text-xs text-ink-300">Add photos</span>
-                  </button>
+              <>
+                {openAlbum.photos.length > 0 && (
+                  <div className="mb-6">
+                    <p className="text-xs font-semibold text-ink-300 uppercase tracking-wide mb-3">Photos</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      {openAlbum.photos.map(photo => (
+                        <PhotoCard
+                          key={photo.id} photo={photo}
+                          onRemove={() => removePhoto(openAlbum.id, photo.id)}
+                          onSetCover={() => setCover(openAlbum.id, photo.id)}
+                          onEditCaption={() => { setEditingCaption({ albumId: openAlbum.id, photoId: photo.id }); setCaptionDraft(photo.caption) }}
+                          isSaved={savedCaption === photo.id}
+                        />
+                      ))}
+                      {totalP < MAX_PHOTOS_TOTAL && (
+                        <button onClick={() => photoInputRef.current?.click()}
+                          className="aspect-square border-2 border-dashed border-ink-200 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-ink-400 hover:bg-ink-50 transition-all">
+                          <Plus className="w-6 h-6 text-ink-300" />
+                          <span className="text-xs text-ink-300">Add photos</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 )}
-              </div>
+
+                {/* ── Videos grid ──────────────────────────────────────────── */}
+                {(openAlbum.videos.length > 0 || openAlbum.videos.length < MAX_VIDEOS_PER_ALBUM) && (
+                  <div className="mb-6">
+                    <p className="text-xs font-semibold text-ink-300 uppercase tracking-wide mb-3">Videos</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {openAlbum.videos.map(video => (
+                        <VideoCard
+                          key={video.id} video={video}
+                          onRemove={() => removeVideo(openAlbum.id, video.id)}
+                        />
+                      ))}
+                      {openAlbum.videos.length < MAX_VIDEOS_PER_ALBUM && totalV < MAX_VIDEOS_TOTAL && (
+                        <button
+                          onClick={() => { resetVideoUpload(); videoInputRef.current?.click() }}
+                          disabled={videoUpload.phase !== 'idle'}
+                          className="aspect-video border-2 border-dashed border-ink-200 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-ink-400 hover:bg-ink-50 transition-all disabled:opacity-40"
+                        >
+                          <Video className="w-7 h-7 text-ink-300" />
+                          <span className="text-sm text-ink-300 font-medium">Add video</span>
+                          <span className="text-xs text-ink-200">MP4, MOV · max {MAX_VIDEO_MB} MB</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             {openAlbum.photos.length > 0 && openAlbum.photos.length < 6 && (
-              <div className="mt-6 bg-ink rounded-2xl p-5">
-                <p className="text-white font-semibold text-sm mb-1">Add {6 - openAlbum.photos.length} more photo{6 - openAlbum.photos.length !== 1 ? 's' : ''}</p>
+              <div className="mt-2 bg-ink rounded-2xl p-5">
+                <p className="text-white font-semibold text-sm mb-1">
+                  Add {6 - openAlbum.photos.length} more photo{6 - openAlbum.photos.length !== 1 ? 's' : ''}
+                </p>
                 <p className="text-ink-400 text-xs leading-relaxed">Albums with 6+ photos get significantly more profile views.</p>
               </div>
             )}
