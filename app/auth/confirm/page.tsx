@@ -26,13 +26,24 @@ function ConfirmHandler() {
       return
     }
 
-    supabase.auth.exchangeCodeForSession(code).then(async ({ data, error: err }) => {
-      if (err || !data.session) {
-        setError('This verification link has expired or already been used. Please sign up again.')
-        return
+    async function handleCode() {
+      // First check if there's already an active session (user clicked Google again
+      // after already being authenticated — code would fail if we tried to exchange it)
+      const { data: { session: existingSession } } = await supabase.auth.getSession()
+
+      let session = existingSession
+
+      // Only exchange code if no active session
+      if (!session) {
+        const { data, error: err } = await supabase.auth.exchangeCodeForSession(code!)
+        if (err || !data.session) {
+          setError('This verification link has expired or already been used. Please sign in again.')
+          return
+        }
+        session = data.session
       }
 
-      const userId = data.session.user.id
+      const userId = session.user.id
 
       // Check if this user already has a row in public.users
       const { data: userData } = await (supabase as any)
@@ -41,7 +52,7 @@ function ConfirmHandler() {
         .eq('id', userId)
         .maybeSingle() as { data: { role: string } | null }
 
-      // ── Existing user (email confirm OR returning Google user) ──────────────
+      // ── Existing user → route to their dashboard ────────────────────────────
       if (userData?.role) {
         const role = userData.role
         if (role === 'photographer') {
@@ -55,14 +66,15 @@ function ConfirmHandler() {
       }
 
       // ── New Google OAuth user — no public.users row yet ─────────────────────
-      // Send them to role selection with their Google name + email pre-filled
-      const googleUser = data.session.user
+      const googleUser = session.user
       const fullName   = googleUser.user_metadata?.full_name ?? googleUser.user_metadata?.name ?? ''
       const email      = googleUser.email ?? ''
 
       const qs = new URLSearchParams({ email, full_name: fullName })
       router.replace(`/signup/role-select?${qs.toString()}`)
-    })
+    }
+
+    handleCode()
   }, [code, router])
 
   if (error) {
@@ -74,10 +86,10 @@ function ConfirmHandler() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
             </svg>
           </div>
-          <h1 className="font-serif text-2xl font-bold text-ink mb-2">Link expired</h1>
+          <h1 className="font-serif text-2xl font-bold text-ink mb-2">Something went wrong</h1>
           <p className="text-ink-400 text-sm leading-relaxed mb-6">{error}</p>
-          <a href="/signup" className="inline-flex items-center justify-center bg-ink text-white font-semibold text-sm px-6 py-3 rounded-xl hover:bg-ink-800 transition-colors">
-            Sign up again
+          <a href="/login" className="inline-flex items-center justify-center bg-ink text-white font-semibold text-sm px-6 py-3 rounded-xl hover:bg-ink-800 transition-colors">
+            Back to sign in
           </a>
         </div>
       </div>

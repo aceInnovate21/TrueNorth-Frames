@@ -53,24 +53,30 @@ export async function POST(request: NextRequest) {
   const welcomeTemplate = role === 'photographer' ? 'welcome_photographer' : 'welcome_client'
   const welcomePayload = { firstName, email }
 
-  // Welcome email — send immediately (too important to sit in the overnight queue)
-  const sent = await sendEmail({ to: email, templateId: welcomeTemplate, payload: welcomePayload })
-  // Fall back to queue if immediate send fails (e.g. Resend rate limit)
-  if (!sent.ok) {
-    await queueEmail({ to: email, templateId: welcomeTemplate, payload: welcomePayload })
-  }
+  // Return success immediately — email + notification are fire-and-forget
+  // so a slow/failing Resend call never blocks the user getting into the app
+  const response = NextResponse.json({ success: true })
 
-  // Welcome in-app notification
-  await notify({
-    db: adminDb,
-    userId: resolvedUserId,
-    type: 'welcome',
-    title: `Welcome to TrueNorth Frames, ${firstName}!`,
-    body: role === 'photographer'
-      ? 'Your profile is being set up. Complete your bio, upload portfolio photos, and connect your Google Business Profile to get discovered.'
-      : 'Browse Edmonton photographers, save your favourites, and send messages — all free.',
-    expiresInDays: 60,
+  // Fire-and-forget: email + in-app notification (never block the response)
+  Promise.resolve().then(async () => {
+    try {
+      const sent = await sendEmail({ to: email, templateId: welcomeTemplate, payload: welcomePayload })
+      if (!sent.ok) await queueEmail({ to: email, templateId: welcomeTemplate, payload: welcomePayload })
+    } catch { /* best-effort */ }
+
+    try {
+      await notify({
+        db: adminDb,
+        userId: resolvedUserId!,
+        type: 'welcome',
+        title: `Welcome to TrueNorth Frames, ${firstName}!`,
+        body: role === 'photographer'
+          ? 'Your profile is being set up. Complete your bio, upload portfolio photos, and connect your Google Business Profile to get discovered.'
+          : 'Browse Edmonton photographers, save your favourites, and send messages — all free.',
+        expiresInDays: 60,
+      })
+    } catch { /* best-effort */ }
   })
 
-  return NextResponse.json({ success: true })
+  return response
 }

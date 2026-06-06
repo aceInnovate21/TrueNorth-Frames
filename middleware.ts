@@ -133,10 +133,18 @@ export async function middleware(request: NextRequest) {
     // ── Limbo state: authenticated via Google but no public.users row yet ──
     // This happens when a Google OAuth user closes the browser on role-select,
     // or navigates away before completing onboarding. Route them back to finish.
-    if (!role && pathname !== '/signup/role-select' && !pathname.startsWith('/api') && !pathname.startsWith('/auth')) {
+    // Limbo state: authenticated via Google but no public.users row yet.
+    // Allow role-select, onboarding, api, and auth routes through — everything else
+    // redirects back to role-select so they can finish setting up their account.
+    const limboPassthrough = [
+      '/signup/role-select',
+      '/onboarding',
+      '/api',
+      '/auth',
+    ]
+    if (!role && !limboPassthrough.some(p => pathname.startsWith(p))) {
       const url = request.nextUrl.clone()
       url.pathname = '/signup/role-select'
-      // Pass their Google metadata so the page can pre-fill name/email
       const googleEmail = user.email ?? ''
       const googleName  = user.user_metadata?.full_name ?? user.user_metadata?.name ?? ''
       if (googleEmail) url.searchParams.set('email', googleEmail)
