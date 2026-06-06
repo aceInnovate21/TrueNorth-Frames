@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
-import { queueEmail } from '@/lib/email/client'
+import { sendEmail, queueEmail } from '@/lib/email/client'
 import { notify } from '@/lib/notify'
 
 // GET /api/admin/accounts?role=client|photographer&q=search&page=1
@@ -79,11 +79,9 @@ export async function PATCH(request: NextRequest) {
         .from('users').select('email, full_name').eq('id', user_id).single()
       if (photUser?.email) {
         const firstName = (photUser.full_name ?? 'there').split(' ')[0]
-        await queueEmail({
-          to: photUser.email,
-          templateId: 'photographer_approved',
-          payload: { firstName, username: photProfile?.username ?? '' },
-        })
+        const approvedPayload = { firstName, username: photProfile?.username ?? '' }
+        const sent = await sendEmail({ to: photUser.email, templateId: 'photographer_approved', payload: approvedPayload })
+        if (!sent.ok) await queueEmail({ to: photUser.email, templateId: 'photographer_approved', payload: approvedPayload })
       }
       // In-app notification
       await notify({
@@ -108,11 +106,9 @@ export async function PATCH(request: NextRequest) {
         .from('users').select('email, full_name, role').eq('id', user_id).single()
       if (targetUser?.email && targetUser.role === 'photographer') {
         const firstName = (targetUser.full_name ?? 'there').split(' ')[0]
-        await queueEmail({
-          to: targetUser.email,
-          templateId: 'photographer_suspended',
-          payload: { firstName, email: targetUser.email, reason: null },
-        })
+        const suspendPayload = { firstName, email: targetUser.email, reason: null }
+        const sent = await sendEmail({ to: targetUser.email, templateId: 'photographer_suspended', payload: suspendPayload })
+        if (!sent.ok) await queueEmail({ to: targetUser.email, templateId: 'photographer_suspended', payload: suspendPayload })
       }
     } catch { /* best-effort */ }
 
@@ -144,11 +140,9 @@ export async function PATCH(request: NextRequest) {
         .from('users').select('email, full_name').eq('id', user_id).single()
       if (photUser?.email) {
         const firstName = (photUser.full_name ?? 'there').split(' ')[0]
-        await queueEmail({
-          to: photUser.email,
-          templateId: 'photographer_rejected',
-          payload: { firstName, reason: reason?.trim() || null },
-        })
+        const rejectedPayload = { firstName, reason: reason?.trim() || null }
+        const sent = await sendEmail({ to: photUser.email, templateId: 'photographer_rejected', payload: rejectedPayload })
+        if (!sent.ok) await queueEmail({ to: photUser.email, templateId: 'photographer_rejected', payload: rejectedPayload })
       }
     } catch { /* best-effort */ }
   } else {

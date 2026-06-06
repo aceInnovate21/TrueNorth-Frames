@@ -430,8 +430,17 @@ export default function PortfolioPage() {
   async function handleVideoFile(file: File) {
     if (!openAlbumId) return
 
+    // Normalise content type — some browsers/iOS return empty string or non-standard types
+    const rawType = file.type || ''
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+    const contentType = rawType || (
+      ext === 'mp4' ? 'video/mp4' :
+      ext === 'mov' ? 'video/quicktime' :
+      ext === 'avi' ? 'video/x-msvideo' : ''
+    )
+
     // Client-side guards
-    if (!ACCEPTED_VIDEO_TYPES.includes(file.type)) {
+    if (!ACCEPTED_VIDEO_TYPES.includes(contentType)) {
       setVideoUpload(s => ({ ...s, error: 'Only MP4, MOV, and AVI files are supported.' }))
       return
     }
@@ -458,7 +467,7 @@ export default function PortfolioPage() {
       const presignRes = await fetch('/api/storage/presign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entity_type: 'portfolio_video', content_type: file.type, size_bytes: file.size }),
+        body: JSON.stringify({ entity_type: 'portfolio_video', content_type: contentType, size_bytes: file.size }),
       })
       if (!presignRes.ok) {
         const err = await presignRes.json().catch(() => ({}))
@@ -470,7 +479,7 @@ export default function PortfolioPage() {
       setVideoUpload(s => ({ ...s, progress: 10 }))
 
       // Step 2: upload directly to R2 with progress
-      await xhrUpload(upload_url, file, file.type, pct =>
+      await xhrUpload(upload_url, file, contentType, pct =>
         // Map XHR progress (0–100) into the 10–100 range so bar never goes backwards
         setVideoUpload(s => ({ ...s, progress: Math.max(10, pct) }))
       )
