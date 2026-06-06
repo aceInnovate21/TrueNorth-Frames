@@ -141,8 +141,11 @@ export async function middleware(request: NextRequest) {
       '/onboarding',
       '/api',
       '/auth',
+      '/login',
+      '/signup',
     ]
-    if (!role && !limboPassthrough.some(p => pathname.startsWith(p))) {
+    const isRoot = pathname === '/'
+    if (!role && !isRoot && !limboPassthrough.some(p => pathname.startsWith(p))) {
       const url = request.nextUrl.clone()
       url.pathname = '/signup/role-select'
       const googleEmail = user.email ?? ''
