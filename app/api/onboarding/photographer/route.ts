@@ -42,6 +42,8 @@ export async function POST(request: NextRequest) {
   if (!location?.trim()) return badRequest('location is required')
   if (!rate) return badRequest('rate is required')
 
+  console.log('[onboarding/photographer] user:', user.id, 'display_name:', display_name)
+
   const fullName = first_name && last_name
     ? `${first_name.trim()} ${last_name.trim()}`
     : display_name.trim()
@@ -54,11 +56,18 @@ export async function POST(request: NextRequest) {
     .update({ full_name: fullName, updated_at: new Date().toISOString() })
     .eq('id', user.id)
 
-  // Generate unique username from display name
-  const username = await uniqueUsername(db, display_name)
-
   const rateNum = parseFloat(rate)
   const rateDisplay = `$${rateNum.toFixed(0)} / hr`
+
+  // Check if profile already exists — if so, keep the existing username
+  const { data: existingProfile } = await db
+    .from('photographer_profiles')
+    .select('id, username')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  // Only generate a new username for brand-new profiles
+  const username = existingProfile?.username ?? await uniqueUsername(db, display_name)
 
   // Upsert photographer_profiles — set pending so admin must approve before going public
   const { data: profile, error: profileError } = await db
@@ -80,7 +89,10 @@ export async function POST(request: NextRequest) {
     .select('id')
     .single()
 
-  if (profileError || !profile) return serverError('Failed to save photographer profile')
+  if (profileError || !profile) {
+    console.error('[onboarding/photographer] upsert error:', JSON.stringify(profileError))
+    return serverError('Failed to save photographer profile')
+  }
 
   const photographerId = profile.id
 
