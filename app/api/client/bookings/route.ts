@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
 import { notify } from '@/lib/notify'
-import { queueEmail } from '@/lib/email/client'
+import { sendEmail, queueEmail } from '@/lib/email/client'
 
 // GET /api/client/bookings
 export async function GET() {
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
         if (photUser?.email) {
           // New conversation → send "client messaged you" email
           if (!existingConv) {
-            await queueEmail({
+            const convSent = await sendEmail({
               to: photUser.email,
               templateId: 'new_conversation',
               payload: {
@@ -195,9 +195,10 @@ export async function POST(request: NextRequest) {
                   : `Booking request for ${occasion.trim()} on ${dateLabel}`,
               },
             })
+            if (!convSent.ok) await queueEmail({ to: photUser.email, templateId: 'new_conversation', payload: { clientName, messagePreview: description?.trim() ? description.trim().slice(0, 200) : `Booking request for ${occasion.trim()} on ${dateLabel}` } })
           }
-          // Also send booking request email regardless
-          await queueEmail({
+          // Also send booking request email immediately
+          const bookingSent = await sendEmail({
             to: photUser.email,
             templateId: 'booking_received',
             payload: {
@@ -208,6 +209,7 @@ export async function POST(request: NextRequest) {
               notes: description?.trim() ?? null,
             },
           })
+          if (!bookingSent.ok) await queueEmail({ to: photUser.email, templateId: 'booking_received', payload: { clientName, sessionType: occasion.trim(), date: dateLabel, location: location_note?.trim() ?? null, notes: description?.trim() ?? null } })
         }
       }
     }

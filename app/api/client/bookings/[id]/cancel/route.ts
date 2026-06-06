@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, notFound, serverError } from '@/lib/api-helpers'
-import { queueEmail } from '@/lib/email/client'
+import { sendEmail, queueEmail } from '@/lib/email/client'
 
 // POST /api/client/bookings/[id]/cancel
 export async function POST(
@@ -86,16 +86,14 @@ export async function POST(
           const dateLabel = fullBooking.requested_date
             ? new Date(fullBooking.requested_date).toLocaleDateString('en-CA', { month: 'long', day: 'numeric', year: 'numeric' })
             : 'your session'
-          await queueEmail({
-            to: photUser.email,
-            templateId: 'booking_cancelled_by_client',
-            payload: {
-              clientName:  clientUser?.full_name ?? 'The client',
-              sessionType: fullBooking.occasion,
-              date:        dateLabel,
-              reason:      reason.trim(),
-            },
-          })
+          const cancelPayload = {
+            clientName:  clientUser?.full_name ?? 'The client',
+            sessionType: fullBooking.occasion,
+            date:        dateLabel,
+            reason:      reason.trim(),
+          }
+          const sent = await sendEmail({ to: photUser.email, templateId: 'booking_cancelled_by_client', payload: cancelPayload })
+          if (!sent.ok) await queueEmail({ to: photUser.email, templateId: 'booking_cancelled_by_client', payload: cancelPayload })
         }
       }
     }
