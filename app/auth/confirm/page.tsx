@@ -14,9 +14,10 @@ export default function ConfirmPage() {
 }
 
 function ConfirmHandler() {
-  const router   = useRouter()
-  const params   = useSearchParams()
-  const code     = params.get('code')
+  const router = useRouter()
+  const params = useSearchParams()
+  const code   = params.get('code')
+  const type   = params.get('type') ?? ''
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -31,21 +32,36 @@ function ConfirmHandler() {
         return
       }
 
-      // Fetch role to route to the right dashboard
-      const { data: userData } = await supabase
+      const userId = data.session.user.id
+
+      // Check if this user already has a row in public.users
+      const { data: userData } = await (supabase as any)
         .from('users')
         .select('role')
-        .eq('id', data.session.user.id)
-        .single() as { data: { role: string } | null; error: unknown }
+        .eq('id', userId)
+        .maybeSingle() as { data: { role: string } | null }
 
-      const role = userData?.role
-      if (role === 'photographer') {
-        router.replace('/onboarding/photographer')
-      } else if (role === 'admin') {
-        router.replace('/admin')
-      } else {
-        router.replace('/onboarding')
+      // ── Existing user (email confirm OR returning Google user) ──────────────
+      if (userData?.role) {
+        const role = userData.role
+        if (role === 'photographer') {
+          router.replace('/dashboard/photographer')
+        } else if (role === 'admin') {
+          router.replace('/admin')
+        } else {
+          router.replace('/dashboard/client')
+        }
+        return
       }
+
+      // ── New Google OAuth user — no public.users row yet ─────────────────────
+      // Send them to role selection with their Google name + email pre-filled
+      const googleUser = data.session.user
+      const fullName   = googleUser.user_metadata?.full_name ?? googleUser.user_metadata?.name ?? ''
+      const email      = googleUser.email ?? ''
+
+      const qs = new URLSearchParams({ email, full_name: fullName })
+      router.replace(`/signup/role-select?${qs.toString()}`)
     })
   }, [code, router])
 
@@ -76,7 +92,7 @@ function ConfirmHandler() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
-        <p className="text-ink font-semibold text-sm">Verifying your email…</p>
+        <p className="text-ink font-semibold text-sm">Signing you in…</p>
         <p className="text-ink-300 text-xs mt-1">Taking you to your dashboard</p>
       </div>
     </div>
