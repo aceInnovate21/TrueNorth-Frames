@@ -130,6 +130,20 @@ export async function middleware(request: NextRequest) {
   if (user) {
     const { role, photographerStatus } = await getUserInfo(user.id)
 
+    // ── Limbo state: authenticated via Google but no public.users row yet ──
+    // This happens when a Google OAuth user closes the browser on role-select,
+    // or navigates away before completing onboarding. Route them back to finish.
+    if (!role && pathname !== '/signup/role-select' && !pathname.startsWith('/api') && !pathname.startsWith('/auth')) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/signup/role-select'
+      // Pass their Google metadata so the page can pre-fill name/email
+      const googleEmail = user.email ?? ''
+      const googleName  = user.user_metadata?.full_name ?? user.user_metadata?.name ?? ''
+      if (googleEmail) url.searchParams.set('email', googleEmail)
+      if (googleName)  url.searchParams.set('full_name', googleName)
+      return NextResponse.redirect(url)
+    }
+
     if (role === 'photographer' && photographerStatus === 'rejected') {
       // Kill their session and bounce to login with an error message
       return forceSignOut(request, 'rejected')
