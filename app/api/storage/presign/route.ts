@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createPresignedUploadUrl } from '@/lib/r2'
-import { createServiceClient } from '@/lib/supabase'
+import { getServerSession, unauthorized } from '@/lib/api-helpers'
 import { randomUUID } from 'crypto'
 
 const ALLOWED_ENTITY_TYPES = ['portfolio_photo', 'portfolio_video', 'avatar', 'cover'] as const
@@ -21,14 +21,9 @@ const SIZE_LIMITS: Record<EntityType, number> = {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = createServiceClient()
-  const { data: { user } } = await supabase.auth.getUser(
-    request.headers.get('authorization')?.replace('Bearer ', '') ?? ''
-  )
-
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { user, adminDb } = await getServerSession()
+  if (!user) return unauthorized()
+  const db = adminDb as any
 
   const body = await request.json()
   const { entity_type, content_type, size_bytes } = body
@@ -63,12 +58,11 @@ export async function POST(request: NextRequest) {
     orphan_expires_at: orphanExpiresAt,
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: asset, error } = await (supabase as any)
+  const { data: asset, error } = await db
     .from('storage_assets')
     .insert(insertPayload)
     .select('id')
-    .single() as { data: { id: string } | null; error: unknown }
+    .single()
 
   if (error || !asset) {
     return NextResponse.json({ error: 'Failed to register asset' }, { status: 500 })
