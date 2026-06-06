@@ -102,7 +102,10 @@ function xhrUpload(url: string, file: File, contentType: string, onProgress: (pc
     })
     xhr.addEventListener('load', () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve()
-      else reject(new Error(`R2 upload failed: ${xhr.status}`))
+      else {
+        console.error('[R2 XHR] upload failed', xhr.status, xhr.responseText)
+        reject(new Error(`R2 upload failed: ${xhr.status}`))
+      }
     })
     xhr.addEventListener('error', () => reject(new Error('Network error during upload')))
     xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')))
@@ -447,6 +450,7 @@ export default function PortfolioPage() {
       return
     }
 
+    // Show modal immediately so user sees feedback right away
     setVideoUpload({ phase: 'uploading', progress: 0, error: null, assetId: null, key: null, fileName: file.name })
 
     try {
@@ -458,19 +462,24 @@ export default function PortfolioPage() {
       })
       if (!presignRes.ok) {
         const err = await presignRes.json().catch(() => ({}))
-        throw new Error(err.error ?? 'Failed to get upload URL')
+        throw new Error(err.error ?? `Failed to get upload URL (${presignRes.status})`)
       }
       const { upload_url, key, asset_id } = await presignRes.json()
 
+      // Show at least 10% so the bar is visible even on fast connections
+      setVideoUpload(s => ({ ...s, progress: 10 }))
+
       // Step 2: upload directly to R2 with progress
       await xhrUpload(upload_url, file, file.type, pct =>
-        setVideoUpload(s => ({ ...s, progress: pct }))
+        // Map XHR progress (0–100) into the 10–100 range so bar never goes backwards
+        setVideoUpload(s => ({ ...s, progress: Math.max(10, pct) }))
       )
 
       // Step 3: move to metadata step
       setVideoUpload(s => ({ ...s, phase: 'metadata', progress: 100, assetId: asset_id, key }))
 
     } catch (err: any) {
+      console.error('[video upload error]', err)
       setVideoUpload(s => ({ ...s, phase: 'idle', error: err.message ?? 'Upload failed. Please try again.' }))
     }
   }
