@@ -50,6 +50,21 @@ export async function POST(request: NextRequest) {
 
   const db = adminDb as any
 
+  // Ensure public.users row exists — Google OAuth users sometimes reach onboarding
+  // without completing role-select (e.g. direct URL navigation). Upsert defensively.
+  const { error: userUpsertError } = await db.from('users').upsert({
+    id: user.id,
+    email: user.email,
+    role: 'photographer',
+    full_name: fullName,
+    account_status: 'active',
+    is_verified: false,
+  }, { onConflict: 'id' })
+  if (userUpsertError) {
+    console.error('[onboarding/photographer] users upsert error:', JSON.stringify(userUpsertError))
+    return serverError('Failed to create user record')
+  }
+
   // Update public.users name
   await db
     .from('users')
