@@ -172,8 +172,7 @@ function PhotographerOnboardingForm() {
       return
     }
 
-    router.push('/dashboard/photographer')
-    router.refresh()
+    router.push('/dashboard/photographer?fresh=1')
   }
 
   return (

@@ -3,22 +3,28 @@ import { NextRequest, NextResponse } from 'next/server'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://truenorthframes.vercel.app'
 
 // Supabase redirects here after:
-//   - Email confirmation (type=signup or type=recovery)
-//   - Google OAuth login (no type param, has code)
-// We hand off to the client-side confirm page which calls exchangeCodeForSession
-// in the browser — the only way to properly set the session cookie.
+//   - Email confirmation (token_hash + type=signup)
+//   - Google OAuth login (code param, no type)
+//   - Password recovery (token_hash + type=recovery)
+// We forward ALL params to the client-side confirm page which handles each case.
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
-  const code  = searchParams.get('code')
-  const type  = searchParams.get('type') ?? ''
-  const next  = searchParams.get('next') ?? ''
+  const code       = searchParams.get('code')
+  const tokenHash  = searchParams.get('token_hash')
+  const type       = searchParams.get('type') ?? ''
+  const next       = searchParams.get('next') ?? ''
 
-  if (!code) {
-    return NextResponse.redirect(`${APP_URL}/login?error=missing_code`)
+  // Must have at least one auth token
+  if (!code && !tokenHash) {
+    return NextResponse.redirect(`${APP_URL}/login?error=missing_token`)
   }
 
-  // Hand off to the client-side confirm page with all params intact
-  const params = new URLSearchParams({ code, type })
-  if (next) params.set('next', next)
+  // Forward everything to the client confirm page
+  const params = new URLSearchParams()
+  if (code)      params.set('code', code)
+  if (tokenHash) params.set('token_hash', tokenHash)
+  if (type)      params.set('type', type)
+  if (next)      params.set('next', next)
+
   return NextResponse.redirect(`${APP_URL}/auth/confirm?${params.toString()}`)
 }

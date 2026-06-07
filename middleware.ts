@@ -130,12 +130,10 @@ export async function middleware(request: NextRequest) {
   if (user) {
     const { role, photographerStatus } = await getUserInfo(user.id)
 
-    // ── Limbo state: authenticated via Google but no public.users row yet ──
-    // This happens when a Google OAuth user closes the browser on role-select,
-    // or navigates away before completing onboarding. Route them back to finish.
-    // Limbo state: authenticated via Google but no public.users row yet.
-    // Allow role-select, onboarding, api, and auth routes through — everything else
-    // redirects back to role-select so they can finish setting up their account.
+    // ── Limbo state: authenticated but no public.users row yet ──────────────
+    // Google OAuth: user closed tab on role-select → send back to role-select to finish.
+    // Email/password: should never happen (confirm page creates the row), but if it
+    // does (e.g. register API failed), send to login so they can try again cleanly.
     const limboPassthrough = [
       '/signup/role-select',
       '/onboarding',
@@ -144,14 +142,23 @@ export async function middleware(request: NextRequest) {
       '/login',
       '/signup',
     ]
-    const isRoot = pathname === '/'
+    const isRoot     = pathname === '/'
+    const isOAuth    = user.app_metadata?.provider === 'google'
+
     if (!role && !isRoot && !limboPassthrough.some(p => pathname.startsWith(p))) {
       const url = request.nextUrl.clone()
-      url.pathname = '/signup/role-select'
-      const googleEmail = user.email ?? ''
-      const googleName  = user.user_metadata?.full_name ?? user.user_metadata?.name ?? ''
-      if (googleEmail) url.searchParams.set('email', googleEmail)
-      if (googleName)  url.searchParams.set('full_name', googleName)
+      if (isOAuth) {
+        // Google user — send to role-select to pick client/photographer
+        url.pathname = '/signup/role-select'
+        const googleEmail = user.email ?? ''
+        const googleName  = user.user_metadata?.full_name ?? user.user_metadata?.name ?? ''
+        if (googleEmail) url.searchParams.set('email', googleEmail)
+        if (googleName)  url.searchParams.set('full_name', googleName)
+      } else {
+        // Email/password user — something went wrong in confirm flow, sign out and restart
+        url.pathname = '/login'
+        url.searchParams.set('error', 'setup_incomplete')
+      }
       return NextResponse.redirect(url)
     }
 

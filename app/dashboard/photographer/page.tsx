@@ -3955,11 +3955,22 @@ function PhotographerDashboardInner() {
     profileStatus: 'pending',
   })
 
-  // Load real profile from DB on mount
+  // Load real profile from DB on mount.
+  // On fresh signup (isFresh=1) the session cookie may not be propagated yet —
+  // retry once after a short delay before giving up.
   useEffect(() => {
-    fetch('/api/photographer/profile')
-      .then(r => r.ok ? r.json() : Promise.reject(r.status))
-      .then(data => {
+    async function loadProfile(attempt = 1) {
+      try {
+        const r = await fetch('/api/photographer/profile')
+        if (!r.ok) {
+          // 401 on first attempt right after signup = cookie race; retry once
+          if (r.status === 401 && attempt === 1) {
+            setTimeout(() => loadProfile(2), 1200)
+            return
+          }
+          return // keep empty defaults
+        }
+        const data = await r.json()
         setProfile(prev => ({
           ...prev,
           displayName:         data.display_name ?? '',
@@ -3985,8 +3996,11 @@ function PhotographerDashboardInner() {
           accountAgeDays:      data.account_age_days ?? 0,
           profileStatus:       data.profile_status ?? 'pending',
         }))
-      })
-      .catch(() => {/* keep empty defaults */})
+      } catch {
+        // keep empty defaults
+      }
+    }
+    loadProfile()
   }, [])
 
   const [messages, setMessages] = useState<Message[]>([])
