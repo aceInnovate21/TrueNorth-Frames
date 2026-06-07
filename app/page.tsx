@@ -170,7 +170,7 @@ function HeroPhotoStack() {
                   <Star key={i} className="w-2.5 h-2.5 text-ink fill-ink" />
                 ))}
               </div>
-              <p className="text-[10px] text-ink-400 leading-none">4.9 · Google + Yelp</p>
+              <p className="text-[10px] text-ink-400 leading-none">4.9 · Google Reviews</p>
             </div>
           </div>
         </div>
@@ -319,9 +319,8 @@ function TrustCard() {
       <div className="space-y-2.5">
         {[
           { source: 'Google Reviews', score: '4.9', count: '31 reviews', bar: 98 },
-          { source: 'Yelp', score: '5.0', count: '8 reviews', bar: 100 },
-          { source: 'Instagram', score: '2.4k', count: 'followers', bar: 85 },
-          { source: 'Facebook', score: '4.8', count: '12 recommendations', bar: 96 },
+          { source: 'Response rate', score: '100%', count: 'last 30 days', bar: 100 },
+          { source: 'Profile completeness', score: '94%', count: 'fully set up', bar: 94 },
         ].map((s) => (
           <div key={s.source}>
             <div className="flex items-center justify-between mb-1">
@@ -547,8 +546,8 @@ export default function HomePage() {
 
               {/* Body */}
               <p className="text-ink-400 text-lg leading-relaxed mb-9 max-w-md">
-                Browse 50+ local photographers with real trust scores — pulled from Google,
-                Yelp &amp; Instagram. No middlemen, no booking fees.
+                Browse 50+ local photographers with real trust scores — verified through Google
+                Business Profile. No middlemen, no booking fees.
               </p>
 
               {/* CTAs */}
@@ -607,7 +606,7 @@ export default function HomePage() {
           <div className="flex flex-wrap items-center justify-center gap-8 sm:gap-14">
             {[
               { value: '50+', label: 'Edmonton photographers' },
-              { value: '4', label: 'Verified trust sources' },
+              { value: 'GBP', label: 'Verified trust source' },
               { value: '6', label: 'Specialties' },
               { value: '$0', label: 'Booking fees' },
             ].map((stat) => (
@@ -710,7 +709,7 @@ export default function HomePage() {
 
             {[
               { step: '01', title: 'Search & discover', desc: 'Browse by specialty, neighbourhood, or style. Read real reviews before you reach out.', icon: Search },
-              { step: '02', title: 'Review their profile', desc: 'See aggregated scores from Google, Yelp & Instagram — their full reputation in one place.', icon: Shield },
+              { step: '02', title: 'Review their profile', desc: 'See verified Google Business Profile scores — their real reputation in one place.', icon: Shield },
               { step: '03', title: 'Message directly', desc: 'Contact any photographer directly. No commissions, no booking fees, no middlemen.', icon: Camera },
             ].map((item, i) => {
               const Icon = item.icon
@@ -747,11 +746,11 @@ export default function HomePage() {
                 Every profile backed<br />by real reviews
               </h2>
               <p className="text-ink-400 text-base leading-relaxed mb-8 max-w-lg">
-                We pull each photographer's reputation from Google, Instagram, Yelp, and Facebook
-                into one unified trust score. You see their real reputation — not just what they say about themselves.
+                We verify each photographer's reputation through their Google Business Profile —
+                real reviews from real clients. You see their actual reputation, not just what they say about themselves.
               </p>
               <div className="grid grid-cols-2 gap-3 mb-8">
-                {['Google Reviews', 'Yelp', 'Instagram', 'Facebook'].map((s) => (
+                {['Google Business Profile', 'Verified reviews', 'Real star ratings', 'No fake profiles'].map((s) => (
                   <div key={s} className="bg-white rounded-xl px-4 py-3 flex items-center gap-2.5"
                     style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.06)' }}
                   >
@@ -794,8 +793,8 @@ export default function HomePage() {
           </h2>
 
           <p className="text-ink-300 text-base leading-relaxed mb-10 max-w-xl mx-auto">
-            Create a profile in under 20 minutes. Connect your existing Google, Instagram, and
-            Yelp reviews. Start receiving client inquiries directly — no commissions.
+            Create a profile in under 20 minutes. Connect your Google Business Profile
+            to verify your reviews. Start receiving client inquiries directly — no commissions.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-center mb-10">
