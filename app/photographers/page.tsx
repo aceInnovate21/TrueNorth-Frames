@@ -8,7 +8,7 @@ import {
   Search, SlidersHorizontal, Star, MapPin, ChevronRight, X,
   Baby, Briefcase, Heart, Home, Sparkles, User,
   Shield, ChevronDown, ChevronLeft, Package, Camera,
-  Share2, ChevronUp, Images,
+  Share2, ChevronUp, Images, GitCompare,
 } from 'lucide-react'
 import { Nav } from '@/components/nav'
 import { Footer } from '@/components/footer'
@@ -167,12 +167,37 @@ function mixedSort(photographers: Photographer[], hasActiveFilters: boolean): Ph
 
 // ─── Grid Card (no price) ────────────────────────────────────────────────────
 
-function GridCard({ p }: { p: Photographer }) {
+function GridCard({ p, compareIds, onToggleCompare }: {
+  p: Photographer
+  compareIds: string[]
+  onToggleCompare: (id: string) => void
+}) {
   const hasRating = p.native_avg_rating > 0
+  const isComparing = compareIds.includes(p.username)
+  const isDisabled = !isComparing && compareIds.length >= 2
+
   return (
+    <div className="relative group">
+      {/* Compare toggle — top-left corner */}
+      <button
+        onClick={e => { e.preventDefault(); onToggleCompare(p.username) }}
+        disabled={isDisabled}
+        title={isDisabled ? 'Remove one to add another' : isComparing ? 'Remove from compare' : 'Add to compare'}
+        className={`absolute top-3 left-3 z-10 flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border-2 transition-all duration-200 ${
+          isComparing
+            ? 'bg-ink text-white border-ink shadow-md'
+            : isDisabled
+            ? 'bg-white/60 text-ink-200 border-ink-100 cursor-not-allowed'
+            : 'bg-white/80 text-ink-500 border-white/60 backdrop-blur-sm hover:bg-ink hover:text-white hover:border-ink'
+        }`}
+      >
+        <GitCompare className="w-2.5 h-2.5" />
+        {isComparing ? 'Added' : 'Compare'}
+      </button>
+
     <Link
       href={`/photographers/${p.username}`}
-      className="group block bg-white rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-0.5"
+      className="block bg-white rounded-2xl overflow-hidden transition-all duration-300 hover:-translate-y-0.5"
       style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 6px 20px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.05)' }}
     >
       <div className="relative h-52 overflow-hidden bg-ink-100">
@@ -188,7 +213,7 @@ function GridCard({ p }: { p: Photographer }) {
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
 
         {p.available_today && (
-          <div className="absolute top-3 left-3">
+          <div className="absolute top-3 right-3">
             <div className="bg-emerald-500 rounded-full px-2.5 py-1">
               <span className="text-white text-[10px] font-bold">Available today</span>
             </div>
@@ -196,12 +221,12 @@ function GridCard({ p }: { p: Photographer }) {
         )}
 
         {hasRating ? (
-          <div className="absolute top-3 right-3 flex items-center gap-1 bg-white/15 backdrop-blur-md rounded-full px-2.5 py-1 border border-white/20">
+          <div className="absolute bottom-14 right-3 flex items-center gap-1 bg-white/15 backdrop-blur-md rounded-full px-2.5 py-1 border border-white/20">
             <Star className="w-3 h-3 text-white fill-white" />
             <span className="text-white text-[11px] font-bold">{p.native_avg_rating.toFixed(1)}</span>
           </div>
         ) : p.trust_score > 0 ? (
-          <div className="absolute top-3 right-3 flex items-center gap-1 bg-white/15 backdrop-blur-md rounded-full px-2.5 py-1 border border-white/20">
+          <div className="absolute bottom-14 right-3 flex items-center gap-1 bg-white/15 backdrop-blur-md rounded-full px-2.5 py-1 border border-white/20">
             <Shield className="w-3 h-3 text-white" />
             <span className="text-white text-[11px] font-bold">{p.trust_score.toFixed(1)}</span>
           </div>
@@ -255,6 +280,7 @@ function GridCard({ p }: { p: Photographer }) {
         </div>
       </div>
     </Link>
+    </div>
   )
 }
 
@@ -824,6 +850,17 @@ function PhotographersPageInner() {
   const [maxPrice, setMaxPrice]       = useState(0)
   const [packageSort, setPackageSort] = useState('popular')
 
+  // ── Compare ───────────────────────────────────────────────────────────────
+  const [compareIds, setCompareIds] = useState<string[]>([])
+
+  function toggleCompare(username: string) {
+    setCompareIds(prev =>
+      prev.includes(username)
+        ? prev.filter(id => id !== username)
+        : prev.length < 2 ? [...prev, username] : prev
+    )
+  }
+
   // ── Data ──────────────────────────────────────────────────────────────────
   const [photographers, setPhotographers] = useState<Photographer[]>([])
   const [packages, setPackages]           = useState<PackageListing[]>([])
@@ -1226,7 +1263,9 @@ function PhotographersPageInner() {
               ) : displayedPhotographers.length > 0 ? (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {displayedPhotographers.map(p => <GridCard key={p.id} p={p} />)}
+                    {displayedPhotographers.map(p => (
+                      <GridCard key={p.id} p={p} compareIds={compareIds} onToggleCompare={toggleCompare} />
+                    ))}
                   </div>
                   <Pagination page={page} totalPages={totalPages} onPage={goPage} />
                 </>
@@ -1265,6 +1304,61 @@ function PhotographersPageInner() {
           )}
         </div>
       </div>
+
+      {/* ── Floating Compare Bar ──────────────────────────────────────────── */}
+      {compareIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
+          <div
+            className="flex items-center gap-3 bg-ink text-white px-5 py-3.5 rounded-2xl shadow-float-xl"
+            style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)' }}
+          >
+            {/* Slots */}
+            <div className="flex items-center gap-2">
+              {[0, 1].map(i => {
+                const username = compareIds[i]
+                const p = username ? photographers.find(ph => ph.username === username) : null
+                return (
+                  <div key={i} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                    p ? 'bg-white/15 border border-white/20' : 'border-2 border-dashed border-white/20 text-white/40'
+                  }`}>
+                    {p ? (
+                      <>
+                        <div className={`w-5 h-5 rounded-full ${avatarBg(p.id)} flex items-center justify-center text-white text-[8px] font-bold flex-shrink-0`}>
+                          {initials(p.display_name)}
+                        </div>
+                        <span className="max-w-[80px] truncate">{p.display_name}</span>
+                        <button onClick={() => toggleCompare(username)} className="ml-0.5 text-white/60 hover:text-white transition-colors">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </>
+                    ) : (
+                      <span className="px-1">Pick {i + 1}</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="w-px h-6 bg-white/20" />
+
+            {compareIds.length === 2 ? (
+              <Link
+                href={`/compare?a=${compareIds[0]}&b=${compareIds[1]}`}
+                className="flex items-center gap-1.5 bg-white text-ink font-bold text-xs px-4 py-2 rounded-xl hover:bg-ink-100 transition-colors"
+              >
+                <GitCompare className="w-3.5 h-3.5" />
+                Compare now
+              </Link>
+            ) : (
+              <span className="text-white/50 text-xs">Select one more</span>
+            )}
+
+            <button onClick={() => setCompareIds([])} className="text-white/40 hover:text-white/80 transition-colors ml-1">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       <Footer />
     </>
