@@ -29,6 +29,8 @@ export type EmailTemplateId =
 
 export type EmailPayload = Record<string, string | number | undefined | null>
 
+const SUPPORT_EMAIL = () => process.env.SUPPORT_EMAIL ?? 'yogeshstrategyandanalytics@gmail.com'
+
 // ─── Brand tokens ─────────────────────────────────────────────────────────────
 
 const BRAND = {
@@ -51,7 +53,8 @@ function base({ preheader, body, accentColor = BRAND.accent }: {
   body: string
   accentColor?: string
 }): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://truenorthframes.ca'
+  const appUrl      = process.env.NEXT_PUBLIC_APP_URL ?? 'https://thetruenorthframes.com'
+  const supportEmail = process.env.SUPPORT_EMAIL ?? 'yogeshstrategyandanalytics@gmail.com'
 
   return `<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
@@ -130,7 +133,7 @@ function base({ preheader, body, accentColor = BRAND.accent }: {
                 <strong style="color:#444;">TrueNorth Frames</strong> &nbsp;·&nbsp; Edmonton, AB
               </p>
               <p style="margin:0 0 6px;font-size:12px;color:${BRAND.faint};line-height:1.5;">
-                Questions? &nbsp;<a href="mailto:support@truenorthframes.ca" style="color:#888;text-decoration:underline;">support@truenorthframes.ca</a>
+                Questions? &nbsp;<a href="mailto:${supportEmail}" style="color:#888;text-decoration:underline;">${supportEmail}</a>
               </p>
               <p style="margin:0;font-size:11px;color:#cccccc;line-height:1.5;">
                 You're receiving this because you have a TrueNorth Frames account. &nbsp;
@@ -275,7 +278,7 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
         ])}
         ${cta('Complete Your Profile', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer`)}
         ${divider()}
-        ${p_('Questions? Email <a href="mailto:support@truenorthframes.ca" style="color:#333;font-weight:600;">support@truenorthframes.ca</a> — we respond within one business day.')}
+        ${p_(`Questions? Email <a href="mailto:${SUPPORT_EMAIL()}" style="color:#333;font-weight:600;">${SUPPORT_EMAIL()}</a> — we respond within one business day.`)}
       `,
     }),
   }),
@@ -519,7 +522,7 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
           : p_('Our team found activity on your account that requires review.')}
         ${p_('While suspended, your profile is hidden from the marketplace and you cannot receive new booking requests. Existing conversations remain accessible.')}
         ${p_('To appeal this decision or get more information, email us directly:')}
-        ${cta('Contact Support', `mailto:support@truenorthframes.ca?subject=Account suspension — ${encodeURIComponent(String(p.email))}`, BRAND.red)}
+        ${cta('Contact Support', `mailto:${SUPPORT_EMAIL()}?subject=Account suspension — ${encodeURIComponent(String(p.email))}`, BRAND.red)}
       `,
     }),
   }),
@@ -557,7 +560,7 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
         ${p_(`Hi ${p.firstName}, thank you for flagging a review — we take every report seriously.`)}
         ${alertBox('After careful investigation, our team determined the review does not violate our policies and it will <strong>remain on your profile</strong>.', BRAND.amber)}
         ${p_('If you believe there are additional details we should consider, contact our support team directly and we\'ll take another look.')}
-        ${cta('Contact Support', `mailto:support@truenorthframes.ca?subject=Review dispute — ${encodeURIComponent(String(p.username))}`)}
+        ${cta('Contact Support', `mailto:${SUPPORT_EMAIL()}?subject=Review dispute — ${encodeURIComponent(String(p.username))}`)}
       `,
     }),
   }),

@@ -65,11 +65,45 @@ function ConfirmHandler() {
         return
       }
 
-      // ── New Google OAuth user — no public.users row yet ─────────────────────
-      const googleUser = session.user
-      const fullName   = googleUser.user_metadata?.full_name ?? googleUser.user_metadata?.name ?? ''
-      const email      = googleUser.email ?? ''
+      // ── New user — no public.users row yet ─────────────────────────────────
+      const authUser   = session.user
+      const metadata   = authUser.user_metadata ?? {}
+      const fullName   = metadata.full_name ?? metadata.name ?? ''
+      const email      = authUser.email ?? ''
+      const metaRole   = metadata.role as string | undefined
 
+      // Email/password signup: role was stored in metadata during signUp —
+      // create the public.users row now and route to onboarding.
+      if (metaRole === 'photographer' || metaRole === 'client') {
+        const registerRes = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: authUser.id,
+            access_token: session.access_token,
+            role: metaRole,
+            full_name: fullName,
+            email,
+          }),
+        })
+
+        if (!registerRes.ok) {
+          setError('Account verified but profile setup failed. Please try signing in.')
+          return
+        }
+
+        if (metaRole === 'photographer') {
+          const firstName = fullName.split(' ')[0] ?? ''
+          const lastName  = fullName.split(' ').slice(1).join(' ')
+          const qs = new URLSearchParams({ firstName, lastName })
+          router.replace(`/onboarding/photographer?${qs.toString()}`)
+        } else {
+          router.replace('/dashboard/client')
+        }
+        return
+      }
+
+      // Google OAuth: no role in metadata — show role-select
       const qs = new URLSearchParams({ email, full_name: fullName })
       router.replace(`/signup/role-select?${qs.toString()}`)
     }

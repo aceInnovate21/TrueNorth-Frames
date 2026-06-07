@@ -75,7 +75,7 @@ export async function sendEmail({
       html,
       text,
       // reply-to support@ so replies from users land somewhere useful
-      replyTo: 'support@truenorthframes.ca',
+      replyTo: process.env.SUPPORT_EMAIL ?? 'yogeshstrategyandanalytics@gmail.com',
       headers: {
         // Marks as transactional — helps bypass promotional tabs in Gmail
         'X-Entity-Ref-ID': `tnf-${templateId}-${Date.now()}`,

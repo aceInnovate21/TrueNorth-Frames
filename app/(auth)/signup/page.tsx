@@ -29,6 +29,7 @@ function GoogleIcon() {
 }
 
 type Role = 'client' | 'photographer' | null
+type Stage = 'form' | 'verify-email'
 
 const CLIENT_PERKS = [
   'Free to browse & contact photographers',
@@ -59,6 +60,7 @@ function SignupForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get('redirect') ?? null
+  const [stage, setStage] = useState<Stage>('form')
   const [role, setRole] = useState<Role>(null)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -96,23 +98,25 @@ function SignupForm() {
     const e = validate()
     if (Object.keys(e).length > 0) return
     setLoading(true)
+    setFormError(null)
 
     const fullName = `${firstName.trim()} ${lastName.trim()}`
 
-    // 1. Create Supabase auth user
+    // 1. Create Supabase auth user — store role+name in metadata so the
+    //    confirm page can create the public.users row after email verification
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: { full_name: fullName, role },
+        emailRedirectTo: `${window.location.origin}/auth/confirm`,
       },
     })
 
     if (signUpError) {
       setLoading(false)
       if (signUpError.message.toLowerCase().includes('already registered')) {
-        setTouched(t => ({ ...t, email: true }))
-        setFormError('An account with this email already exists.')
+        setFormError('An account with this email already exists. Try signing in instead.')
       } else {
         setFormError(signUpError.message)
       }
@@ -125,13 +129,23 @@ function SignupForm() {
       return
     }
 
-    // 2. Insert public users row via server route (service role bypasses RLS)
+    // 2a. Email confirmation is ON — session will be null until user clicks link.
+    //     Store role + name in metadata (already done above). The confirm page
+    //     will call /api/auth/register after exchangeCodeForSession succeeds.
+    if (!data.session) {
+      setLoading(false)
+      setStage('verify-email')
+      return
+    }
+
+    // 2b. Email confirmation is OFF (dev/testing) — session exists immediately.
+    //     Register the public.users row now.
     const registerRes = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         user_id: data.user.id,
-        access_token: data.session?.access_token,
+        access_token: data.session.access_token,
         role,
         full_name: fullName,
         email,
@@ -140,11 +154,11 @@ function SignupForm() {
 
     if (!registerRes.ok) {
       setLoading(false)
-      setFormError('Account created but profile setup failed. Please try logging in.')
+      setFormError('Account created but profile setup failed. Please try signing in.')
       return
     }
 
-    // 3. Go directly to onboarding
+    // 3. Route to onboarding
     const params = new URLSearchParams({ firstName, lastName })
     if (redirectTo && role === 'client') {
       router.push(redirectTo)
@@ -222,6 +236,40 @@ function SignupForm() {
             </Link>
           </div>
 
+          {/* ── Verify-email screen ── */}
+          {stage === 'verify-email' && (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-ink-50 border border-ink-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <svg className="w-8 h-8 text-ink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+                </svg>
+              </div>
+              <h1 className="font-serif text-2xl font-bold text-ink mb-2">Check your email</h1>
+              <p className="text-ink-300 text-sm mb-1">We sent a confirmation link to</p>
+              <p className="text-ink font-semibold text-sm mb-6">{email}</p>
+              <p className="text-ink-300 text-xs leading-relaxed mb-8 max-w-xs mx-auto">
+                Click the link in that email to verify your account and finish setting up your profile.
+                The link expires in 24 hours.
+              </p>
+              <div className="bg-ink-50 border border-ink-100 rounded-xl px-5 py-4 text-left mb-6">
+                <p className="text-xs font-semibold text-ink mb-2">Didn&apos;t get the email?</p>
+                <ul className="space-y-1.5 text-xs text-ink-400">
+                  <li>· Check your spam or junk folder</li>
+                  <li>· Make sure you typed your email correctly</li>
+                  <li>· Wait a minute and check again</li>
+                </ul>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStage('form')}
+                className="text-sm text-ink-300 hover:text-ink transition-colors underline underline-offset-2"
+              >
+                Use a different email address
+              </button>
+            </div>
+          )}
+
+          {stage === 'form' && (<>
           <h1 className="font-serif text-3xl font-bold text-ink mb-1">Join TrueNorth Frames</h1>
           <p className="text-ink-300 text-sm mb-8">Free to join. No credit card required.</p>
 
@@ -425,6 +473,7 @@ function SignupForm() {
               Sign in
             </Link>
           </p>
+          </>)}
         </div>
       </div>
     </div>
