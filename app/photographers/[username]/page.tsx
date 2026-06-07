@@ -376,6 +376,7 @@ import { Footer } from '@/components/footer'
 import { ContactModal } from '@/components/contact-modal'
 import { SaveButton } from '@/components/save-button'
 import { PhotographerBadge } from '@/components/photographer-badge'
+import { InfoTooltip } from '@/components/tooltip'
 
 // ─── Portfolio preview card (extracted to avoid hooks-in-IIFE violation) ─────
 
@@ -966,7 +967,7 @@ export default function ProfilePage({ params }: { params: { username: string } }
                 {/* Name + badge */}
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <h1 className="font-serif text-2xl sm:text-3xl font-bold text-ink tracking-tight">{p.display_name}</h1>
-                  {p.badge && <PhotographerBadge badge={p.badge} size="md" />}
+                  {p.badge && <PhotographerBadge badge={p.badge} size="md" showTooltip />}
                 </div>
                 {p.tagline && <p className="text-ink-400 text-sm mt-1">{p.tagline}</p>}
                 {/* Meta row */}
@@ -1197,14 +1198,17 @@ export default function ProfilePage({ params }: { params: { username: string } }
                   <h3 className="font-semibold text-ink text-sm mb-4">At a glance</h3>
                   <div className="grid grid-cols-2 gap-2.5">
                     {[
-                      { label: 'Reviews', value: String(liveReviewCount), icon: Star },
-                      { label: 'Specialties', value: String(p.specialties.length), icon: Camera },
-                      { label: 'Trust score', value: Number(p.trust_score) > 0 ? Number(p.trust_score).toFixed(1) : '—', icon: Shield },
-                      { label: 'Profile views', value: String(p.profile_view_count), icon: Eye },
+                      { label: 'Reviews', value: String(liveReviewCount), icon: Star, tip: 'Verified reviews left by clients who booked through TrueNorth Frames.' },
+                      { label: 'Specialties', value: String(p.specialties.length), icon: Camera, tip: 'Photography categories this photographer specialises in.' },
+                      { label: 'Trust score', value: Number(p.trust_score) > 0 ? Number(p.trust_score).toFixed(1) : '—', icon: Shield, tip: 'Composite score (0–100) based on Google Business Profile rating, review count, profile completeness, and account activity. Higher is better.' },
+                      { label: 'Profile views', value: String(p.profile_view_count), icon: Eye, tip: 'Number of times clients have viewed this profile.' },
                     ].map(stat => {
                       const Icon = stat.icon
                       return (
-                        <div key={stat.label} className="bg-ink-50 rounded-xl p-3 text-center border border-ink-50 hover:border-ink-100 transition-colors">
+                        <div key={stat.label} className="bg-ink-50 rounded-xl p-3 text-center border border-ink-50 hover:border-ink-100 transition-colors relative">
+                          <div className="absolute top-1.5 right-1.5">
+                            <InfoTooltip content={stat.tip} side="top" />
+                          </div>
                           <Icon className="w-4 h-4 text-ink-300 mx-auto mb-1.5" />
                           <p className="font-bold text-ink text-lg leading-none">{stat.value}</p>
                           <p className="text-ink-300 text-[10px] mt-1 font-medium">{stat.label}</p>
@@ -1237,9 +1241,13 @@ export default function ProfilePage({ params }: { params: { username: string } }
 
                       {/* Header row */}
                       <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <Shield className="w-4 h-4 text-ink-400" />
                           <h3 className="font-semibold text-ink text-sm">Trust score</h3>
+                          <InfoTooltip
+                            content="Scored 0–100 from verified Google Business Profile data: star rating, review count, verification status, and profile completeness. Scores above 90 are green, 75+ are blue."
+                            side="top"
+                          />
                         </div>
                         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border"
                           style={{ backgroundColor: `${scoreColor}10`, borderColor: `${scoreColor}40` }}>

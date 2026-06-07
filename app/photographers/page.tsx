@@ -258,7 +258,7 @@ function GridCard({ p, compareIds, onToggleCompare }: {
 
       <div className="p-4">
         <div className="flex items-center justify-between mb-2.5">
-          <PhotographerBadge badge={p.badge} size="sm" />
+          <PhotographerBadge badge={p.badge} size="sm" showTooltip />
           {hasRating && (
             <span className="text-[10px] text-ink-400">
               <span className="font-semibold text-ink">{p.native_review_count}</span> review{p.native_review_count !== 1 ? 's' : ''}
