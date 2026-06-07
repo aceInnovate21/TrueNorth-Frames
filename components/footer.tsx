@@ -6,7 +6,7 @@ export function Footer() {
   return (
     <footer className="bg-ink text-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-14 pb-10">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-10 pb-10 border-b border-ink-800">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-10 pb-10 border-b border-ink-800">
           {/* Brand */}
           <div className="md:col-span-2">
             <Link href="/" className="flex items-center gap-2.5 mb-4 group">
@@ -63,11 +63,31 @@ export function Footer() {
               ))}
             </ul>
           </div>
+
+          {/* Support */}
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-ink-500 mb-4">Support</p>
+            <ul className="space-y-2">
+              {[
+                { label: 'Contact & Support', href: '/contact' },
+                { label: 'Privacy policy', href: '/privacy' },
+                { label: 'Terms of use', href: '/terms' },
+                { label: 'Guidelines', href: '/guidelines' },
+              ].map((link) => (
+                <li key={link.href}>
+                  <Link href={link.href} className="text-sm text-ink-400 hover:text-white transition-colors">
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
 
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-ink-600 text-xs">© {new Date().getFullYear()} TrueNorth Frames. Edmonton, Alberta.</p>
           <div className="flex items-center gap-6 text-xs text-ink-500">
+            <Link href="/contact" className="hover:text-white transition-colors">Support</Link>
             <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
             <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
           </div>
