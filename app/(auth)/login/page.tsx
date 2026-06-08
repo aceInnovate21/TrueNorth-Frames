@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowRight, Star, Eye, EyeOff, AlertCircle, CheckCircle2, User, Camera } from 'lucide-react'
+import { ArrowRight, Star, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 async function signInWithGoogle() {
@@ -17,8 +17,6 @@ async function signInWithGoogle() {
   })
 }
 
-type Role = 'client' | 'photographer'
-
 export default function LoginPage() {
   return (
     <Suspense>
@@ -30,90 +28,81 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTo   = searchParams.get('redirect') ?? null
-  const wasDeleted       = searchParams.get('deleted') === '1'
-  const wasVerified      = searchParams.get('verified') === '1'
-  const verifyFailed     = searchParams.get('error') === 'verification_failed'
-  const wasRejected      = searchParams.get('error') === 'rejected'
-  const setupIncomplete  = searchParams.get('error') === 'setup_incomplete'
-  const [role, setRole] = useState<Role | null>(null)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const redirectTo      = searchParams.get('redirect') ?? null
+  const wasDeleted      = searchParams.get('deleted') === '1'
+  const wasVerified     = searchParams.get('verified') === '1'
+  const verifyFailed    = searchParams.get('error') === 'verification_failed'
+  const wasRejected     = searchParams.get('error') === 'rejected'
+  const setupIncomplete = searchParams.get('error') === 'setup_incomplete'
+
+  const [email, setEmail]             = useState('')
+  const [password, setPassword]       = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [shake, setShake] = useState(false)
-  const [errors, setErrors] = useState<{ role?: string; email?: string; password?: string; form?: string }>({})
-  const [touched, setTouched] = useState<{ role?: boolean; email?: boolean; password?: boolean }>({})
+  const [loading, setLoading]         = useState(false)
+  const [shake, setShake]             = useState(false)
+  const [formError, setFormError]     = useState<string | null>(null)
+  const [emailErr, setEmailErr]       = useState<string | null>(null)
+  const [passErr, setPassErr]         = useState<string | null>(null)
 
-  function validate() {
-    const e: typeof errors = {}
-    if (!role) e.role = 'Please select your account type'
-    if (!email.trim()) e.email = 'Email is required'
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = 'Enter a valid email address'
-    if (!password) e.password = 'Password is required'
-    else if (password.length < 6) e.password = 'Password must be at least 6 characters'
-    return e
-  }
-
-  function handleBlur(field: 'email' | 'password') {
-    setTouched((t) => ({ ...t, [field]: true }))
-    const e = validate()
-    setErrors((prev) => ({ ...prev, [field]: e[field] }))
+  function validateFields() {
+    let ok = true
+    if (!email.trim()) { setEmailErr('Email is required'); ok = false }
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setEmailErr('Enter a valid email address'); ok = false }
+    else setEmailErr(null)
+    if (!password) { setPassErr('Password is required'); ok = false }
+    else if (password.length < 6) { setPassErr('Password must be at least 6 characters'); ok = false }
+    else setPassErr(null)
+    return ok
   }
 
   async function handleSubmit(ev: React.FormEvent) {
     ev.preventDefault()
-    setTouched({ role: true, email: true, password: true })
-    const e = validate()
-    if (Object.keys(e).length > 0) {
-      setErrors(e)
-      setShake(true)
-      setTimeout(() => setShake(false), 500)
+    if (!validateFields()) {
+      setShake(true); setTimeout(() => setShake(false), 500)
       return
     }
-    setErrors({})
+    setFormError(null)
     setLoading(true)
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
       setLoading(false)
-      if (error.message.toLowerCase().includes('invalid')) {
-        setErrors({ form: 'Incorrect email or password. Please try again.' })
+      if (error.message.toLowerCase().includes('invalid') || error.message.toLowerCase().includes('credentials')) {
+        setFormError('Incorrect email or password. Please try again.')
       } else if (error.message.toLowerCase().includes('locked')) {
-        setErrors({ form: 'Your account is temporarily locked. Please try again later.' })
+        setFormError('Your account is temporarily locked. Please try again later.')
+      } else if (error.message.toLowerCase().includes('email not confirmed')) {
+        setFormError('Please verify your email first. Check your inbox for the confirmation link.')
       } else {
-        setErrors({ form: error.message })
+        setFormError(error.message)
       }
-      setShake(true)
-      setTimeout(() => setShake(false), 500)
+      setShake(true); setTimeout(() => setShake(false), 500)
       return
     }
 
-    // Fetch role, account_status, and photographer profile_status in one pass
-    const { data: userData } = await supabase
+    // Look up the user's role and account status from public.users
+    const { data: userData } = await (supabase as any)
       .from('users')
       .select('role, account_status')
       .eq('id', data.user.id)
-      .single() as { data: { role: string; account_status: string } | null; error: unknown }
+      .maybeSingle() as { data: { role: string; account_status: string } | null }
 
-    // Suspended / banned / deactivated — sign out immediately
-    if (userData?.account_status === 'suspended' || userData?.account_status === 'banned' || userData?.account_status === 'deactivated') {
+    // Suspended / banned / deactivated
+    const status = userData?.account_status
+    if (status === 'suspended' || status === 'banned' || status === 'deactivated') {
       await supabase.auth.signOut()
       setLoading(false)
-      const msg = userData.account_status === 'deactivated'
-        ? 'This account has been deleted. If you believe this is a mistake, contact support@truenorthframes.ca.'
-        : 'Your account has been suspended. Please contact support at support@truenorthframes.ca to resolve this.'
-      setErrors({ form: msg })
-      setShake(true)
-      setTimeout(() => setShake(false), 500)
+      setFormError(status === 'deactivated'
+        ? 'This account has been deleted. Contact support if you believe this is a mistake.'
+        : 'Your account has been suspended. Contact support@truenorthframes.ca to resolve this.')
+      setShake(true); setTimeout(() => setShake(false), 500)
       return
     }
 
     const dbRole = userData?.role ?? null
 
-    // No public.users row — email confirmed but registration API failed.
-    // Route through finishing page which will poll until row appears.
+    // No public.users row yet — route through finishing page to wait for it
     if (!dbRole) {
       router.push('/auth/finishing?dest=%2Fdashboard%2Fclient')
       return
@@ -130,14 +119,13 @@ function LoginForm() {
       if (profileData?.profile_status === 'rejected') {
         await supabase.auth.signOut()
         setLoading(false)
-        setErrors({ form: 'Your profile was not approved. Please check your email for details, then contact support@truenorthframes.ca.' })
-        setShake(true)
-        setTimeout(() => setShake(false), 500)
+        setFormError('Your profile was not approved. Check your email for details or contact support@truenorthframes.ca.')
+        setShake(true); setTimeout(() => setShake(false), 500)
         return
       }
     }
 
-    // Route to correct dashboard using DB role (not form-selected role)
+    // Route to correct dashboard by DB role
     if (redirectTo) {
       router.push(redirectTo)
     } else if (dbRole === 'photographer') {
@@ -148,10 +136,6 @@ function LoginForm() {
       router.push('/dashboard/client')
     }
   }
-
-  const roleErr  = touched.role ? validate().role : undefined
-  const emailErr = touched.email ? validate().email : undefined
-  const passErr  = touched.password ? validate().password : undefined
 
   return (
     <div className="min-h-screen bg-white flex">
@@ -176,7 +160,7 @@ function LoginForm() {
             "Find your perfect photographer — completely free."
           </blockquote>
           <p className="text-ink-400 text-sm leading-relaxed">
-            50+ Edmonton photographers. Real reviews from Google, Yelp &amp; Instagram. No booking fees.
+            50+ Edmonton photographers. Real reviews from Google. No booking fees.
           </p>
 
           <div className="flex items-center gap-3 pt-2">
@@ -189,21 +173,14 @@ function LoginForm() {
             </div>
             <div>
               <div className="flex items-center gap-0.5 mb-0.5">
-                {[1,2,3,4,5].map((i) => (
-                  <Star key={i} className="w-3 h-3 text-white fill-white" />
-                ))}
+                {[1,2,3,4,5].map((i) => <Star key={i} className="w-3 h-3 text-white fill-white" />)}
               </div>
               <p className="text-ink-400 text-xs">Trusted by Edmonton clients</p>
             </div>
           </div>
 
-          {/* Trust strip */}
           <div className="border-t border-ink-800 pt-4 space-y-2">
-            {[
-              'No spam — ever',
-              'Manage all your conversations in one place',
-              'Get notified when a photographer replies',
-            ].map((item) => (
+            {['No spam — ever', 'All conversations in one place', 'Get notified when a photographer replies'].map((item) => (
               <div key={item} className="flex items-center gap-2">
                 <div className="w-1 h-1 rounded-full bg-ink-500" />
                 <p className="text-ink-400 text-xs">{item}</p>
@@ -247,129 +224,66 @@ function LoginForm() {
             <div className="flex-1 h-px bg-ink-100" />
           </div>
 
-          {/* Email verified success */}
+          {/* Status banners */}
           {wasVerified && (
             <div className="flex items-start gap-2.5 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 mb-5">
               <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-emerald-700 leading-snug">Email verified! Sign in below to get started.</p>
             </div>
           )}
-
-          {/* Rejected photographer — session killed by middleware */}
+          {setupIncomplete && (
+            <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-5">
+              <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-700 leading-snug">Your account was created but setup didn't complete. Sign in below to finish.</p>
+            </div>
+          )}
           {wasRejected && (
             <div className="flex items-start gap-2.5 bg-red-50 border border-red-100 rounded-xl px-4 py-3 mb-5">
               <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700 leading-snug">
-                Your photographer profile was not approved. Check your email for details on what needs to be fixed. Questions? Contact <strong>support@truenorthframes.ca</strong>.
-              </p>
+              <p className="text-sm text-red-700 leading-snug">Your photographer profile was not approved. Check your email for details or contact support.</p>
             </div>
           )}
-
-          {/* Verification failed */}
           {verifyFailed && (
             <div className="flex items-start gap-2.5 bg-red-50 border border-red-100 rounded-xl px-4 py-3 mb-5">
               <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-red-700 leading-snug">That verification link has expired or is invalid. Please sign up again or contact support.</p>
             </div>
           )}
-
-          {/* Account setup incomplete — session cleared, user should sign in fresh */}
-          {setupIncomplete && (
-            <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-5">
-              <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-amber-700 leading-snug">
-                Your account was created but setup didn't complete. Sign in below to finish setting up your account.
-              </p>
-            </div>
-          )}
-
-          {/* Account deleted confirmation */}
           {wasDeleted && (
             <div className="flex items-start gap-2.5 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 mb-5">
               <AlertCircle className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-blue-700 leading-snug">Your account has been deleted. We're sorry to see you go — your data will be removed within 30 days.</p>
+              <p className="text-sm text-blue-700 leading-snug">Your account has been deleted. We're sorry to see you go.</p>
             </div>
           )}
-
-          {/* Form-level error */}
-          {errors.form && (
+          {formError && (
             <div className="flex items-start gap-2.5 bg-red-50 border border-red-100 rounded-xl px-4 py-3 mb-5">
               <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700 leading-snug">{errors.form}</p>
+              <p className="text-sm text-red-700 leading-snug">{formError}</p>
             </div>
           )}
 
-
-
-          {/* Role selector */}
-          <div className="mb-6">
-            <p className="text-xs font-semibold uppercase tracking-widest text-ink-300 mb-3">I am a…</p>
-            <div className="grid grid-cols-2 gap-3">
-              {([
-                { value: 'client' as Role,       Icon: User,   title: 'Client',       sub: 'Looking for a photographer' },
-                { value: 'photographer' as Role, Icon: Camera, title: 'Photographer', sub: 'Managing my bookings'       },
-              ]).map(({ value, Icon, title, sub }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => { setRole(value); setTouched(t => ({ ...t, role: true })); setErrors(e => ({ ...e, role: undefined })) }}
-                  className={`border-2 rounded-2xl p-4 text-left transition-all duration-200 ${
-                    role === value ? 'border-ink bg-ink-50' : 'border-ink-100 hover:border-ink-200'
-                  }`}
-                >
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-2.5 transition-colors ${role === value ? 'bg-ink' : 'bg-ink-50'}`}>
-                    <Icon className={`w-4 h-4 transition-colors ${role === value ? 'text-white' : 'text-ink-300'}`} />
-                  </div>
-                  <p className="font-semibold text-ink text-sm mb-0.5">{title}</p>
-                  <p className="text-ink-300 text-xs leading-tight">{sub}</p>
-                </button>
-              ))}
-            </div>
-            {roleErr && (
-              <p className="mt-2 flex items-center gap-1.5 text-xs text-red-600">
-                <AlertCircle className="w-3 h-3 flex-shrink-0" />{roleErr}
-              </p>
-            )}
-          </div>
-
-          <form
-            className={`space-y-4 ${shake ? 'animate-shake' : ''}`}
-            noValidate
-            onSubmit={handleSubmit}
-          >
+          <form className={`space-y-4 ${shake ? 'animate-shake' : ''}`} noValidate onSubmit={handleSubmit}>
             {/* Email */}
             <div>
-              <label className="block text-sm font-medium text-ink mb-1.5" htmlFor="email">
-                Email address
-              </label>
+              <label className="block text-sm font-medium text-ink mb-1.5" htmlFor="email">Email address</label>
               <input
                 id="email"
                 type="email"
                 placeholder="you@example.com"
                 autoComplete="email"
                 value={email}
-                onChange={(e) => { setEmail(e.target.value); if (touched.email) setErrors((prev) => ({ ...prev, email: undefined })) }}
-                onBlur={() => handleBlur('email')}
+                onChange={(e) => { setEmail(e.target.value); setEmailErr(null) }}
                 className={`w-full border rounded-xl px-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:ring-2 transition-all ${
-                  emailErr
-                    ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
-                    : 'border-ink-100 focus:border-ink focus:ring-ink/10'
+                  emailErr ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : 'border-ink-100 focus:border-ink focus:ring-ink/10'
                 }`}
               />
-              {emailErr && (
-                <p className="mt-1.5 flex items-center gap-1.5 text-xs text-red-600">
-                  <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                  {emailErr}
-                </p>
-              )}
+              {emailErr && <p className="mt-1.5 flex items-center gap-1.5 text-xs text-red-600"><AlertCircle className="w-3 h-3 flex-shrink-0" />{emailErr}</p>}
             </div>
 
             {/* Password */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-sm font-medium text-ink" htmlFor="password">
-                  Password
-                </label>
+                <label className="block text-sm font-medium text-ink" htmlFor="password">Password</label>
                 <Link href="/forgot-password" className="text-xs text-ink-400 hover:text-ink transition-colors font-medium">
                   Forgot password?
                 </Link>
@@ -381,30 +295,21 @@ function LoginForm() {
                   placeholder="••••••••"
                   autoComplete="current-password"
                   value={password}
-                  onChange={(e) => { setPassword(e.target.value); if (touched.password) setErrors((prev) => ({ ...prev, password: undefined })) }}
-                  onBlur={() => handleBlur('password')}
+                  onChange={(e) => { setPassword(e.target.value); setPassErr(null) }}
                   className={`w-full border rounded-xl px-4 py-3 pr-11 text-sm text-ink placeholder-ink-200 outline-none focus:ring-2 transition-all ${
-                    passErr
-                      ? 'border-red-300 focus:border-red-400 focus:ring-red-100'
-                      : 'border-ink-100 focus:border-ink focus:ring-ink/10'
+                    passErr ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : 'border-ink-100 focus:border-ink focus:ring-ink/10'
                   }`}
                 />
                 <button
-                  type="button"
-                  tabIndex={-1}
-                  onClick={() => setShowPassword((v) => !v)}
+                  type="button" tabIndex={-1}
+                  onClick={() => setShowPassword(v => !v)}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-300 hover:text-ink transition-colors"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              {passErr && (
-                <p className="mt-1.5 flex items-center gap-1.5 text-xs text-red-600">
-                  <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                  {passErr}
-                </p>
-              )}
+              {passErr && <p className="mt-1.5 flex items-center gap-1.5 text-xs text-red-600"><AlertCircle className="w-3 h-3 flex-shrink-0" />{passErr}</p>}
             </div>
 
             <button
@@ -412,31 +317,17 @@ function LoginForm() {
               disabled={loading}
               className="w-full bg-ink hover:bg-ink-800 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors mt-2"
             >
-              {loading ? (
-                <>
-                  <Spinner />
-                  Signing in…
-                </>
-              ) : (
-                <>
-                  Sign in
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
+              {loading ? <><Spinner />Signing in…</> : <>Sign in <ArrowRight className="w-4 h-4" /></>}
             </button>
           </form>
 
-          <p className="text-center text-xs text-ink-300 mt-5 leading-relaxed">
-            No spam. No newsletters. No booking fees.
-          </p>
-
+          <p className="text-center text-xs text-ink-300 mt-5">No spam. No newsletters. No booking fees.</p>
           <p className="text-center text-sm text-ink-300 mt-3">
             Don&apos;t have an account?{' '}
             <Link href="/signup" className="text-ink font-semibold hover:text-ink-600 transition-colors underline underline-offset-2">
               Sign up free
             </Link>
           </p>
-
         </div>
       </div>
 
@@ -467,7 +358,7 @@ function GoogleIcon() {
 
 function Spinner() {
   return (
-    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+    <svg className="w-4 h-4 animate-spin mr-2" viewBox="0 0 24 24" fill="none">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
     </svg>
