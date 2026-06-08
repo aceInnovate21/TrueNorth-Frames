@@ -98,13 +98,16 @@ function ConfirmHandler() {
 
         // Route through /auth/finishing which polls until the public.users row is
         // visible in the DB before navigating — prevents middleware redirect loops.
+        const [firstName, ...rest] = fullName.trim().split(' ')
+        const lastName = rest.join(' ')
+
         if (metaRole === 'photographer') {
-          const [firstName, ...rest] = fullName.trim().split(' ')
-          const lastName = rest.join(' ')
           const onboardingUrl = `/onboarding/photographer?firstName=${encodeURIComponent(firstName ?? '')}&lastName=${encodeURIComponent(lastName)}`
           router.replace(`/auth/finishing?dest=${encodeURIComponent(onboardingUrl)}`)
         } else {
-          router.replace('/auth/finishing?dest=%2Fdashboard%2Fclient')
+          // Clients go through a brief onboarding (confirm name + pick area) before dashboard
+          const onboardingUrl = `/onboarding?firstName=${encodeURIComponent(firstName ?? '')}&lastName=${encodeURIComponent(lastName)}`
+          router.replace(`/auth/finishing?dest=${encodeURIComponent(onboardingUrl)}`)
         }
         return
       }

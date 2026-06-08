@@ -45,7 +45,6 @@ function OnboardingForm() {
     })
 
     router.push('/dashboard/client')
-    router.refresh()
   }
 
   return (
