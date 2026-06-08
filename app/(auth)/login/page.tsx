@@ -31,10 +31,11 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo   = searchParams.get('redirect') ?? null
-  const wasDeleted    = searchParams.get('deleted') === '1'
-  const wasVerified   = searchParams.get('verified') === '1'
-  const verifyFailed  = searchParams.get('error') === 'verification_failed'
-  const wasRejected   = searchParams.get('error') === 'rejected'
+  const wasDeleted       = searchParams.get('deleted') === '1'
+  const wasVerified      = searchParams.get('verified') === '1'
+  const verifyFailed     = searchParams.get('error') === 'verification_failed'
+  const wasRejected      = searchParams.get('error') === 'rejected'
+  const setupIncomplete  = searchParams.get('error') === 'setup_incomplete'
   const [role, setRole] = useState<Role | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -109,17 +110,17 @@ function LoginForm() {
       return
     }
 
-    if (userData?.role && userData.role !== role) {
-      await supabase.auth.signOut()
-      setLoading(false)
-      setErrors({ form: `This account is registered as a ${userData.role}. Please select the correct account type.` })
-      setShake(true)
-      setTimeout(() => setShake(false), 500)
+    const dbRole = userData?.role ?? null
+
+    // No public.users row — email confirmed but registration API failed.
+    // Route through finishing page which will poll until row appears.
+    if (!dbRole) {
+      router.push('/auth/finishing?dest=%2Fdashboard%2Fclient')
       return
     }
 
-    // Rejected photographers cannot log in — sign them out immediately
-    if (userData?.role === 'photographer') {
+    // Rejected photographers cannot log in
+    if (dbRole === 'photographer') {
       const { data: profileData } = await (supabase as any)
         .from('photographer_profiles')
         .select('profile_status')
@@ -129,18 +130,22 @@ function LoginForm() {
       if (profileData?.profile_status === 'rejected') {
         await supabase.auth.signOut()
         setLoading(false)
-        setErrors({ form: 'Your profile was not approved. Please check your email for details on what needs to be fixed, then sign up again or contact support@truenorthframes.ca.' })
+        setErrors({ form: 'Your profile was not approved. Please check your email for details, then contact support@truenorthframes.ca.' })
         setShake(true)
         setTimeout(() => setShake(false), 500)
         return
       }
     }
 
-    // Pending photographers go to their dashboard to keep building their profile
+    // Route to correct dashboard using DB role (not form-selected role)
     if (redirectTo) {
       router.push(redirectTo)
+    } else if (dbRole === 'photographer') {
+      router.push('/dashboard/photographer')
+    } else if (dbRole === 'admin') {
+      router.push('/admin')
     } else {
-      router.push(role === 'photographer' ? '/dashboard/photographer' : '/dashboard/client')
+      router.push('/dashboard/client')
     }
   }
 
@@ -265,6 +270,16 @@ function LoginForm() {
             <div className="flex items-start gap-2.5 bg-red-50 border border-red-100 rounded-xl px-4 py-3 mb-5">
               <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-red-700 leading-snug">That verification link has expired or is invalid. Please sign up again or contact support.</p>
+            </div>
+          )}
+
+          {/* Account setup incomplete — session cleared, user should sign in fresh */}
+          {setupIncomplete && (
+            <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-5">
+              <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-700 leading-snug">
+                Your account was created but setup didn't complete. Sign in below to finish setting up your account.
+              </p>
             </div>
           )}
 

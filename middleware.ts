@@ -150,18 +150,18 @@ export async function middleware(request: NextRequest) {
     if (!role && !isRoot && !limboPassthrough.some(p => pathname.startsWith(p))) {
       const url = request.nextUrl.clone()
       if (isOAuth) {
-        // Google user — send to role-select to pick client/photographer
+        // Google OAuth user — no public.users row yet, send to role-select
         url.pathname = '/signup/role-select'
         const googleEmail = user.email ?? ''
         const googleName  = user.user_metadata?.full_name ?? user.user_metadata?.name ?? ''
         if (googleEmail) url.searchParams.set('email', googleEmail)
         if (googleName)  url.searchParams.set('full_name', googleName)
+        return NextResponse.redirect(url)
       } else {
-        // Email/password user — something went wrong in confirm flow, sign out and restart
-        url.pathname = '/login'
-        url.searchParams.set('error', 'setup_incomplete')
+        // Email/password user in limbo — registration incomplete.
+        // Force sign out so they get a clean slate rather than a redirect loop.
+        return forceSignOut(request, 'setup_incomplete')
       }
-      return NextResponse.redirect(url)
     }
 
     if (role === 'photographer' && photographerStatus === 'rejected') {

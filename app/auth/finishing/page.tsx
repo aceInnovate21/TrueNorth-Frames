@@ -1,13 +1,15 @@
 'use client'
 
 // Intermediate landing after email confirmation.
-// Polls /api/auth/me until the public.users row is committed to the DB,
-// then navigates to the destination. Prevents redirect loops caused by the
-// middleware reading the DB before the register API write is visible.
+// Polls the client-side Supabase session until the public.users row is visible,
+// then navigates to destination. Using client-side supabase (not a server fetch)
+// because verifyOtp sets the session in the browser — server routes won't see
+// the cookie until the browser makes a full navigation with it attached.
 
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
+import { supabase } from '@/lib/supabase'
 
 export default function FinishingPage() {
   return (
@@ -29,27 +31,38 @@ function FinishingHandler() {
 
     async function poll() {
       try {
-        const res = await fetch('/api/auth/me')
+        // Use client-side supabase — this reads the session cookie the browser
+        // already has after verifyOtp, no server round-trip needed
+        const { data: { session } } = await supabase.auth.getSession()
         if (cancelled) return
 
-        if (res.ok) {
-          const data = await res.json()
-          if (data?.user?.role) {
-            // Row is visible — safe to navigate without hitting the limbo check
+        if (session?.user?.id) {
+          // Session confirmed. Now check public.users via client supabase (anon key,
+          // but RLS allows users to read their own row)
+          const { data: userData } = await (supabase as any)
+            .from('users')
+            .select('role')
+            .eq('id', session.user.id)
+            .maybeSingle()
+
+          if (cancelled) return
+
+          if (userData?.role) {
+            // Row is visible — safe to navigate
             router.replace(dest)
             return
           }
         }
       } catch {
-        // network error — keep retrying
+        // keep retrying
       }
 
       if (cancelled) return
 
-      if (attempt >= 10) {
-        // ~5 seconds elapsed — navigate anyway, dashboard retries on 401
+      if (attempt >= 12) {
+        // ~6 seconds elapsed — navigate anyway
         setTimedOut(true)
-        setTimeout(() => { if (!cancelled) router.replace(dest) }, 600)
+        setTimeout(() => { if (!cancelled) router.replace(dest) }, 400)
         return
       }
 
