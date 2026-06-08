@@ -6,24 +6,19 @@ import type { NextRequest } from 'next/server'
 const PROTECTED_PREFIXES = ['/dashboard', '/messages', '/admin']
 const ADMIN_PUBLIC = ['/admin/login']
 
-const ROLE_ROUTES: Record<string, string> = {
-  '/dashboard/photographer': 'photographer',
-  '/dashboard/client': 'client',
-  '/admin': 'admin',
-}
-
-interface UserInfo {
-  role: string | null
-  photographerStatus: string | null  // 'draft' | 'pending' | 'approved' | 'rejected' | 'suspended' | 'banned'
-}
-
-async function getUserInfo(userId: string): Promise<UserInfo> {
+async function getUserInfo(userId: string) {
   const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } }
   ) as any
-  const { data: userData } = await admin.from('users').select('role').eq('id', userId).single()
+
+  const { data: userData } = await admin
+    .from('users')
+    .select('role')
+    .eq('id', userId)
+    .maybeSingle()
+
   const role = userData?.role ?? null
 
   let photographerStatus: string | null = null
@@ -39,60 +34,26 @@ async function getUserInfo(userId: string): Promise<UserInfo> {
   return { role, photographerStatus }
 }
 
-async function getUserRole(userId: string): Promise<string | null> {
-  const { role } = await getUserInfo(userId)
-  return role
-}
-
-// Returns a response that clears the Supabase auth cookies, effectively signing the user out server-side.
-// The client will be redirected to /login with a reason param.
-function forceSignOut(request: NextRequest, reason: string): NextResponse {
-  const url = request.nextUrl.clone()
-  url.pathname = '/login'
-  url.searchParams.set('error', reason)
-
-  const response = NextResponse.redirect(url)
-
-  // Clear all Supabase session cookies
-  const cookiesToClear = ['sb-access-token', 'sb-refresh-token']
-  request.cookies.getAll().forEach(({ name }) => {
-    if (name.startsWith('sb-') || cookiesToClear.includes(name)) {
-      response.cookies.set(name, '', { maxAge: 0, path: '/' })
-    }
-  })
-
-  return response
-}
-
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  let response = NextResponse.next({
-    request: { headers: request.headers },
-  })
+  let response = NextResponse.next({ request: { headers: request.headers } })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
+        getAll() { return request.cookies.getAll() },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          )
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           response = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          )
+          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options))
         },
       },
     }
   )
 
-  // Refresh session — must call getUser() to validate
   const { data: { user } } = await supabase.auth.getUser()
 
   const isAdminPublic = ADMIN_PUBLIC.some(p => pathname.startsWith(p))
@@ -100,105 +61,85 @@ export async function middleware(request: NextRequest) {
   const isProtected   = PROTECTED_PREFIXES.some(p => pathname.startsWith(p)) && !isAdminPublic
   const isAuthPage    = pathname === '/login' || pathname === '/signup'
 
-  // Unauthenticated on admin route → /admin/login
-  if (isAdminRoute && !user) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/admin/login'
-    return NextResponse.redirect(url)
-  }
-
-  // Authenticated on /admin/login → /admin
-  if (isAdminPublic && user) {
-    const role = await getUserRole(user.id)
-    if (role === 'admin') {
+  // ── Not logged in ────────────────────────────────────────────────────────────
+  if (!user) {
+    if (isAdminRoute) {
       const url = request.nextUrl.clone()
-      url.pathname = '/admin'
+      url.pathname = '/admin/login'
       return NextResponse.redirect(url)
     }
+    if (isProtected) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      url.searchParams.set('redirect', pathname)
+      return NextResponse.redirect(url)
+    }
+    return response
   }
 
-  // Unauthenticated non-admin protected route → /login
-  if (isProtected && !isAdminRoute && !user) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    url.searchParams.set('redirect', pathname)
-    return NextResponse.redirect(url)
-  }
+  // ── Logged in ────────────────────────────────────────────────────────────────
+  const { role, photographerStatus } = await getUserInfo(user.id)
 
-  // Authenticated user — check for rejected photographers before anything else.
-  // A rejected photographer should not have an active session anywhere.
-  if (user) {
-    const { role, photographerStatus } = await getUserInfo(user.id)
-
-    // ── Limbo state: authenticated but no public.users row yet ──────────────
-    // Google OAuth: user closed tab on role-select → send back to role-select to finish.
-    // Email/password: should never happen (confirm page creates the row), but if it
-    // does (e.g. register API failed), send to login so they can try again cleanly.
-    const limboPassthrough = [
-      '/signup/role-select',
-      '/onboarding',
-      '/api',
-      '/auth',
-      '/login',
-      '/signup',
-      '/photographers',
-      '/contact',
-    ]
-    const isRoot     = pathname === '/'
-    const isOAuth    = user.app_metadata?.provider === 'google'
-
-    if (!role && !isRoot && !limboPassthrough.some(p => pathname.startsWith(p))) {
+  // No public.users row yet — still setting up.
+  // Let them through to /onboarding, /auth, /api, /signup — block dashboard only.
+  if (!role) {
+    const allowed = ['/onboarding', '/auth', '/api', '/signup', '/login', '/signup/role-select', '/photographers', '/contact']
+    const isRoot  = pathname === '/'
+    if (!isRoot && !allowed.some(p => pathname.startsWith(p))) {
+      // Send to onboarding so they can finish setup — never sign them out
+      const isOAuth = user.app_metadata?.provider === 'google'
       const url = request.nextUrl.clone()
       if (isOAuth) {
-        // Google OAuth user — no public.users row yet, send to role-select
         url.pathname = '/signup/role-select'
-        const googleEmail = user.email ?? ''
-        const googleName  = user.user_metadata?.full_name ?? user.user_metadata?.name ?? ''
-        if (googleEmail) url.searchParams.set('email', googleEmail)
-        if (googleName)  url.searchParams.set('full_name', googleName)
-        return NextResponse.redirect(url)
+        url.searchParams.set('email', user.email ?? '')
+        url.searchParams.set('full_name', user.user_metadata?.full_name ?? user.user_metadata?.name ?? '')
       } else {
-        // Email/password user in limbo — registration incomplete.
-        // Force sign out so they get a clean slate rather than a redirect loop.
-        return forceSignOut(request, 'setup_incomplete')
+        const meta = user.user_metadata ?? {}
+        const fullName = meta.full_name ?? ''
+        const [firstName, ...rest] = fullName.split(' ')
+        url.pathname = '/onboarding'
+        if (meta.role === 'photographer') url.pathname = '/onboarding/photographer'
+        if (firstName) url.searchParams.set('firstName', firstName)
+        if (rest.length) url.searchParams.set('lastName', rest.join(' '))
       }
-    }
-
-    if (role === 'photographer' && photographerStatus === 'rejected') {
-      // Kill their session and bounce to login with an error message
-      return forceSignOut(request, 'rejected')
-    }
-
-    // Authenticated on auth page → redirect to correct dashboard
-    if (isAuthPage) {
-      let dest: string
-      if (role === 'photographer') {
-        // pending and approved both go to the dashboard — pending sees a banner there
-        dest = '/dashboard/photographer'
-      } else if (role === 'admin') {
-        dest = '/admin'
-      } else {
-        dest = '/dashboard/client'
-      }
-      const url = request.nextUrl.clone()
-      url.pathname = dest
       return NextResponse.redirect(url)
     }
+    return response
+  }
 
-    // Role gate — wrong role gets redirected to their correct dashboard
-    if (isProtected) {
-      const matchedRoute = Object.keys(ROLE_ROUTES).find(p => pathname.startsWith(p))
-      if (matchedRoute && role !== ROLE_ROUTES[matchedRoute]) {
-        const url = request.nextUrl.clone()
-        if (role === 'photographer') {
-          url.pathname = '/dashboard/photographer'
-        } else if (role === 'admin') {
-          url.pathname = '/admin'
-        } else {
-          url.pathname = '/dashboard/client'
-        }
-        return NextResponse.redirect(url)
-      }
+  // Rejected photographer — clear session
+  if (role === 'photographer' && photographerStatus === 'rejected') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    url.searchParams.set('error', 'rejected')
+    const res = NextResponse.redirect(url)
+    request.cookies.getAll().forEach(({ name }) => {
+      if (name.startsWith('sb-')) res.cookies.set(name, '', { maxAge: 0, path: '/' })
+    })
+    return res
+  }
+
+  // Already logged in — bounce off auth pages to dashboard
+  if (isAuthPage) {
+    const url = request.nextUrl.clone()
+    url.pathname = role === 'photographer' ? '/dashboard/photographer'
+      : role === 'admin' ? '/admin'
+      : '/dashboard/client'
+    return NextResponse.redirect(url)
+  }
+
+  // Wrong dashboard for role — redirect to correct one
+  if (isProtected) {
+    const expected = pathname.startsWith('/dashboard/photographer') ? 'photographer'
+      : pathname.startsWith('/dashboard/client') ? 'client'
+      : pathname.startsWith('/admin') ? 'admin'
+      : null
+    if (expected && role !== expected) {
+      const url = request.nextUrl.clone()
+      url.pathname = role === 'photographer' ? '/dashboard/photographer'
+        : role === 'admin' ? '/admin'
+        : '/dashboard/client'
+      return NextResponse.redirect(url)
     }
   }
 
@@ -206,7 +147,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|logo.png|public).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|logo.png|public).*)'],
 }

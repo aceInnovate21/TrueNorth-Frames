@@ -102,9 +102,9 @@ function LoginForm() {
 
     const dbRole = userData?.role ?? null
 
-    // No public.users row yet — route through finishing page to wait for it
+    // No public.users row yet — middleware will redirect to onboarding
     if (!dbRole) {
-      router.push('/auth/finishing?dest=%2Fdashboard%2Fclient')
+      router.push('/dashboard/client')
       return
     }
 

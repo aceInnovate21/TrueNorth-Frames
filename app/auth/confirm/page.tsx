@@ -6,80 +6,79 @@ import { Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 
 export default function ConfirmPage() {
-  return (
-    <Suspense>
-      <ConfirmHandler />
-    </Suspense>
-  )
+  return <Suspense><ConfirmHandler /></Suspense>
 }
 
 function ConfirmHandler() {
   const router = useRouter()
   const params = useSearchParams()
-  const code      = params.get('code')
   const tokenHash = params.get('token_hash')
-  const type      = params.get('type') ?? ''
+  const code      = params.get('code')
+  const type      = params.get('type') ?? 'signup'
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    async function handleConfirm() {
-      let session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'] = null
+    async function run() {
+      let session: any = null
 
-      // ── 1. Resolve session ────────────────────────────────────────────────────
+      // Email confirmation link → token_hash
       if (tokenHash) {
-        // Email confirmation link (type=signup) or password reset (type=recovery)
-        // Supabase sends token_hash in the link when "confirm email" is enabled.
         const { data, error: err } = await supabase.auth.verifyOtp({
           token_hash: tokenHash,
-          type: (type as any) || 'signup',
+          type: type as any,
         })
         if (err || !data.session) {
-          setError('This verification link has expired or has already been used. Please sign in or request a new link.')
+          setError('This link has expired or already been used. Please sign in or create a new account.')
           return
         }
         session = data.session
       } else if (code) {
-        // Google OAuth PKCE code exchange
-        // First check if there's already an active session (e.g. user opened link twice)
-        const { data: { session: existing } } = await supabase.auth.getSession()
-        if (existing) {
-          session = existing
+        // Google OAuth → code
+        const { data: existing } = await supabase.auth.getSession()
+        if (existing.session) {
+          session = existing.session
         } else {
           const { data, error: err } = await supabase.auth.exchangeCodeForSession(code)
           if (err || !data.session) {
-            setError('This sign-in link has expired or already been used. Please try signing in again.')
+            setError('This link has expired or already been used. Please sign in or create a new account.')
             return
           }
           session = data.session
         }
       } else {
-        router.replace('/login?error=missing_token')
+        router.replace('/login')
         return
       }
 
-      // ── 2. Check if public.users row already exists ───────────────────────────
       const authUser = session.user
+      const metadata = authUser.user_metadata ?? {}
+
+      // Check if public.users row already exists
       const { data: existingUser } = await (supabase as any)
         .from('users')
         .select('role')
         .eq('id', authUser.id)
-        .maybeSingle() as { data: { role: string } | null }
+        .maybeSingle()
 
       if (existingUser?.role) {
-        // Returning user — go straight to their dashboard
-        routeToDashboard(existingUser.role, router)
+        // Existing user — go to their dashboard
+        const role = existingUser.role
+        router.replace(
+          role === 'photographer' ? '/dashboard/photographer'
+          : role === 'admin' ? '/admin'
+          : '/dashboard/client'
+        )
         return
       }
 
-      // ── 3. New user — create public.users row ─────────────────────────────────
-      const metadata  = authUser.user_metadata ?? {}
-      const fullName  = metadata.full_name ?? metadata.name ?? ''
-      const email     = authUser.email ?? ''
-      const metaRole  = metadata.role as string | undefined
+      // New user — create public.users row
+      const metaRole = metadata.role as string | undefined
+      const fullName = metadata.full_name ?? metadata.name ?? ''
+      const email    = authUser.email ?? ''
 
       if (metaRole === 'photographer' || metaRole === 'client') {
-        // Email/password signup — role + name were saved in metadata during signUp()
-        const res = await fetch('/api/auth/register', {
+        // Email/password signup — role stored in metadata
+        await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -91,34 +90,27 @@ function ConfirmHandler() {
           }),
         })
 
-        if (!res.ok) {
-          setError('Your email was verified but account setup failed. Please try signing in.')
-          return
-        }
-
-        // Route through /auth/finishing which polls until the public.users row is
-        // visible in the DB before navigating — prevents middleware redirect loops.
+        // Go to onboarding — middleware will handle it if row isn't visible yet
         const [firstName, ...rest] = fullName.trim().split(' ')
-        const lastName = rest.join(' ')
+        const qs = new URLSearchParams()
+        if (firstName) qs.set('firstName', firstName)
+        if (rest.length) qs.set('lastName', rest.join(' '))
 
-        if (metaRole === 'photographer') {
-          const onboardingUrl = `/onboarding/photographer?firstName=${encodeURIComponent(firstName ?? '')}&lastName=${encodeURIComponent(lastName)}`
-          router.replace(`/auth/finishing?dest=${encodeURIComponent(onboardingUrl)}`)
-        } else {
-          // Clients go through a brief onboarding (confirm name + pick area) before dashboard
-          const onboardingUrl = `/onboarding?firstName=${encodeURIComponent(firstName ?? '')}&lastName=${encodeURIComponent(lastName)}`
-          router.replace(`/auth/finishing?dest=${encodeURIComponent(onboardingUrl)}`)
-        }
+        router.replace(
+          metaRole === 'photographer'
+            ? `/onboarding/photographer?${qs}`
+            : `/onboarding?${qs}`
+        )
         return
       }
 
-      // Google OAuth user — no role in metadata, show role-select
+      // Google OAuth — no role in metadata, go to role-select
       const qs = new URLSearchParams({ email, full_name: fullName })
-      router.replace(`/signup/role-select?${qs.toString()}`)
+      router.replace(`/signup/role-select?${qs}`)
     }
 
-    handleConfirm()
-  }, [code, tokenHash, type, router])
+    run()
+  }, [tokenHash, code, type, router])
 
   if (error) {
     return (
@@ -132,16 +124,10 @@ function ConfirmHandler() {
           <h1 className="font-serif text-2xl font-bold text-ink mb-2">Link expired</h1>
           <p className="text-ink-400 text-sm leading-relaxed mb-6">{error}</p>
           <div className="flex flex-col gap-3">
-            <a
-              href="/signup"
-              className="inline-flex items-center justify-center bg-ink text-white font-semibold text-sm px-6 py-3 rounded-xl hover:bg-ink-800 transition-colors"
-            >
+            <a href="/signup" className="inline-flex items-center justify-center bg-ink text-white font-semibold text-sm px-6 py-3 rounded-xl hover:bg-ink-800 transition-colors">
               Create a new account
             </a>
-            <a
-              href="/login"
-              className="inline-flex items-center justify-center border border-ink-100 text-ink font-semibold text-sm px-6 py-3 rounded-xl hover:bg-ink-50 transition-colors"
-            >
+            <a href="/login" className="inline-flex items-center justify-center border border-ink-100 text-ink font-semibold text-sm px-6 py-3 rounded-xl hover:bg-ink-50 transition-colors">
               Sign in instead
             </a>
           </div>
@@ -163,10 +149,4 @@ function ConfirmHandler() {
       </div>
     </div>
   )
-}
-
-function routeToDashboard(role: string, router: ReturnType<typeof useRouter>) {
-  if (role === 'photographer') router.replace('/dashboard/photographer')
-  else if (role === 'admin')   router.replace('/admin')
-  else                         router.replace('/dashboard/client')
 }
