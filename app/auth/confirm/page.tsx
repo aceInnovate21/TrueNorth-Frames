@@ -96,13 +96,15 @@ function ConfirmHandler() {
           return
         }
 
+        // Route through /auth/finishing which polls until the public.users row is
+        // visible in the DB before navigating — prevents middleware redirect loops.
         if (metaRole === 'photographer') {
           const [firstName, ...rest] = fullName.trim().split(' ')
           const lastName = rest.join(' ')
-          const qs = new URLSearchParams({ firstName: firstName ?? '', lastName })
-          router.replace(`/onboarding/photographer?${qs.toString()}`)
+          const onboardingUrl = `/onboarding/photographer?firstName=${encodeURIComponent(firstName ?? '')}&lastName=${encodeURIComponent(lastName)}`
+          router.replace(`/auth/finishing?dest=${encodeURIComponent(onboardingUrl)}`)
         } else {
-          router.replace('/dashboard/client')
+          router.replace('/auth/finishing?dest=%2Fdashboard%2Fclient')
         }
         return
       }

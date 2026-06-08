@@ -141,6 +141,8 @@ export async function middleware(request: NextRequest) {
       '/auth',
       '/login',
       '/signup',
+      '/photographers',
+      '/contact',
     ]
     const isRoot     = pathname === '/'
     const isOAuth    = user.app_metadata?.provider === 'google'
