@@ -15,6 +15,24 @@ export async function POST(request: NextRequest) {
   const fullName = `${first_name.trim()} ${last_name.trim()}`
   const db = adminDb as any
 
+  // Ensure public.users row exists before touching client_profiles (FK constraint).
+  // /api/auth/register may not have committed yet if the user navigated here quickly.
+  const { data: existingUser } = await db.from('users').select('id').eq('id', user.id).maybeSingle()
+  if (!existingUser) {
+    const { error: userInsertError } = await db.from('users').insert({
+      id: user.id,
+      email: user.email,
+      role: 'client',
+      full_name: fullName,
+      account_status: 'active',
+      is_verified: false,
+    })
+    if (userInsertError && userInsertError.code !== '23505') {
+      console.error('[onboarding/client] users insert error:', JSON.stringify(userInsertError))
+      return serverError('Failed to create user record')
+    }
+  }
+
   // Update name in public.users
   await db
     .from('users')
