@@ -13,35 +13,24 @@ export async function POST(request: NextRequest) {
   }
 
   const fullName = `${first_name.trim()} ${last_name.trim()}`
-
   const db = adminDb as any
 
-  // Update public.users name
-  const { error: userError } = await db
+  // Update name in public.users
+  await db
     .from('users')
     .update({ full_name: fullName, updated_at: new Date().toISOString() })
     .eq('id', user.id)
 
-  if (userError) return serverError('Failed to update user')
+  // Delete existing row then insert fresh — avoids any upsert/conflict issues
+  await db.from('client_profiles').delete().eq('user_id', user.id)
 
-  // Check if client_profile exists — update if so, insert if not
-  const { data: existing } = await db
+  const { error } = await db
     .from('client_profiles')
-    .select('id')
-    .eq('user_id', user.id)
-    .maybeSingle()
+    .insert({ user_id: user.id, location: location?.trim() || null })
 
-  if (existing) {
-    const { error: profileError } = await db
-      .from('client_profiles')
-      .update({ location: location?.trim() || null })
-      .eq('user_id', user.id)
-    if (profileError) return serverError('Failed to update profile')
-  } else {
-    const { error: profileError } = await db
-      .from('client_profiles')
-      .insert({ user_id: user.id, location: location?.trim() || null })
-    if (profileError) return serverError('Failed to save profile')
+  if (error) {
+    console.error('[onboarding/client] insert error:', JSON.stringify(error))
+    return serverError('Failed to save profile')
   }
 
   return NextResponse.json({ success: true })
