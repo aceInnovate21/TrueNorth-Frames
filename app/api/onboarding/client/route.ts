@@ -24,12 +24,25 @@ export async function POST(request: NextRequest) {
 
   if (userError) return serverError('Failed to update user')
 
-  // Upsert client_profiles
-  const { error: profileError } = await db
+  // Check if client_profile exists — update if so, insert if not
+  const { data: existing } = await db
     .from('client_profiles')
-    .upsert({ user_id: user.id, location: location?.trim() || null }, { onConflict: 'user_id' })
+    .select('id')
+    .eq('user_id', user.id)
+    .maybeSingle()
 
-  if (profileError) return serverError('Failed to save profile')
+  if (existing) {
+    const { error: profileError } = await db
+      .from('client_profiles')
+      .update({ location: location?.trim() || null })
+      .eq('user_id', user.id)
+    if (profileError) return serverError('Failed to update profile')
+  } else {
+    const { error: profileError } = await db
+      .from('client_profiles')
+      .insert({ user_id: user.id, location: location?.trim() || null })
+    if (profileError) return serverError('Failed to save profile')
+  }
 
   return NextResponse.json({ success: true })
 }
