@@ -80,28 +80,15 @@ export async function middleware(request: NextRequest) {
   // ── Logged in ────────────────────────────────────────────────────────────────
   const { role, photographerStatus } = await getUserInfo(user.id)
 
-  // No public.users row yet — still setting up.
-  // Let them through to /onboarding, /auth, /api, /signup — block dashboard only.
+  // No public.users row yet — user is logged in but hasn't completed setup.
+  // Login page handles creating the row and routing to onboarding.
+  // Just block dashboard access; let everything else through.
   if (!role) {
-    const allowed = ['/onboarding', '/auth', '/api', '/signup', '/login', '/signup/role-select', '/photographers', '/contact']
-    const isRoot  = pathname === '/'
-    if (!isRoot && !allowed.some(p => pathname.startsWith(p))) {
-      // Send to onboarding so they can finish setup — never sign them out
-      const isOAuth = user.app_metadata?.provider === 'google'
+    const isDashboard = PROTECTED_PREFIXES.some(p => pathname.startsWith(p))
+    if (isDashboard) {
       const url = request.nextUrl.clone()
-      if (isOAuth) {
-        url.pathname = '/signup/role-select'
-        url.searchParams.set('email', user.email ?? '')
-        url.searchParams.set('full_name', user.user_metadata?.full_name ?? user.user_metadata?.name ?? '')
-      } else {
-        const meta = user.user_metadata ?? {}
-        const fullName = meta.full_name ?? ''
-        const [firstName, ...rest] = fullName.split(' ')
-        url.pathname = '/onboarding'
-        if (meta.role === 'photographer') url.pathname = '/onboarding/photographer'
-        if (firstName) url.searchParams.set('firstName', firstName)
-        if (rest.length) url.searchParams.set('lastName', rest.join(' '))
-      }
+      url.pathname = '/login'
+      url.searchParams.set('error', 'setup_incomplete')
       return NextResponse.redirect(url)
     }
     return response

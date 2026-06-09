@@ -11,7 +11,7 @@ async function signInWithGoogle() {
   await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${window.location.origin}/auth/callback`,
+      redirectTo: `${window.location.origin}/auth/google/callback`,
       queryParams: { access_type: 'offline', prompt: 'select_account' },
     },
   })
@@ -100,12 +100,40 @@ function LoginForm() {
       return
     }
 
-    const dbRole = userData?.role ?? null
+    let dbRole = userData?.role ?? null
+    let isNewUser = false
 
-    // No public.users row yet — middleware will redirect to onboarding
+    // No public.users row yet — create it now using role from auth metadata.
+    // This is the definitive moment: clean session, email confirmed, no races.
     if (!dbRole) {
-      router.push('/dashboard/client')
-      return
+      const meta = data.user.user_metadata ?? {}
+      const metaRole = meta.role as string | undefined
+      const fullName = (meta.full_name ?? meta.name ?? '').trim()
+
+      if (metaRole === 'client' || metaRole === 'photographer') {
+        const registerRes = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id:      data.user.id,
+            access_token: data.session!.access_token,
+            role:         metaRole,
+            full_name:    fullName || email,
+            email:        data.user.email,
+          }),
+        })
+
+        if (!registerRes.ok) {
+          await supabase.auth.signOut()
+          setLoading(false)
+          setFormError('Account setup failed. Please try signing in again.')
+          setShake(true); setTimeout(() => setShake(false), 500)
+          return
+        }
+
+        dbRole = metaRole
+        isNewUser = true
+      }
     }
 
     // Rejected photographers cannot log in
@@ -123,9 +151,21 @@ function LoginForm() {
         setShake(true); setTimeout(() => setShake(false), 500)
         return
       }
+
+      // New photographer — send to onboarding; returning — send to dashboard
+      if (isNewUser) {
+        router.push('/onboarding/photographer')
+        return
+      }
     }
 
-    // Route to correct dashboard by DB role
+    // New client — send to onboarding
+    if (isNewUser && dbRole === 'client') {
+      router.push('/onboarding')
+      return
+    }
+
+    // Returning user — route to correct dashboard
     if (redirectTo) {
       router.push(redirectTo)
     } else if (dbRole === 'photographer') {
