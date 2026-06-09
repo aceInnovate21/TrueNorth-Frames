@@ -87,10 +87,12 @@ export async function POST(request: NextRequest) {
   // Only generate a new username for brand-new profiles
   const username = existingProfile?.username ?? await uniqueUsername(db, display_name)
 
-  // Upsert photographer_profiles — set pending so admin must approve before going public
+  // Delete-then-insert — avoids upsert/conflict issues (same pattern as client_profiles)
+  await db.from('photographer_profiles').delete().eq('user_id', user.id)
+
   const { data: profile, error: profileError } = await db
     .from('photographer_profiles')
-    .upsert({
+    .insert({
       user_id: user.id,
       username,
       display_name: display_name.trim(),
@@ -103,12 +105,12 @@ export async function POST(request: NextRequest) {
       ...(has_gbp != null ? { has_gbp_self_reported: has_gbp } : {}),
       ...(has_gbp_reviews != null ? { has_gbp_reviews_self_reported: has_gbp_reviews } : {}),
       ...(has_website != null ? { has_website_self_reported: has_website } : {}),
-    }, { onConflict: 'user_id' })
+    })
     .select('id')
     .single()
 
   if (profileError || !profile) {
-    console.error('[onboarding/photographer] upsert error:', JSON.stringify(profileError))
+    console.error('[onboarding/photographer] insert error:', JSON.stringify(profileError))
     return serverError('Failed to save photographer profile')
   }
 
