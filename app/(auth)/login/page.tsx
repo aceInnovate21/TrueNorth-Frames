@@ -95,7 +95,7 @@ function LoginForm() {
       setLoading(false)
       setFormError(status === 'deactivated'
         ? 'This account has been deleted. Contact support if you believe this is a mistake.'
-        : 'Your account has been suspended. Contact support@truenorthframes.ca to resolve this.')
+        : 'Your account has been suspended. Contact support to resolve this.')
       setShake(true); setTimeout(() => setShake(false), 500)
       return
     }
@@ -119,7 +119,7 @@ function LoginForm() {
       if (profileData?.profile_status === 'rejected') {
         await supabase.auth.signOut()
         setLoading(false)
-        setFormError('Your profile was not approved. Check your email for details or contact support@truenorthframes.ca.')
+        setFormError('Your profile was not approved. Check your email for details or contact support.')
         setShake(true); setTimeout(() => setShake(false), 500)
         return
       }
