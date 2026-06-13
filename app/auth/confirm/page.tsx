@@ -10,27 +10,41 @@ export default function ConfirmPage() {
 }
 
 function ConfirmHandler() {
-  const router     = useRouter()
-  const params     = useSearchParams()
-  const tokenHash  = params.get('token_hash')
-  const type       = params.get('type') ?? 'signup'
+  const router    = useRouter()
+  const params    = useSearchParams()
+  const tokenHash = params.get('token_hash')
+  const code      = params.get('code')
+  const type      = params.get('type') ?? 'signup'
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!tokenHash) {
+    if (!tokenHash && !code) {
       router.replace('/login')
       return
     }
 
     async function run() {
-      const { data, error: err } = await supabase.auth.verifyOtp({
-        token_hash: tokenHash!,
-        type: type as any,
-      })
+      let session: any = null
 
-      if (err || !data.session) {
-        setError('This link has expired or already been used. Please sign in or create a new account.')
-        return
+      if (tokenHash) {
+        // Supabase older format — token_hash in URL
+        const { data, error: err } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: type as any,
+        })
+        if (err || !data.session) {
+          setError('This link has expired or already been used. Please sign in or create a new account.')
+          return
+        }
+        session = data.session
+      } else if (code) {
+        // Supabase newer format — code in URL (same as OAuth but for email confirm)
+        const { data, error: err } = await supabase.auth.exchangeCodeForSession(code)
+        if (err || !data.session) {
+          setError('This link has expired or already been used. Please sign in or create a new account.')
+          return
+        }
+        session = data.session
       }
 
       // Email confirmed. Sign out immediately — users row is created at login.
@@ -39,7 +53,7 @@ function ConfirmHandler() {
     }
 
     run()
-  }, [tokenHash, type, router])
+  }, [tokenHash, code, type, router])
 
   if (error) {
     return (

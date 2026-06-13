@@ -476,7 +476,7 @@ function DeleteAccountModal({ onClose }: { onClose: () => void }) {
           {deleteError && (
             <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
               <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
-              <p className="text-xs text-red-700">Something went wrong. Please try again or contact support@truenorthframes.ca.</p>
+              <p className="text-xs text-red-700">Something went wrong. Please try again or contact support.</p>
             </div>
           )}
           <div>

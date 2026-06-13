@@ -236,24 +236,42 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
   // ── Welcome — Client ──────────────────────────────────────────────────────
 
   welcome_client: (p) => ({
-    subject: `Welcome to TrueNorth Frames, ${p.firstName}! 👋`,
+    subject: `Welcome to TrueNorth Frames, ${p.firstName} — you're in!`,
     html: base({
-      preheader: `Find Edmonton's best photographers — browsing and messaging is completely free.`,
+      preheader: `Edmonton's best photographers are waiting. Browse, message, and book — completely free.`,
+      accentColor: BRAND.green,
       body: `
-        ${h1(`Welcome, ${p.firstName}!`)}
-        ${lead('Your TrueNorth Frames account is ready to go.')}
+        ${h1(`You're in, ${p.firstName}! 🎉`)}
+        ${lead('Welcome to TrueNorth Frames — Edmonton\'s home for finding and booking local photographers.')}
         ${divider()}
-        ${p_('Browse Edmonton photographers, message them directly, and book a session — all at zero cost. No platform fees, ever.')}
-        ${p_('Here\'s what you can do right now:')}
-        ${ul([
-          'Browse verified photographers by specialty &amp; neighbourhood',
-          'Message photographers directly — no middleman',
-          'Save your favourites for later',
-          'Request and manage bookings in one place',
-        ])}
-        ${cta('Browse Photographers', `${process.env.NEXT_PUBLIC_APP_URL}/photographers`, BRAND.green)}
+        ${p_('Your account is live and ready. Here\'s what makes TrueNorth Frames different:')}
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 20px;">
+          <tr>
+            <td style="padding:12px 0;border-bottom:1px solid ${BRAND.border};">
+              <div style="font-size:20px;margin-bottom:4px;">📷</div>
+              <div style="font-size:14px;font-weight:700;color:${BRAND.black};margin-bottom:2px;">Real Edmonton photographers</div>
+              <div style="font-size:13px;color:#666;line-height:1.5;">Every photographer is reviewed by our team before going live. No random freelancers.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:12px 0;border-bottom:1px solid ${BRAND.border};">
+              <div style="font-size:20px;margin-bottom:4px;">💬</div>
+              <div style="font-size:14px;font-weight:700;color:${BRAND.black};margin-bottom:2px;">Message directly — no middleman</div>
+              <div style="font-size:13px;color:#666;line-height:1.5;">Talk to photographers directly. Ask questions, share your vision, get a feel before booking.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:12px 0;">
+              <div style="font-size:20px;margin-bottom:4px;">✅</div>
+              <div style="font-size:14px;font-weight:700;color:${BRAND.black};margin-bottom:2px;">Zero fees. Always.</div>
+              <div style="font-size:13px;color:#666;line-height:1.5;">Browsing, messaging, and booking are free. We never take a cut from you or the photographer.</div>
+            </td>
+          </tr>
+        </table>
+        ${cta('Find Your Photographer', `${process.env.NEXT_PUBLIC_APP_URL}/photographers`, BRAND.green)}
         ${divider()}
-        ${p_('We\'re a small Edmonton team — if you ever need help, just reply to this email and a real person will get back to you.')}
+        ${p_('We\'re a small Edmonton team building something we genuinely believe in. If you have questions, feedback, or just want to say hi — reply to this email. A real person will read it.')}
+        <p style="margin:0;font-size:13px;color:#888;line-height:1.6;">— The TrueNorth Frames Team 🌲</p>
       `,
     }),
   }),
@@ -261,24 +279,42 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
   // ── Welcome — Photographer ────────────────────────────────────────────────
 
   welcome_photographer: (p) => ({
-    subject: `📸 We've received your profile, ${p.firstName} — under review now`,
+    subject: `Welcome to TrueNorth Frames, ${p.firstName} — let's get you live 📸`,
     html: base({
-      preheader: `Your TrueNorth Frames profile is under review. Here's what to do while you wait.`,
+      preheader: `Your profile is under review. Here's how to set yourself up for success while you wait.`,
       body: `
-        ${h1(`Thanks for joining, ${p.firstName}!`)}
-        ${lead('Your photographer profile has been submitted and is under review.')}
+        ${h1(`Welcome aboard, ${p.firstName}!`)}
+        ${lead('Thank you for joining TrueNorth Frames — Edmonton\'s dedicated marketplace for local photographers.')}
         ${divider()}
-        ${alertBox(`Our team will review your profile within <strong>1–2 business days</strong>. You'll get an email the moment it's approved and live on the marketplace.`, BRAND.blue)}
-        ${p_('While you wait, you can log in and get ahead:')}
-        ${ul([
-          'Upload your best portfolio photos (aim for 8–12)',
-          'Add your specialties and starting rate',
-          'Set your weekly availability',
-          'Connect your Google Business Profile to unlock your trust score',
-        ])}
-        ${cta('Complete Your Profile', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer`)}
+        ${alertBox(`<strong>Your profile is now under review.</strong> Our team manually reviews every photographer to keep the quality high for clients. You'll hear back within <strong>1–2 business days</strong>.`, BRAND.blue)}
+        ${p_('While you wait, make the most of your dashboard:')}
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;">
+          <tr>
+            <td style="padding:10px 0;border-bottom:1px solid ${BRAND.border};">
+              <div style="font-size:13px;color:${BRAND.black};line-height:1.6;"><span style="font-weight:700;">1. Upload your portfolio</span> — aim for 8–12 of your strongest shots. First impressions matter.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:10px 0;border-bottom:1px solid ${BRAND.border};">
+              <div style="font-size:13px;color:${BRAND.black};line-height:1.6;"><span style="font-weight:700;">2. Set your specialties &amp; rate</span> — clients filter by specialty and budget. Be specific.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:10px 0;border-bottom:1px solid ${BRAND.border};">
+              <div style="font-size:13px;color:${BRAND.black};line-height:1.6;"><span style="font-weight:700;">3. Add your availability</span> — photographers with availability set get 2× more enquiries.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:10px 0;">
+              <div style="font-size:13px;color:${BRAND.black};line-height:1.6;"><span style="font-weight:700;">4. Connect your Google Business Profile</span> — your reviews power your trust score and badge.</div>
+            </td>
+          </tr>
+        </table>
+        ${cta('Go to My Dashboard', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer`)}
         ${divider()}
-        ${p_(`Questions? Email <a href="mailto:${SUPPORT_EMAIL()}" style="color:#333;font-weight:600;">${SUPPORT_EMAIL()}</a> — we respond within one business day.`)}
+        ${p_('We built TrueNorth Frames because we believe Edmonton photographers deserve a platform that works for them — not against them. No commissions. No hidden fees. Just direct bookings.')}
+        ${p_(`Questions before you hear back? Reply to this email or reach us at <a href="mailto:${SUPPORT_EMAIL()}" style="color:#333;font-weight:600;">${SUPPORT_EMAIL()}</a> — we're quick to respond.`)}
+        <p style="margin:0;font-size:13px;color:#888;line-height:1.6;">— The TrueNorth Frames Team 🌲</p>
       `,
     }),
   }),

@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowRight, Star, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { ArrowRight, Star, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 async function signInWithGoogle() {
@@ -30,8 +30,6 @@ function LoginForm() {
   const searchParams = useSearchParams()
   const redirectTo      = searchParams.get('redirect') ?? null
   const wasDeleted      = searchParams.get('deleted') === '1'
-  const wasVerified     = searchParams.get('verified') === '1'
-  const verifyFailed    = searchParams.get('error') === 'verification_failed'
   const wasRejected     = searchParams.get('error') === 'rejected'
   const setupIncomplete = searchParams.get('error') === 'setup_incomplete'
 
@@ -265,28 +263,16 @@ function LoginForm() {
           </div>
 
           {/* Status banners */}
-          {wasVerified && (
-            <div className="flex items-start gap-2.5 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 mb-5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-emerald-700 leading-snug">Email verified! Sign in below to get started.</p>
-            </div>
-          )}
           {setupIncomplete && (
             <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-5">
               <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-amber-700 leading-snug">Your account was created but setup didn't complete. Sign in below to finish.</p>
+              <p className="text-sm text-amber-700 leading-snug">Your account setup didn't complete. Sign in below to finish.</p>
             </div>
           )}
           {wasRejected && (
             <div className="flex items-start gap-2.5 bg-red-50 border border-red-100 rounded-xl px-4 py-3 mb-5">
               <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-red-700 leading-snug">Your photographer profile was not approved. Check your email for details or contact support.</p>
-            </div>
-          )}
-          {verifyFailed && (
-            <div className="flex items-start gap-2.5 bg-red-50 border border-red-100 rounded-xl px-4 py-3 mb-5">
-              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700 leading-snug">That verification link has expired or is invalid. Please sign up again or contact support.</p>
             </div>
           )}
           {wasDeleted && (

@@ -73,7 +73,7 @@ export default function AdminLoginPage() {
                 onChange={e => setEmail(e.target.value)}
                 required
                 autoFocus
-                placeholder="admin@truenorthframes.ca"
+                placeholder="admin@thetruenorthframes.com"
                 className="w-full border border-ink-100 rounded-xl px-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
               />
             </div>

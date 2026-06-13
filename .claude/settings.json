@@ -3,7 +3,9 @@
     "allow": [
       "Bash(grep -n \"^          </>$\\\\|^          \\)}\" \"/Users/yogesh/Desktop/ACE/Development/TrueNorth Frames/app/\\(auth\\)/signup/page.tsx\")",
       "Bash(vercel --prod)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(sed -i '' 's/contact support@truenorthframes\\\\.ca/contact support/g' \"/Users/yogesh/Desktop/ACE/Development/TrueNorth Frames/app/dashboard/client/page.tsx\" \"/Users/yogesh/Desktop/ACE/Development/TrueNorth Frames/app/dashboard/photographer/page.tsx\")",
+      "Bash(sed -i '' 's/placeholder=\"admin@truenorthframes\\\\.ca\"/placeholder=\"admin@thetruenorthframes.com\"/g' \"/Users/yogesh/Desktop/ACE/Development/TrueNorth Frames/app/admin/login/page.tsx\")"
     ]
   }
 }
