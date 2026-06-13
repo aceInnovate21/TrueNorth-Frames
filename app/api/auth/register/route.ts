@@ -53,30 +53,33 @@ export async function POST(request: NextRequest) {
   const welcomeTemplate = role === 'photographer' ? 'welcome_photographer' : 'welcome_client'
   const welcomePayload = { firstName, email }
 
-  // Return success immediately — email + notification are fire-and-forget
-  // so a slow/failing Resend call never blocks the user getting into the app
-  const response = NextResponse.json({ success: true })
+  // Send welcome email before returning — fire-and-forget Promise doesn't
+  // survive Vercel serverless function freeze after response is sent.
+  try {
+    const sent = await sendEmail({ to: email, templateId: welcomeTemplate, payload: welcomePayload })
+    if (!sent.ok) {
+      console.error('[register] sendEmail failed:', sent.error, '— queuing fallback')
+      await queueEmail({ to: email, templateId: welcomeTemplate, payload: welcomePayload })
+    } else {
+      console.log('[register] welcome email sent to:', email)
+    }
+  } catch (e) {
+    console.error('[register] sendEmail threw:', e)
+  }
 
-  // Fire-and-forget: email + in-app notification (never block the response)
-  Promise.resolve().then(async () => {
-    try {
-      const sent = await sendEmail({ to: email, templateId: welcomeTemplate, payload: welcomePayload })
-      if (!sent.ok) await queueEmail({ to: email, templateId: welcomeTemplate, payload: welcomePayload })
-    } catch { /* best-effort */ }
+  // In-app welcome notification
+  try {
+    await notify({
+      db: adminDb,
+      userId: resolvedUserId!,
+      type: 'welcome',
+      title: `Welcome to TrueNorth Frames, ${firstName}!`,
+      body: role === 'photographer'
+        ? 'Your profile is being set up. Complete your bio, upload portfolio photos, and connect your Google Business Profile to get discovered.'
+        : 'Browse Edmonton photographers, save your favourites, and send messages — all free.',
+      expiresInDays: 60,
+    })
+  } catch { /* best-effort */ }
 
-    try {
-      await notify({
-        db: adminDb,
-        userId: resolvedUserId!,
-        type: 'welcome',
-        title: `Welcome to TrueNorth Frames, ${firstName}!`,
-        body: role === 'photographer'
-          ? 'Your profile is being set up. Complete your bio, upload portfolio photos, and connect your Google Business Profile to get discovered.'
-          : 'Browse Edmonton photographers, save your favourites, and send messages — all free.',
-        expiresInDays: 60,
-      })
-    } catch { /* best-effort */ }
-  })
-
-  return response
+  return NextResponse.json({ success: true })
 }
