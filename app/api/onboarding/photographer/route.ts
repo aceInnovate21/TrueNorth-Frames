@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
+import { Resend } from 'resend'
 
 function slugify(name: string): string {
   return name
@@ -125,6 +126,22 @@ export async function POST(request: NextRequest) {
     await db
       .from('photographer_specialties')
       .upsert(rows, { onConflict: 'photographer_id,specialty' })
+  }
+
+  // Send welcome email now that onboarding is complete
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY!)
+    const firstName = fullName.split(' ')[0]
+    await resend.emails.send({
+      from: process.env.RESEND_FROM_EMAIL ?? 'hello@thetruenorthframes.com',
+      to: user.email!,
+      template: {
+        id: process.env.RESEND_TEMPLATE_WELCOME_PHOTOGRAPHER!,
+        variables: { USER_NAME: firstName },
+      },
+    } as any)
+  } catch (e) {
+    console.error('[onboarding/photographer] welcome email error:', e)
   }
 
   return NextResponse.json({ success: true, username })

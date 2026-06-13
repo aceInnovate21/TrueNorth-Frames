@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
+import { Resend } from 'resend'
 
 export async function POST(request: NextRequest) {
   const { adminDb, user } = await getServerSession()
@@ -49,6 +50,22 @@ export async function POST(request: NextRequest) {
   if (error) {
     console.error('[onboarding/client] insert error:', JSON.stringify(error))
     return serverError('Failed to save profile')
+  }
+
+  // Send welcome email now that onboarding is complete
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY!)
+    const firstName = fullName.split(' ')[0]
+    await resend.emails.send({
+      from: process.env.RESEND_FROM_EMAIL ?? 'hello@thetruenorthframes.com',
+      to: user.email!,
+      template: {
+        id: process.env.RESEND_TEMPLATE_WELCOME_CLIENT!,
+        variables: { USER_NAME: firstName },
+      },
+    } as any)
+  } catch (e) {
+    console.error('[onboarding/client] welcome email error:', e)
   }
 
   return NextResponse.json({ success: true })

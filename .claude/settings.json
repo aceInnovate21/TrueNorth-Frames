@@ -6,7 +6,9 @@
       "Bash(git rm *)",
       "Bash(sed -i '' 's/contact support@truenorthframes\\\\.ca/contact support/g' \"/Users/yogesh/Desktop/ACE/Development/TrueNorth Frames/app/dashboard/client/page.tsx\" \"/Users/yogesh/Desktop/ACE/Development/TrueNorth Frames/app/dashboard/photographer/page.tsx\")",
       "Bash(sed -i '' 's/placeholder=\"admin@truenorthframes\\\\.ca\"/placeholder=\"admin@thetruenorthframes.com\"/g' \"/Users/yogesh/Desktop/ACE/Development/TrueNorth Frames/app/admin/login/page.tsx\")",
-      "Bash(vercel deploy *)"
+      "Bash(vercel deploy *)",
+      "Bash(curl -s -X POST https://api.resend.com/emails -H 'Authorization: Bearer re_NUTaeyah_162m7i2xj8uhceu67BjBJhoK' -H 'Content-Type: application/json' -d '{ *)",
+      "WebSearch"
     ]
   }
 }
