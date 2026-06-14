@@ -51,10 +51,14 @@ export async function POST(request: NextRequest) {
 
   const db = adminDb as any
 
-  // Ensure public.users row exists — Google OAuth users sometimes reach onboarding
-  // without completing role-select (e.g. direct URL navigation). Insert only if missing.
+  // Ensure public.users row exists. Check by user.id first — if missing, insert.
+  // Ignore 23505 (duplicate key) since the row may already exist via register route
+  // or a stale email row from a previous test account with the same email.
   const { data: existingUser } = await db.from('users').select('id').eq('id', user.id).maybeSingle()
   if (!existingUser) {
+    // Delete any stale row with the same email but different id (leftover test data)
+    await db.from('users').delete().eq('email', user.email).neq('id', user.id)
+
     const { error: userInsertError } = await db.from('users').insert({
       id: user.id,
       email: user.email,
@@ -63,7 +67,7 @@ export async function POST(request: NextRequest) {
       account_status: 'active',
       is_verified: false,
     })
-    if (userInsertError) {
+    if (userInsertError && userInsertError.code !== '23505') {
       console.error('[onboarding/photographer] users insert error:', JSON.stringify(userInsertError))
       return serverError('Failed to create user record')
     }

@@ -20,6 +20,9 @@ export async function POST(request: NextRequest) {
   // /api/auth/register may not have committed yet if the user navigated here quickly.
   const { data: existingUser } = await db.from('users').select('id').eq('id', user.id).maybeSingle()
   if (!existingUser) {
+    // Delete any stale row with the same email but different id (leftover test data)
+    await db.from('users').delete().eq('email', user.email).neq('id', user.id)
+
     const { error: userInsertError } = await db.from('users').insert({
       id: user.id,
       email: user.email,
