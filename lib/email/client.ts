@@ -2,7 +2,7 @@ import { Resend } from 'resend'
 import { createClient } from '@supabase/supabase-js'
 
 const resend = new Resend(process.env.RESEND_API_KEY!)
-const FROM   = process.env.RESEND_FROM_EMAIL ?? 'hello@thetruenorthframes.com'
+const FROM   = `TrueNorth Frames <${process.env.RESEND_FROM_EMAIL ?? 'hello@thetruenorthframes.com'}>`
 
 // Maps our template IDs to Resend template UUIDs via env vars
 const TEMPLATE_ENV_MAP: Record<string, string> = {
