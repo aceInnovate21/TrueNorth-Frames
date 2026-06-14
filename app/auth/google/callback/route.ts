@@ -50,13 +50,37 @@ export async function GET(request: NextRequest) {
     .eq('id', user.id)
     .maybeSingle()
 
+  // Determine if the user has actually completed onboarding by checking for a profile.
+  // The DB trigger creates a public.users row immediately on auth signup (role defaults
+  // to 'client'), so we cannot use the users row alone to decide — we must verify a
+  // profile record exists, which only happens after onboarding is finished.
+  let hasProfile = false
+  if (existingUser?.role === 'photographer') {
+    const { data: pp } = await adminDb
+      .from('photographer_profiles')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    hasProfile = !!pp
+  } else if (existingUser?.role === 'client') {
+    const { data: cp } = await adminDb
+      .from('client_profiles')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    hasProfile = !!cp
+  } else if (existingUser?.role === 'admin') {
+    hasProfile = true
+  }
+
   // Decide destination before building the response
   let destination: string
-  if (existingUser?.role) {
+  if (existingUser && hasProfile) {
     destination = existingUser.role === 'photographer' ? `${APP_URL}/dashboard/photographer`
       : existingUser.role === 'admin' ? `${APP_URL}/admin`
       : `${APP_URL}/dashboard/client`
   } else {
+    // New user or onboarding incomplete — send to role-select
     const fullName = user.user_metadata?.full_name ?? user.user_metadata?.name ?? ''
     const email    = user.email ?? ''
     const qs = new URLSearchParams({ email, full_name: fullName })
