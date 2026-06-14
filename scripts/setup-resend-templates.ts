@@ -65,7 +65,7 @@ function base({ preheader, body, accent = '#0ea5e9' }: { preheader: string; body
       <strong style="color:#444;">TrueNorth Frames</strong> &nbsp;·&nbsp; Edmonton, AB
     </p>
     <p style="margin:0 0 6px;font-size:12px;color:#bbb;">
-      Questions? <a href="mailto:${SUPPORT}" style="color:#888;text-decoration:underline;">${SUPPORT}</a>
+      Need help? <a href="${APP_URL}/contact" style="color:#888;text-decoration:underline;">Contact support</a>
     </p>
     <p style="margin:0;font-size:11px;color:#ccc;">
       You're receiving this because you have a TrueNorth Frames account.

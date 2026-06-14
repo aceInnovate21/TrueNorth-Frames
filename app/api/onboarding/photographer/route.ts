@@ -132,10 +132,11 @@ export async function POST(request: NextRequest) {
       .upsert(rows, { onConflict: 'photographer_id,specialty' })
   }
 
-  // Send welcome email now that onboarding is complete
+  const resend = new Resend(process.env.RESEND_API_KEY!)
+  const firstName = fullName.split(' ')[0]
+
+  // Welcome email to photographer
   try {
-    const resend = new Resend(process.env.RESEND_API_KEY!)
-    const firstName = fullName.split(' ')[0]
     await resend.emails.send({
       from: process.env.RESEND_FROM_EMAIL ?? 'hello@thetruenorthframes.com',
       to: user.email!,
@@ -146,6 +147,28 @@ export async function POST(request: NextRequest) {
     } as any)
   } catch (e) {
     console.error('[onboarding/photographer] welcome email error:', e)
+  }
+
+  // Notify admin — new photographer needs approval
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL ?? 'aceinnovate21@gmail.com'
+    await resend.emails.send({
+      from: process.env.RESEND_FROM_EMAIL ?? 'hello@thetruenorthframes.com',
+      to: adminEmail,
+      template: {
+        id: process.env.RESEND_TEMPLATE_SUPPORT_TICKET_CREATED!,
+        variables: {
+          TICKET_ID: photographerId.slice(0, 8),
+          SUBJECT: `New photographer profile — ${display_name.trim()}`,
+          CATEGORY: 'photographer_approval',
+          SUBMITTER_NAME: fullName,
+          SUBMITTER_ROLE: 'photographer',
+          DESCRIPTION: `${fullName} (${user.email}) has completed onboarding and is waiting for approval.\n\nBio: ${bio.trim().slice(0, 200)}\nLocation: ${location}\nRate: ${rateDisplay}\nUsername: ${username}`,
+        },
+      },
+    } as any)
+  } catch (e) {
+    console.error('[onboarding/photographer] admin notification error:', e)
   }
 
   return NextResponse.json({ success: true, username })
