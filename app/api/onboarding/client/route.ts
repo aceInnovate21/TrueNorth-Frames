@@ -16,32 +16,21 @@ export async function POST(request: NextRequest) {
   const fullName = `${first_name.trim()} ${last_name.trim()}`
   const db = adminDb as any
 
-  // Ensure public.users row exists before touching client_profiles (FK constraint).
-  // /api/auth/register may not have committed yet if the user navigated here quickly.
-  const { data: existingUser } = await db.from('users').select('id').eq('id', user.id).maybeSingle()
-  if (!existingUser) {
-    // Delete any stale row with the same email but different id (leftover test data)
-    await db.from('users').delete().eq('email', user.email).neq('id', user.id)
+  // public.users is guaranteed to exist by DB trigger on auth.users INSERT.
+  // Just update role + name now that we know the real values.
+  const { error: upsertUserError } = await db.from('users').upsert({
+    id: user.id,
+    email: user.email,
+    role: 'client',
+    full_name: fullName,
+    account_status: 'active',
+    is_verified: false,
+  }, { onConflict: 'id', ignoreDuplicates: false })
 
-    const { error: userInsertError } = await db.from('users').insert({
-      id: user.id,
-      email: user.email,
-      role: 'client',
-      full_name: fullName,
-      account_status: 'active',
-      is_verified: false,
-    })
-    if (userInsertError && userInsertError.code !== '23505') {
-      console.error('[onboarding/client] users insert error:', JSON.stringify(userInsertError))
-      return serverError('Failed to create user record')
-    }
+  if (upsertUserError) {
+    console.error('[onboarding/client] users upsert error:', JSON.stringify(upsertUserError))
+    return serverError('Failed to update user record')
   }
-
-  // Update name in public.users
-  await db
-    .from('users')
-    .update({ full_name: fullName, updated_at: new Date().toISOString() })
-    .eq('id', user.id)
 
   // Delete existing row then insert fresh — avoids any upsert/conflict issues
   await db.from('client_profiles').delete().eq('user_id', user.id)

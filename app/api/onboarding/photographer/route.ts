@@ -51,33 +51,21 @@ export async function POST(request: NextRequest) {
 
   const db = adminDb as any
 
-  // Ensure public.users row exists. Check by user.id first — if missing, insert.
-  // Ignore 23505 (duplicate key) since the row may already exist via register route
-  // or a stale email row from a previous test account with the same email.
-  const { data: existingUser } = await db.from('users').select('id').eq('id', user.id).maybeSingle()
-  if (!existingUser) {
-    // Delete any stale row with the same email but different id (leftover test data)
-    await db.from('users').delete().eq('email', user.email).neq('id', user.id)
+  // public.users is guaranteed to exist by DB trigger on auth.users INSERT.
+  // Just update role + name now that we know the real values.
+  const { error: upsertUserError } = await db.from('users').upsert({
+    id: user.id,
+    email: user.email,
+    role: 'photographer',
+    full_name: fullName,
+    account_status: 'active',
+    is_verified: false,
+  }, { onConflict: 'id', ignoreDuplicates: false })
 
-    const { error: userInsertError } = await db.from('users').insert({
-      id: user.id,
-      email: user.email,
-      role: 'photographer',
-      full_name: fullName,
-      account_status: 'active',
-      is_verified: false,
-    })
-    if (userInsertError && userInsertError.code !== '23505') {
-      console.error('[onboarding/photographer] users insert error:', JSON.stringify(userInsertError))
-      return serverError('Failed to create user record')
-    }
+  if (upsertUserError) {
+    console.error('[onboarding/photographer] users upsert error:', JSON.stringify(upsertUserError))
+    return serverError('Failed to update user record')
   }
-
-  // Update public.users name
-  await db
-    .from('users')
-    .update({ full_name: fullName, updated_at: new Date().toISOString() })
-    .eq('id', user.id)
 
   const rateNum = parseFloat(rate)
   const rateDisplay = `$${rateNum.toFixed(0)} / hr`
