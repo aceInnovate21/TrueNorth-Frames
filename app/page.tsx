@@ -241,12 +241,12 @@ export default function HomePage() {
     <>
       <Nav />
 
-      {/* ── Hero ─────────────────────────────────────────────────────── */}
+      {/* -- Hero ------------------------------------------------------- */}
       <section className="bg-white overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-2 gap-0 lg:gap-16 items-center min-h-[600px] py-16 lg:py-24">
 
-            {/* Left — client-facing copy */}
+            {/* Left - client-facing copy */}
             <div className="max-w-xl">
               <div className="inline-flex items-center gap-2 bg-ink-50 border border-ink-100 rounded-full px-3.5 py-1.5 mb-8">
                 <MapPin className="w-3 h-3 text-ink-400" />
@@ -264,7 +264,7 @@ export default function HomePage() {
               </h1>
 
               <p className="text-ink-400 text-lg leading-relaxed mb-8 max-w-md">
-                Every photographer on TrueNorth Frames is Google-verified, portfolio-reviewed, and Edmonton-based. Browse by specialty, read real scores, and message directly — free.
+                Every photographer on TrueNorth Frames is Google-verified, portfolio-reviewed, and Edmonton-based. Browse by specialty, read real scores, and message directly -- free.
               </p>
 
               <div className="flex flex-wrap gap-3 mb-10">
@@ -293,7 +293,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Search bar ───────────────────────────────────────────────── */}
+      {/* -- Search bar ------------------------------------------------- */}
       <div className="bg-ink-50 border-y border-ink-100 py-6">
         <div className="max-w-3xl mx-auto px-4 sm:px-6">
           <p className="text-center text-xs font-semibold text-ink-300 uppercase tracking-[0.15em] mb-4">Search Edmonton photographers</p>
@@ -374,12 +374,12 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ── Trust strip ──────────────────────────────────────────────── */}
+      {/* -- Trust strip ------------------------------------------------ */}
       <div className="bg-white border-b border-ink-100">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5">
           <div className="flex flex-wrap items-center justify-center gap-8 sm:gap-14">
             {[
-              { value: '$0',       label: 'Booking fees — ever' },
+              { value: '$0',       label: 'Booking fees -- ever' },
               { value: 'GBP',      label: 'Verified trust source' },
               { value: 'Free',     label: 'To browse, no account' },
               { value: 'Edmonton', label: 'Focused. Local. Yours.' },
@@ -393,7 +393,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ── Why it's hard to find a photographer (client problem) ─────── */}
+      {/* -- Why it's hard to find a photographer (client problem) ------- */}
       <section className="bg-ink py-24 relative overflow-hidden">
         <div className="absolute inset-0 grid-pattern opacity-100 pointer-events-none" />
         {/* subtle radial glow */}
@@ -406,16 +406,16 @@ export default function HomePage() {
                 Finding a<br />photographer<br />shouldn't be<br />this hard.
               </h2>
               <p className="text-ink-400 text-base leading-relaxed">
-                Edmonton has talented photographers everywhere — but there's been no good way to find, compare, and trust them.
+                Edmonton has talented photographers everywhere -- but there's been no good way to find, compare, and trust them.
               </p>
             </div>
             <div className="space-y-0 divide-y divide-ink-800">
               {[
-                { n: '01', text: 'You can't tell who's actually good vs. who's good at marketing' },
+                { n: '01', text: "You can't tell who's actually good vs. who's good at marketing" },
                 { n: '02', text: 'Reviews are scattered across Google, Facebook, word of mouth' },
                 { n: '03', text: 'No way to compare work, rates, and availability in one place' },
-                { n: '04', text: 'Booking is a mess — DMs, WhatsApp, email chains, no confirmation' },
-                { n: '05', text: 'No platform built for Edmonton's local photography market' },
+                { n: '04', text: 'Booking is a mess -- DMs, WhatsApp, email chains, no confirmation' },
+                { n: '05', text: "No platform built for Edmonton's local photography market" },
               ].map((item) => (
                 <div key={item.n} className="flex items-start gap-4 py-4">
                   <span className="text-ink-600 text-xs font-bold tracking-widest flex-shrink-0 mt-0.5">{item.n}</span>
@@ -427,7 +427,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── How TrueNorth Frames solves it — 3 client benefits ────────── */}
+      {/* -- How TrueNorth Frames solves it - 3 client benefits ---------- */}
       <section className="bg-white py-24">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-14">
@@ -446,21 +446,21 @@ export default function HomePage() {
                 step: '01',
                 icon: Search,
                 title: 'Search by work, not price',
-                desc: 'Filter by specialty, neighbourhood, and rating. Every result shows portfolio photos front and centre — not just a logo and a quote.',
+                desc: 'Filter by specialty, neighbourhood, and rating. Every result shows portfolio photos front and centre -- not just a logo and a quote.',
                 highlight: 'Portfolio-first search',
               },
               {
                 step: '02',
                 icon: Shield,
                 title: 'Read their Trust Score',
-                desc: 'Every profile shows a verified Trust Score powered by Google Business Profile — real star rating, review count, and account age. Scores update weekly. Photographers can't edit them.',
+                desc: "Every profile shows a verified Trust Score powered by Google Business Profile -- real star rating, review count, and account age. Scores update weekly. Photographers can't edit them.",
                 highlight: 'Google-verified scores',
               },
               {
                 step: '03',
                 icon: MessageSquare,
                 title: 'Message directly',
-                desc: 'Contact any photographer in-app. No commission, no booking fees, no middleman. Pay them directly — we stay out of it.',
+                desc: 'Contact any photographer in-app. No commission, no booking fees, no middleman. Pay them directly -- we stay out of it.',
                 highlight: '$0 platform fees',
               },
             ].map((item) => {
@@ -502,7 +502,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Why trust them — 4 pillars ────────────────────────────────── */}
+      {/* -- Why trust them - 4 pillars ---------------------------------- */}
       <section className="bg-ink-50 py-24 border-y border-ink-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
@@ -512,7 +512,7 @@ export default function HomePage() {
                 How do you know<br />who to trust?
               </h2>
               <p className="text-ink-400 text-base leading-relaxed mb-8">
-                Every photographer on TrueNorth Frames carries a Trust Score — a composite rating we calculate from their Google Business Profile, profile completeness, and booking history. You see the real number, not what they say about themselves.
+                Every photographer on TrueNorth Frames carries a Trust Score -- a composite rating we calculate from their Google Business Profile, profile completeness, and booking history. You see the real number, not what they say about themselves.
               </p>
               <Link href="/how-it-works" className="inline-flex items-center gap-2 bg-ink hover:bg-ink-800 text-white font-semibold px-6 py-3 rounded-xl transition-all duration-200 text-sm shadow-[0_4px_14px_rgba(0,0,0,0.20)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.28)] hover:-translate-y-0.5">
                 How Trust Scores work <ArrowRight className="w-4 h-4" />
@@ -521,7 +521,7 @@ export default function HomePage() {
 
             <div className="grid grid-cols-2 gap-4">
               {[
-                { icon: Shield,       pct: '35%', title: 'Google Business Profile', desc: 'Star rating, review count, and account age — pulled directly from GBP weekly.' },
+                { icon: Shield,       pct: '35%', title: 'Google Business Profile', desc: 'Star rating, review count, and account age -- pulled directly from GBP weekly.' },
                 { icon: User,         pct: '25%', title: 'Profile Completeness',    desc: 'Bio, portfolio, rates, availability all filled in and up to date.' },
                 { icon: Star,         pct: '25%', title: 'Platform Activity',        desc: 'Booking history, native client reviews, and response rate on TrueNorth Frames.' },
                 { icon: CheckCircle2, pct: '15%', title: 'Admin Verified',           desc: 'Identity confirmed by the TrueNorth Frames team.' },
@@ -552,7 +552,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Featured Photographers ───────────────────────────────────── */}
+      {/* -- Featured Photographers ------------------------------------- */}
       <section className="bg-white py-24" id="featured">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-end justify-between mb-12">
@@ -574,7 +574,7 @@ export default function HomePage() {
                 ? featured.map((p, i) => <PhotographerCard key={p.slug} p={p} index={i} />)
                 : (
                   <div className="col-span-3 text-center py-16">
-                    <p className="text-ink-300 text-sm">Photographers are joining soon — check back shortly.</p>
+                    <p className="text-ink-300 text-sm">Photographers are joining soon -- check back shortly.</p>
                     <Link href="/photographers" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-ink hover:text-ink-600 transition-colors">
                       Browse all <ArrowRight className="w-4 h-4" />
                     </Link>
@@ -591,14 +591,14 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Browse by specialty ──────────────────────────────────────── */}
+      {/* -- Browse by specialty ---------------------------------------- */}
       <section className="bg-ink-50 py-24 border-y border-ink-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <p className="text-ink-300 text-xs font-semibold uppercase tracking-[0.15em] mb-2">What do you need?</p>
             <h2 className="font-serif text-4xl sm:text-5xl font-bold text-ink mb-3">Browse by specialty</h2>
             <p className="text-ink-400 text-base max-w-md mx-auto">
-              From weddings to newborns — find a photographer who specialises in exactly what you need.
+              From weddings to newborns -- find a photographer who specialises in exactly what you need.
             </p>
           </div>
 
@@ -626,7 +626,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── What clients get — feature grid ─────────────────────────── */}
+      {/* -- What clients get - feature grid --------------------------- */}
       <section className="bg-white py-24">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-14">
@@ -638,12 +638,12 @@ export default function HomePage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-ink-100 border border-ink-100 rounded-2xl overflow-hidden">
             {[
-              { icon: Images,        title: 'Portfolio galleries',     desc: 'Every photographer shows their actual work — masonry grid on desktop, swipeable on mobile. Judge by the photos, not the pitch.' },
+              { icon: Images,        title: 'Portfolio galleries',     desc: 'Every photographer shows their actual work -- masonry grid on desktop, swipeable on mobile. Judge by the photos, not the pitch.' },
               { icon: Shield,        title: 'Verified Trust Scores',   desc: 'Composite score from Google Business Profile, profile completeness, and booking history. Updated weekly, tamper-proof.' },
               { icon: Star,          title: 'Real reviews',            desc: 'Client reviews collected natively on TrueNorth Frames, plus GBP rating. No fake testimonials.' },
               { icon: MapPin,        title: 'Edmonton-only',           desc: 'Every photographer here is Edmonton-based. No out-of-town listings, no national directories.' },
               { icon: MessageSquare, title: 'Direct messaging',        desc: 'Message any photographer in-app. Full history saved to your dashboard. File attachments supported.' },
-              { icon: Bell,          title: 'Booking reminders',       desc: 'Automated 24-hour shoot reminders sent to both you and the photographer — nobody forgets.' },
+              { icon: Bell,          title: 'Booking reminders',       desc: 'Automated 24-hour shoot reminders sent to both you and the photographer -- nobody forgets.' },
             ].map((f) => {
               const Icon = f.icon
               return (
@@ -662,7 +662,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Dual CTA — clients + photographers ───────────────────────── */}
+      {/* -- Dual CTA - clients + photographers ------------------------- */}
       <section className="bg-ink py-24 relative overflow-hidden">
         <div className="absolute inset-0 grid-pattern opacity-100 pointer-events-none" />
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-white/[0.015] rounded-full blur-3xl pointer-events-none" />
@@ -683,10 +683,10 @@ export default function HomePage() {
               <p className="text-ink-300 text-[10px] font-bold uppercase tracking-[0.15em] mb-2">For clients</p>
               <h3 className="font-serif text-2xl font-bold text-ink mb-3 leading-snug">Find your photographer today.</h3>
               <p className="text-ink-400 text-sm leading-relaxed mb-7 flex-1">
-                Browse verified Edmonton photographers by specialty. Read real Trust Scores. Message directly — no fees, no account needed to browse.
+                Browse verified Edmonton photographers by specialty. Read real Trust Scores. Message directly -- no fees, no account needed to browse.
               </p>
               <div className="space-y-2.5 mb-7">
-                {['Free to browse — no account needed', 'GBP-verified Trust Scores', 'Zero booking fees', 'Edmonton-only photographers'].map((item) => (
+                {['Free to browse -- no account needed', 'GBP-verified Trust Scores', 'Zero booking fees', 'Edmonton-only photographers'].map((item) => (
                   <div key={item} className="flex items-center gap-2.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-ink flex-shrink-0" />
                     <span className="text-ink-500 text-xs">{item}</span>
@@ -715,7 +715,7 @@ export default function HomePage() {
               <p className="text-ink-500 text-[10px] font-bold uppercase tracking-[0.15em] mb-2">For photographers</p>
               <h3 className="font-serif text-2xl font-bold text-white mb-3 leading-snug">List your work. Grow your practice.</h3>
               <p className="text-ink-400 text-sm leading-relaxed mb-7 flex-1">
-                Your portfolio, Trust Score, packages, and booking tools — all in one place. Edmonton clients are already searching. Up and running in 20 minutes.
+                Your portfolio, Trust Score, packages, and booking tools -- all in one place. Edmonton clients are already searching. Up and running in 20 minutes.
               </p>
               <div className="space-y-2.5 mb-7">
                 {['Free professional profile', 'Portfolio albums & Trust Score', 'Booking & messaging tools', 'Zero commission, always'].map((item) => (
