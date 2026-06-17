@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
   // Welcome email to photographer
   try {
     await resend.emails.send({
-      from: `TrueNorth Frames <${process.env.RESEND_FROM_EMAIL ?? 'hello@thetruenorthframes.com'}>`,
+      from: `TrueNorth Frames <${process.env.RESEND_FROM_EMAIL ?? 'no-reply@thetruenorthframes.com'}>`,
       to: user.email!,
       template: {
         id: process.env.RESEND_TEMPLATE_WELCOME_PHOTOGRAPHER!,
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
   try {
     const adminEmail = process.env.ADMIN_EMAIL ?? 'aceinnovate21@gmail.com'
     await resend.emails.send({
-      from: `TrueNorth Frames <${process.env.RESEND_FROM_EMAIL ?? 'hello@thetruenorthframes.com'}>`,
+      from: `TrueNorth Frames <${process.env.RESEND_FROM_EMAIL ?? 'no-reply@thetruenorthframes.com'}>`,
       to: adminEmail,
       template: {
         id: process.env.RESEND_TEMPLATE_SUPPORT_TICKET_CREATED!,

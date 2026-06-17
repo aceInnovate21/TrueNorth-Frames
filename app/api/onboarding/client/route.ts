@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     const resend = new Resend(process.env.RESEND_API_KEY!)
     const firstName = fullName.split(' ')[0]
     await resend.emails.send({
-      from: `TrueNorth Frames <${process.env.RESEND_FROM_EMAIL ?? 'hello@thetruenorthframes.com'}>`,
+      from: `TrueNorth Frames <${process.env.RESEND_FROM_EMAIL ?? 'no-reply@thetruenorthframes.com'}>`,
       to: user.email!,
       template: {
         id: process.env.RESEND_TEMPLATE_WELCOME_CLIENT!,

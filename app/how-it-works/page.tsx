@@ -2,8 +2,8 @@ import Link from 'next/link'
 import { Nav } from '@/components/nav'
 import { Footer } from '@/components/footer'
 import {
-  Search, Shield, MessageSquare, ArrowRight, Star, CheckCircle2,
-  Globe, Instagram, MapPin, Clock, Bell, Camera, User,
+  Search, Shield, MessageSquare, ArrowRight, CheckCircle2,
+  Globe, MapPin, Bell, Camera, User,
 } from 'lucide-react'
 import type { Metadata } from 'next'
 
@@ -17,39 +17,39 @@ const CLIENT_STEPS = [
     step: '01',
     icon: Search,
     title: 'Search & filter',
-    desc: 'Browse by specialty (wedding, portrait, corporate, newborn), neighbourhood, price range, and minimum rating. Every filter updates results instantly — no page reloads.',
+    desc: 'Browse by specialty (wedding, portrait, corporate, newborn), neighbourhood, and minimum rating. Every filter updates results instantly.',
     detail: [
       'Filter by 6 specialties',
       'Search by neighbourhood',
-      'Set price range with a slider',
       'Toggle "Available today" for same-day bookings',
-      'Sort by rating, reviews, or price',
+      'Sort by rating, most reviewed, or newest',
+      'Compare two photographers side by side',
     ],
   },
   {
     step: '02',
     icon: Shield,
-    title: 'Read their trust score',
-    desc: 'Every profile shows a composite trust score built from Google Reviews, Yelp, Instagram, and Facebook. You see their real reputation — aggregated automatically, not self-reported.',
+    title: 'Read their Trust Score',
+    desc: 'Every profile shows a Trust Score built from their Google Business Profile — real star rating, review count, account age, and verification status. You see their real reputation, not what they say about themselves.',
     detail: [
-      'Scores pulled from 4 sources weekly',
-      'Breakdown by source on every profile',
+      'Score pulled from Google Business Profile',
+      'Breakdown visible on every profile',
       'Verified — photographers can\'t edit scores',
       'Portfolio gallery and bio included',
-      'Response time shown on each profile',
+      'Badges show experience level at a glance',
     ],
   },
   {
     step: '03',
     icon: MessageSquare,
     title: 'Message directly',
-    desc: 'Click "Send a message" on any profile. Create a free account (takes 60 seconds) to send your message and track the reply. No commission, no booking platform, no middleman.',
+    desc: 'Click "Book a session" on any profile. Create a free account (takes 60 seconds) to send your request and track the reply. No commission, no middleman.',
     detail: [
       'Free account — no credit card',
-      'Notifications when photographer replies',
+      'Email notification when photographer replies',
       'All conversations in your dashboard',
       'No platform fee on any booking',
-      'Photographer contacts you directly',
+      'Automated 24-hour shoot reminder',
     ],
   },
 ]
@@ -58,56 +58,49 @@ const PHOTOGRAPHER_STEPS = [
   {
     step: '01',
     icon: User,
-    title: 'Create your profile',
-    desc: 'Sign up as a photographer, fill in your bio, specialties, rate, and location. Takes about 20 minutes start to finish.',
+    title: 'Sign up free',
+    desc: 'Email or Google sign-in. Takes 30 seconds.',
   },
   {
     step: '02',
-    icon: Globe,
-    title: 'Connect your reviews',
-    desc: 'Add your Google, Yelp, Instagram and Facebook profile links. We pull your existing reputation automatically and build your trust score.',
+    icon: Camera,
+    title: 'Build your profile',
+    desc: 'Bio, specialties, rates and portfolio albums. Takes about 20 minutes start to finish.',
   },
   {
     step: '03',
-    icon: Camera,
-    title: 'Upload your portfolio',
-    desc: 'Add up to 20 portfolio photos. Your best work, curated. Clients can browse your gallery before they reach out.',
+    icon: Globe,
+    title: 'Connect Google',
+    desc: 'Link your Google Business Profile — Trust Score goes live instantly. Score updates automatically from then on.',
   },
   {
     step: '04',
     icon: Bell,
-    title: 'Receive enquiries',
-    desc: 'Clients find you, read your trust score, and message you directly. You get notified instantly. No bidding, no algorithm to game.',
+    title: 'Go live',
+    desc: 'Profile approved, published to Edmonton clients searching right now.',
   },
-]
-
-const TRUST_SOURCES = [
-  { name: 'Google Reviews', desc: 'Star rating + review count from your Google Business profile.', icon: Globe },
-  { name: 'Yelp', desc: 'Star rating and reviews from Yelp — especially strong for local service businesses.', icon: Star },
-  { name: 'Instagram', desc: 'Follower count as a proxy for audience trust and reach.', icon: Instagram },
-  { name: 'Facebook', desc: 'Recommendations and page rating from your Facebook business page.', icon: Globe },
 ]
 
 const FAQS = [
   {
     q: 'Do I need an account to browse photographers?',
-    a: 'No. Anyone can browse, search, and read photographer profiles without signing up. You only need a free account when you want to send a message.',
+    a: 'No. Anyone can browse, search, and read photographer profiles without signing up. You only need a free account when you want to send a booking request.',
   },
   {
     q: 'Is there a fee for clients?',
-    a: 'Never. TrueNorth Frames is completely free for clients — no booking fees, no service charges, no hidden costs. We never take a cut of your session.',
+    a: 'Never. TrueNorth Frames is completely free for clients — no booking fees, no service charges, no hidden costs.',
   },
   {
-    q: 'How is the trust score calculated?',
-    a: 'We pull each photographer\'s rating from Google Reviews, Yelp, Instagram, and Facebook, then compute a weighted composite score. Scores update weekly. Photographers cannot edit or influence their own score.',
+    q: 'How is the Trust Score calculated?',
+    a: 'We pull each photographer\'s rating from their Google Business Profile — star rating, review count, account age, and verification status. This is combined with profile completeness and platform activity into a single composite score. Scores update weekly. Photographers cannot edit or influence their own score.',
   },
   {
-    q: 'What happens after I send a message?',
-    a: 'The photographer receives your message directly and replies through the platform. You\'ll get an email notification when they respond. All messages are stored in your dashboard.',
+    q: 'What happens after I send a booking request?',
+    a: 'The photographer receives your request and replies through the platform. You\'ll get an email notification when they respond. All messages are stored in your dashboard.',
   },
   {
     q: 'Can I book directly through TrueNorth Frames?',
-    a: 'Right now, we facilitate the introduction. You negotiate timing and payment directly with your photographer — we stay out of it. That keeps the relationship honest and fee-free.',
+    a: 'Yes — you submit a booking request with your preferred date, time, and a description of what you need. The photographer accepts or declines. Payment is negotiated directly between you and the photographer — we stay out of it and never charge commission.',
   },
   {
     q: 'Are all photographers based in Edmonton?',
@@ -145,10 +138,7 @@ export default function HowItWorksPage() {
             {CLIENT_STEPS.map((s, i) => {
               const Icon = s.icon
               return (
-                <div
-                  key={s.step}
-                  className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center bg-ink-50 rounded-3xl p-8"
-                >
+                <div key={s.step} className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center bg-ink-50 rounded-3xl p-8">
                   <div className={i % 2 === 1 ? 'lg:order-2' : ''}>
                     <div className="flex items-center gap-3 mb-4">
                       <div className="w-10 h-10 bg-ink rounded-xl flex items-center justify-center flex-shrink-0">
@@ -168,8 +158,8 @@ export default function HowItWorksPage() {
                     </ul>
                   </div>
 
-                  {/* Visual placeholder */}
-                  <div className={`bg-white rounded-2xl h-52 flex items-center justify-center ${i % 2 === 1 ? 'lg:order-1' : ''}`}
+                  <div
+                    className={`bg-white rounded-2xl h-52 flex items-center justify-center ${i % 2 === 1 ? 'lg:order-1' : ''}`}
                     style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}
                   >
                     <div className="flex flex-col items-center gap-3 text-ink-200">
@@ -183,10 +173,7 @@ export default function HowItWorksPage() {
           </div>
 
           <div className="mt-10 text-center">
-            <Link
-              href="/photographers"
-              className="inline-flex items-center gap-2 bg-ink hover:bg-ink-800 text-white font-semibold px-7 py-3.5 rounded-xl transition-colors"
-            >
+            <Link href="/photographers" className="inline-flex items-center gap-2 bg-ink hover:bg-ink-800 text-white font-semibold px-7 py-3.5 rounded-xl transition-colors">
               Start browsing photographers
               <ArrowRight className="w-4 h-4" />
             </Link>
@@ -194,32 +181,34 @@ export default function HowItWorksPage() {
         </div>
       </section>
 
-      {/* ── Trust score explainer ─────────────────────────────────────── */}
+      {/* ── Trust score explainer — GBP only ─────────────────────────── */}
       <section className="bg-ink-50 py-24 border-y border-ink-100">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-14">
-            <p className="text-ink-300 text-xs font-semibold uppercase tracking-[0.15em] mb-3">How trust scores work</p>
+            <p className="text-ink-300 text-xs font-semibold uppercase tracking-[0.15em] mb-3">How Trust Scores work</p>
             <h2 className="font-serif text-3xl sm:text-4xl font-bold text-ink mb-4">
-              Real reputation. Four sources. One score.
+              Real reputation. Verified by Google.
             </h2>
             <p className="text-ink-400 text-base max-w-lg mx-auto">
-              We pull each photographer's public ratings weekly, weight them by source, and publish a single composite score. Photographers can't edit it. We don't sell placement.
+              We pull each photographer's Google Business Profile data weekly, combine it with profile completeness and platform activity, and publish a single composite score. Photographers can't edit it. We don't sell placement.
             </p>
           </div>
 
+          {/* 4 signal cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
-            {TRUST_SOURCES.map((s) => {
+            {[
+              { icon: Globe,   title: 'Google Business Profile', desc: 'Star rating, review count, account age & verified status — pulled directly from GBP.' },
+              { icon: User,    title: 'Profile Completeness',    desc: 'Bio, specialties, portfolio, rates, and availability all filled in.' },
+              { icon: Search,  title: 'Platform Activity',       desc: 'Booking history, native client reviews, and response rate on TrueNorth Frames.' },
+              { icon: Shield,  title: 'Admin Verification',      desc: 'Identity verified by the TrueNorth Frames team.' },
+            ].map((s) => {
               const Icon = s.icon
               return (
-                <div
-                  key={s.name}
-                  className="bg-white rounded-2xl p-5"
-                  style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}
-                >
+                <div key={s.title} className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}>
                   <div className="w-9 h-9 bg-ink-50 rounded-xl flex items-center justify-center mb-3">
                     <Icon className="w-4 h-4 text-ink-500" />
                   </div>
-                  <p className="font-semibold text-ink text-sm mb-1">{s.name}</p>
+                  <p className="font-semibold text-ink text-sm mb-1">{s.title}</p>
                   <p className="text-ink-400 text-xs leading-relaxed">{s.desc}</p>
                 </div>
               )
@@ -231,29 +220,28 @@ export default function HowItWorksPage() {
             <div className="flex-1">
               <p className="font-semibold text-white text-sm mb-1">Scores are verified and tamper-proof</p>
               <p className="text-ink-400 text-xs leading-relaxed">
-                Photographers link their public profiles. We pull ratings directly from each platform. There's no way for a photographer to boost, hide, or manipulate their score on TrueNorth Frames.
+                Photographers link their Google Business Profile. We pull ratings directly from Google. There's no way for a photographer to boost, hide, or manipulate their score on TrueNorth Frames.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Photographer section ──────────────────────────────────────── */}
+      {/* ── Photographer how-to — pitch deck slide 09 ────────────────── */}
       <section className="bg-white py-24">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-14">
             <p className="text-ink-300 text-xs font-semibold uppercase tracking-[0.15em] mb-3">For photographers</p>
-            <h2 className="font-serif text-3xl sm:text-4xl font-bold text-ink">How to get discovered</h2>
+            <h2 className="font-serif text-3xl sm:text-4xl font-bold text-ink">
+              Up and running<br />in 20 minutes.
+            </h2>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {PHOTOGRAPHER_STEPS.map((s) => {
               const Icon = s.icon
               return (
-                <div
-                  key={s.step}
-                  className="bg-ink-50 rounded-2xl p-5 relative"
-                >
+                <div key={s.step} className="bg-ink-50 rounded-2xl p-5 relative">
                   <span className="absolute top-4 right-4 text-ink-100 text-3xl font-bold font-serif leading-none">{s.step}</span>
                   <div className="w-9 h-9 bg-ink rounded-xl flex items-center justify-center mb-4">
                     <Icon className="w-4 h-4 text-white" />
@@ -265,7 +253,9 @@ export default function HowItWorksPage() {
             })}
           </div>
 
-          <div className="mt-8 text-center">
+          <p className="text-center text-ink-400 text-sm italic mt-8">Your next client is already searching.</p>
+
+          <div className="mt-6 text-center">
             <Link
               href="/for-photographers"
               className="inline-flex items-center gap-2 border border-ink-200 hover:border-ink text-ink-500 hover:text-ink font-medium px-6 py-3 rounded-xl transition-colors text-sm"
@@ -277,21 +267,40 @@ export default function HowItWorksPage() {
         </div>
       </section>
 
+      {/* ── Edmonton-only commitment ──────────────────────────────────── */}
+      <section className="bg-ink-50 py-16 border-y border-ink-100">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
+            {[
+              { icon: MapPin,  title: 'Edmonton-First, Always', desc: 'This isn\'t a side tab on a national platform. Edmonton photographers are the only photographers here.' },
+              { icon: Shield,  title: 'No Race to the Bottom',  desc: 'Trust Score and portfolio-first search mean clients choose on quality — not just the cheapest rate.' },
+              { icon: Globe,   title: 'GBP Verified',           desc: 'Every Trust Score is powered by real Google Business Profile data. No fake scores, no paid badges.' },
+            ].map((item) => {
+              const Icon = item.icon
+              return (
+                <div key={item.title} className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.05)' }}>
+                  <div className="w-9 h-9 bg-ink rounded-xl flex items-center justify-center mx-auto mb-3">
+                    <Icon className="w-4 h-4 text-white" />
+                  </div>
+                  <p className="font-semibold text-ink text-sm mb-2">{item.title}</p>
+                  <p className="text-ink-400 text-xs leading-relaxed">{item.desc}</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
       {/* ── FAQ ───────────────────────────────────────────────────────── */}
-      <section className="bg-ink-50 py-24 border-t border-ink-100">
+      <section className="bg-white py-24">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <p className="text-ink-300 text-xs font-semibold uppercase tracking-[0.15em] mb-3">FAQ</p>
             <h2 className="font-serif text-3xl sm:text-4xl font-bold text-ink">Common questions</h2>
           </div>
-
           <div className="space-y-3">
             {FAQS.map((faq, i) => (
-              <div
-                key={i}
-                className="bg-white rounded-2xl p-5"
-                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}
-              >
+              <div key={i} className="bg-ink-50 rounded-2xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}>
                 <p className="font-semibold text-ink text-sm mb-2">{faq.q}</p>
                 <p className="text-ink-400 text-sm leading-relaxed">{faq.a}</p>
               </div>
