@@ -1,5 +1,6 @@
 import { Resend } from 'resend'
 import { createClient } from '@supabase/supabase-js'
+import { renderTemplate, type EmailTemplateId, type EmailPayload } from '@/lib/email/templates'
 
 const resend = new Resend(process.env.RESEND_API_KEY!)
 const FROM   = `TrueNorth Frames <${process.env.RESEND_FROM_EMAIL ?? 'no-reply@thetruenorthframes.com'}>`
@@ -88,6 +89,26 @@ export async function sendEmail({
       },
     } as any)
 
+    if (error) return { ok: false, error: error.message }
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? 'Unknown error' }
+  }
+}
+
+// ── Send using local HTML templates (no Resend template UUID needed) ──────────
+export async function sendEmailDirect({
+  to,
+  templateId,
+  payload,
+}: {
+  to: string
+  templateId: EmailTemplateId
+  payload: EmailPayload
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { subject, html } = renderTemplate(templateId, payload)
+    const { error } = await resend.emails.send({ from: FROM, to, subject, html })
     if (error) return { ok: false, error: error.message }
     return { ok: true }
   } catch (e: any) {
