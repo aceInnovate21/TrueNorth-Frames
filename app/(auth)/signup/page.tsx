@@ -92,6 +92,7 @@ function SignupForm() {
 
   async function handleSubmit(ev: React.FormEvent) {
     ev.preventDefault()
+    if (loading) return  // guard double-submit
     setTouched({ role: true, firstName: true, lastName: true, email: true, password: true, agreed: true })
     const e = validate()
     if (Object.keys(e).length > 0) return
@@ -101,17 +102,25 @@ function SignupForm() {
     const fullName = `${firstName.trim()} ${lastName.trim()}`
 
     // 1. Create Supabase auth user (email confirmation OFF — users land directly)
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName, role },
-      },
-    })
+    let data: any, signUpError: any
+    try {
+      const result = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: fullName, role } },
+      })
+      data = result.data
+      signUpError = result.error
+    } catch (e: any) {
+      setLoading(false)
+      setFormError('An account with this email already exists. Try signing in instead.')
+      return
+    }
 
     if (signUpError) {
       setLoading(false)
-      if (signUpError.message.toLowerCase().includes('already registered')) {
+      const msg = signUpError.message?.toLowerCase() ?? ''
+      if (msg.includes('already registered') || msg.includes('already exists') || signUpError.status === 422 || signUpError.status === 500) {
         setFormError('An account with this email already exists. Try signing in instead.')
       } else {
         setFormError(signUpError.message)
