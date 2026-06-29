@@ -1,6 +1,5 @@
 'use client'
 
-import Image from 'next/image'
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
 import {
@@ -628,7 +627,7 @@ export default function YourProfilePreviewPage() {
       {/* Cover */}
       <div className="relative h-64 sm:h-80 bg-ink-800 overflow-hidden">
         {p.cover_image_url ? (
-          <Image src={p.cover_image_url} alt="" fill className="object-cover" priority sizes="100vw" />
+          <img src={p.cover_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900" />
         )}
@@ -643,7 +642,7 @@ export default function YourProfilePreviewPage() {
             <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-4 border-white flex-shrink-0 bg-ink"
               style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
               {p.avatar_url ? (
-                <Image src={p.avatar_url} alt={p.display_name} width={96} height={96} className="object-cover w-full h-full" />
+                <img src={p.avatar_url} alt={p.display_name} className="object-cover w-full h-full" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-white text-2xl font-bold">
                   {initials(p.display_name || 'P')}

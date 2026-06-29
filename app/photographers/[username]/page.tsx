@@ -1,6 +1,5 @@
 'use client'
 
-import Image from 'next/image'
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
 import {
@@ -724,7 +723,7 @@ function PackageCard({ pkg, username, photographerName, photographerId, allPacka
       {/* Banner */}
       {pkg.bannerUrl && (
         <div className="relative w-full h-32 overflow-hidden flex-shrink-0">
-          <Image src={pkg.bannerUrl} alt={pkg.name} fill className="object-cover" sizes="600px" />
+          <img src={pkg.bannerUrl} alt={pkg.name} className="absolute inset-0 w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/30" />
           {pkg.isPopular && (
             <div className="absolute top-2.5 left-3 flex items-center gap-1 bg-ink/90 backdrop-blur-sm px-2.5 py-1 rounded-full">
@@ -926,7 +925,7 @@ export default function ProfilePage({ params }: { params: { username: string } }
       {/* ── Cover ─────────────────────────────────────────────────────── */}
       <div className="relative h-56 sm:h-72 bg-ink-900 overflow-hidden">
         {p.cover_image_url ? (
-          <Image src={p.cover_image_url} alt="" fill className="object-cover opacity-90" priority sizes="100vw" />
+          <img src={p.cover_image_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-90" />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-900 to-black" />
         )}
@@ -950,7 +949,7 @@ export default function ProfilePage({ params }: { params: { username: string } }
               <div className="w-24 h-24 rounded-2xl overflow-hidden border-4 border-white bg-ink"
                 style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.06)' }}>
                 {p.avatar_url ? (
-                  <Image src={p.avatar_url} alt={p.display_name} width={96} height={96} className="object-cover w-full h-full" />
+                  <img src={p.avatar_url} alt={p.display_name} className="object-cover w-full h-full" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-white text-2xl font-bold tracking-tight">
                     {initials(p.display_name)}
