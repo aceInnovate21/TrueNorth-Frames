@@ -1639,14 +1639,18 @@ function MessagesTab({ messages, setMessages, groups, setGroups }: {
 
   function leaveGroup(groupId: string) {
     const g = groups.find(x => x.id === groupId)
-    setGroups(prev => {
-      if (!g) return prev
-      // Already left — remove from UI (DELETE called below)
-      if (g.isLeft) return prev.filter(x => x.id !== groupId)
-      // Cover groups and owner/removed — always hard-remove from view
-      if (g.isCoverGroup || g.ownerId === 'me' || g.isRemoved) return prev.filter(x => x.id !== groupId)
-      return prev.map(x => x.id === groupId ? { ...x, isLeft: true, memberIds: x.memberIds.filter(id => id !== 'me') } : x)
-    })
+    if (!g) return
+    // Already left — just close the pane, don't fire DELETE again
+    if (g.isLeft) { setActiveGroupId(null); return }
+    // Optimistically update UI
+    if (g.isCoverGroup || g.ownerId === 'me' || g.isRemoved) {
+      setGroups(prev => prev.filter(x => x.id !== groupId))
+    } else {
+      setGroups(prev => prev.map(x => x.id === groupId
+        ? { ...x, isLeft: true, memberIds: x.memberIds.filter(id => id !== 'me') }
+        : x
+      ))
+    }
     setActiveGroupId(null)
     fetch(`/api/photographer/groups?id=${groupId}`, { method: 'DELETE' }).catch(() => {})
   }

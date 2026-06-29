@@ -155,6 +155,8 @@ export async function GET() {
         const senderBg = m.sender_id === me.id ? 'bg-ink' : avatarBg(m.sender_id)
         const isSystem = (
           m.body.endsWith(' left the conversation.') ||
+          m.body.endsWith(' left the group.') ||
+          m.body.endsWith(' left and closed the group.') ||
           m.body.startsWith('✅ You\'ve been chosen') ||
           m.body.startsWith('✅ This cover request has been filled') ||
           m.body.startsWith('❌ This cover request has been filled')
@@ -368,7 +370,24 @@ export async function DELETE(request: NextRequest) {
   const alreadyLeft = !!membership.left_at
   const isOwner = !!membership.is_owner
 
-  if (isOwner || isCoverGroup || alreadyLeft) {
+  // Already left — nothing to do, just return success (never hard-delete on repeat call)
+  if (alreadyLeft) return NextResponse.json({ success: true })
+
+  // Fetch display name for system message
+  const { data: myProfile } = await db
+    .from('photographer_profiles')
+    .select('display_name')
+    .eq('id', me.id)
+    .single()
+  const displayName = myProfile?.display_name ?? 'Someone'
+
+  if (isOwner || isCoverGroup) {
+    // Post a system message so remaining members see who dissolved the group
+    await db.from('group_messages').insert({
+      group_id: groupId,
+      sender_id: me.id,
+      body: `${displayName} left and closed the group.`,
+    })
     // Hard delete: remove messages, members, invites, then the group itself
     await db.from('group_messages').delete().eq('group_id', groupId)
     await db.from('group_members').delete().eq('group_id', groupId)
@@ -376,6 +395,12 @@ export async function DELETE(request: NextRequest) {
     const { error } = await db.from('connection_groups').delete().eq('id', groupId)
     if (error) return serverError('Failed to delete group')
   } else {
+    // Post WhatsApp-style system message before soft-leaving
+    await db.from('group_messages').insert({
+      group_id: groupId,
+      sender_id: me.id,
+      body: `${displayName} left the group.`,
+    })
     // Soft-leave: keep history visible, mark left_at
     const { error } = await db
       .from('group_members')
