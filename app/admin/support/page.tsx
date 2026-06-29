@@ -326,6 +326,8 @@ function TicketCard({ ticket, onUpdate, onReviewAction }: {
       {expanded && (
         <div className="border-t border-ink-50 px-6 py-5 space-y-4">
           <div className="flex items-center gap-3 text-xs text-ink-400 flex-wrap">
+            <span className="font-mono font-semibold text-ink-500">TNF-{ticket.id.slice(0, 6).toUpperCase()}</span>
+            <span>·</span>
             <span>{ticket.email}</span>
             <span>·</span>
             <span>Submitted {relTime(ticket.submittedAt)}</span>

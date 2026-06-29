@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
       template: {
         id: process.env.RESEND_TEMPLATE_SUPPORT_TICKET_CREATED!,
         variables: {
-          TICKET_ID: photographerId.slice(0, 8),
+          TICKET_ID: `TNF-${photographerId.slice(0, 6).toUpperCase()}`,
           SUBJECT: `New photographer profile — ${display_name.trim()}`,
           CATEGORY: 'photographer_approval',
           SUBMITTER_NAME: fullName,

@@ -473,7 +473,7 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
   // ── Support ticket created (→ admin) ──────────────────────────────────────
 
   support_ticket_created: (p) => ({
-    subject: `[Support #${String(p.ticketId).slice(0, 8)}] ${p.subject}`,
+    subject: `[TNF-${String(p.ticketId).slice(0, 6).toUpperCase()}] ${p.subject}`,
     html: base({
       preheader: `New support ticket from ${p.submitterName} — action required.`,
       accentColor: BRAND.red,
@@ -482,7 +482,7 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
         ${badge('Action Required', BRAND.red)}
         ${divider()}
         ${infoBox([
-          { label: 'Ticket ID',    value: `#${String(p.ticketId).slice(0, 8)}` },
+          { label: 'Ticket ID',    value: `TNF-${String(p.ticketId).slice(0, 6).toUpperCase()}` },
           { label: 'Category',     value: String(p.category).replace(/_/g, ' ') },
           { label: 'Submitted by', value: `${p.submitterName} (${p.submitterRole})` },
           { label: 'Subject',      value: String(p.subject) },
@@ -503,7 +503,7 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
       accentColor: BRAND.green,
       body: `
         ${h1('Ticket Resolved')}
-        ${lead(`Support ticket #${String(p.ticketId).slice(0, 8)} — ${p.subject}`)}
+        ${lead(`Support ticket TNF-${String(p.ticketId).slice(0, 6).toUpperCase()} — ${p.subject}`)}
         ${divider()}
         ${p_(`Hi ${p.firstName}, your support request has been reviewed and resolved by our team.`)}
         ${p.resolutionNote
