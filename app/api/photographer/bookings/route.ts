@@ -41,16 +41,25 @@ export async function GET() {
 
   if (!bookings || bookings.length === 0) return NextResponse.json([])
 
-  // Fetch client names in one query
+  // Fetch client names and package names in parallel
   const clientIds = Array.from(new Set(bookings.map((b: any) => b.client_id)))
-  const { data: clients } = await db
-    .from('users')
-    .select('id, full_name, avatar_url')
-    .in('id', clientIds)
+  const packageIds = Array.from(new Set(bookings.map((b: any) => b.package_id).filter(Boolean)))
+
+  const [{ data: clients }, { data: pkgs }] = await Promise.all([
+    db.from('users').select('id, full_name, avatar_url').in('id', clientIds),
+    packageIds.length > 0
+      ? db.from('packages').select('id, name, price, billing_type').in('id', packageIds)
+      : Promise.resolve({ data: [] }),
+  ])
 
   const clientMap: Record<string, { full_name: string; avatar_url: string | null }> = {}
   for (const c of clients ?? []) {
     clientMap[c.id] = { full_name: c.full_name, avatar_url: c.avatar_url }
+  }
+
+  const packageMap: Record<string, { name: string; price: number; billing_type: string }> = {}
+  for (const p of pkgs ?? []) {
+    packageMap[p.id] = { name: p.name, price: p.price, billing_type: p.billing_type }
   }
 
   const result = bookings.map((b: any) => {
@@ -62,6 +71,8 @@ export async function GET() {
       .map((w: string) => w[0].toUpperCase())
       .slice(0, 2)
       .join('')
+
+    const pkg = b.package_id ? packageMap[b.package_id] ?? null : null
 
     return {
       id: b.id,
@@ -79,6 +90,8 @@ export async function GET() {
       status: b.status,
       photographerNote: b.photographer_note ?? '',
       packageId: b.package_id ?? null,
+      packageName: pkg?.name ?? null,
+      packagePrice: pkg?.price ?? null,
       submittedAt: b.created_at,
     }
   })

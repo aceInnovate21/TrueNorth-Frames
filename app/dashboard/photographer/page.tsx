@@ -97,6 +97,8 @@ interface BookingRequest {
   note: string
   billingType: BookingBillingType
   billingDetail: string
+  packageName: string | null
+  packagePrice: number | null
   status: BookingRequestStatus
   photographerNote: string
   submittedAt: string
@@ -373,9 +375,12 @@ function BookingRequestsTab({
                         ? 'bg-violet-50 text-violet-700 border-violet-200'
                         : 'bg-sky-50 text-sky-700 border-sky-200'
                     }`}>
-                      {req.billingType === 'hourly' ? 'Per hour' : 'Package'}
+                      {req.billingType === 'hourly' ? 'Per hour' : req.packageName ? req.packageName : 'Package'}
                     </span>
-                    <span className="text-ink-300">{req.billingDetail}</span>
+                    {req.packagePrice != null && req.billingType !== 'hourly' && (
+                      <span className="text-ink-400 text-xs font-medium">${req.packagePrice.toLocaleString()}</span>
+                    )}
+                    {req.billingType === 'hourly' && <span className="text-ink-300">{req.billingDetail}</span>}
                   </div>
                   <p className="text-xs text-ink-300 mt-0.5">{fmtSubmitted(req.submittedAt)}</p>
                 </div>
@@ -385,6 +390,17 @@ function BookingRequestsTab({
               {/* Expanded */}
               {expanded && (
                 <div className="px-4 pb-4 space-y-4 border-t border-ink-50 pt-4">
+                  {/* Package requested */}
+                  {req.packageName && (
+                    <div className="bg-sky-50 border border-sky-100 rounded-xl px-4 py-3">
+                      <p className="text-[10px] font-semibold text-sky-500 uppercase tracking-widest mb-1">Package requested</p>
+                      <p className="text-sm font-semibold text-ink">{req.packageName}</p>
+                      {req.packagePrice != null && (
+                        <p className="text-xs text-ink-400 mt-0.5">${req.packagePrice.toLocaleString()}</p>
+                      )}
+                    </div>
+                  )}
+
                   {/* Client note */}
                   {req.note && (
                     <div className="bg-ink-50 rounded-xl px-4 py-3">
@@ -4128,6 +4144,8 @@ function PhotographerDashboardInner() {
               note: b.description,
               billingType: b.billingType,
               billingDetail: b.billingDetail,
+              packageName: b.packageName ?? null,
+              packagePrice: b.packagePrice ?? null,
               status: b.status,
               photographerNote: b.photographerNote,
               submittedAt: b.submittedAt,
