@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, serverError } from '@/lib/api-helpers'
 import { notify } from '@/lib/notify'
-import { sendEmail, queueEmail } from '@/lib/email/client'
+import { sendEmailDirect } from '@/lib/email/client'
 
 export async function GET() {
   const { adminDb, user } = await getServerSession()
@@ -164,11 +164,8 @@ export async function PATCH(request: NextRequest) {
       const photographerName: string = photProfile?.display_name ?? 'Your photographer'
 
       if (clientUser.email) {
-        type EmailArgs = Parameters<typeof sendEmail>[0]
-        let emailArgs: EmailArgs | null = null
-
         if (status === 'approved') {
-          emailArgs = {
+          await sendEmailDirect({
             to: clientUser.email,
             templateId: 'booking_confirmed',
             payload: {
@@ -178,9 +175,9 @@ export async function PATCH(request: NextRequest) {
               location: booking.location_note ?? null,
               photographerNote: photographer_note?.trim() ?? null,
             },
-          }
+          })
         } else if (status === 'declined') {
-          emailArgs = {
+          await sendEmailDirect({
             to: clientUser.email,
             templateId: 'booking_declined',
             payload: {
@@ -189,15 +186,15 @@ export async function PATCH(request: NextRequest) {
               date: dateLabel,
               photographerNote: photographer_note?.trim() ?? null,
             },
-          }
+          })
         } else if (status === 'completed') {
-          emailArgs = {
+          await sendEmailDirect({
             to: clientUser.email,
             templateId: 'booking_completed',
             payload: { photographerName, date: dateLabel },
-          }
+          })
         } else if (status === 'cancelled') {
-          emailArgs = {
+          await sendEmailDirect({
             to: clientUser.email,
             templateId: 'booking_cancellation_confirmed',
             payload: {
@@ -205,12 +202,7 @@ export async function PATCH(request: NextRequest) {
               sessionType: booking.occasion,
               date: dateLabel,
             },
-          }
-        }
-
-        if (emailArgs) {
-          const sent = await sendEmail(emailArgs)
-          if (!sent.ok) await queueEmail(emailArgs)
+          })
         }
       }
     }

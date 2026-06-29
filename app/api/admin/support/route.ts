@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
-import { queueEmail } from '@/lib/email/client'
+import { sendEmailDirect } from '@/lib/email/client'
 
 async function verifyAdmin(db: any, userId: string) {
   const { data } = await db.from('users').select('role').eq('id', userId).single()
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     const { data: submitter } = await db
       .from('users').select('full_name, email, role').eq('id', user.id).single()
     const adminEmail = process.env.ADMIN_EMAIL ?? 'yogeshstrategyandanalytics@gmail.com'
-    await queueEmail({
+    await sendEmailDirect({
       to: adminEmail,
       templateId: 'support_ticket_created',
       payload: {
@@ -164,7 +164,7 @@ export async function PATCH(request: NextRequest) {
           .from('users').select('email, full_name, role').eq('id', ticket.submitted_by).single()
         if (submitter?.email) {
           const firstName = (submitter.full_name ?? 'there').split(' ')[0]
-          await queueEmail({
+          await sendEmailDirect({
             to: submitter.email,
             templateId: 'support_ticket_resolved',
             payload: {

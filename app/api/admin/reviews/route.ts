@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
-import { queueEmail } from '@/lib/email/client'
+import { sendEmailDirect } from '@/lib/email/client'
 
 async function verifyAdmin(db: any, userId: string) {
   const { data } = await db.from('users').select('role').eq('id', userId).single()
@@ -107,7 +107,7 @@ export async function PATCH(request: NextRequest) {
           .from('users').select('email, full_name').eq('id', photProfile.user_id).single()
         if (photUser?.email) {
           const firstName = (photUser.full_name ?? 'there').split(' ')[0]
-          await queueEmail({
+          await sendEmailDirect({
             to:         photUser.email,
             templateId: action === 'remove' ? 'review_removed' : 'review_dismissed',
             payload: {

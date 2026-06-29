@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, notFound, serverError } from '@/lib/api-helpers'
-import { sendEmail, queueEmail } from '@/lib/email/client'
+import { sendEmailDirect } from '@/lib/email/client'
 
 // POST /api/client/bookings/[id]/cancel
 export async function POST(
@@ -92,8 +92,7 @@ export async function POST(
             date:        dateLabel,
             reason:      reason.trim(),
           }
-          const sent = await sendEmail({ to: photUser.email, templateId: 'booking_cancelled_by_client', payload: cancelPayload })
-          if (!sent.ok) await queueEmail({ to: photUser.email, templateId: 'booking_cancelled_by_client', payload: cancelPayload })
+          await sendEmailDirect({ to: photUser.email, templateId: 'booking_cancelled_by_client', payload: cancelPayload })
         }
       }
     }

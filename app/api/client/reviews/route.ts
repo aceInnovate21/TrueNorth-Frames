@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, notFound, serverError } from '@/lib/api-helpers'
-import { queueEmail } from '@/lib/email/client'
+import { sendEmailDirect } from '@/lib/email/client'
 
 // GET /api/client/reviews — fetch all reviews submitted by this client
 export async function GET() {
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
         const dateLabel = bookingRow?.requested_date
           ? new Date(bookingRow.requested_date).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' })
           : 'your session'
-        await queueEmail({
+        await sendEmailDirect({
           to: photUser.email,
           templateId: 'review_received',
           payload: {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, serverError } from '@/lib/api-helpers'
 import { notify } from '@/lib/notify'
-import { queueEmail } from '@/lib/email/client'
+import { sendEmailDirect } from '@/lib/email/client'
 
 export async function GET() {
   const { adminDb, user } = await getServerSession()
@@ -169,7 +169,7 @@ export async function PATCH(request: NextRequest) {
       const { data: clientUser } = await db
         .from('users').select('email').eq('id', review.client_id).single()
       if (clientUser?.email) {
-        await queueEmail({
+        await sendEmailDirect({
           to: clientUser.email,
           templateId: 'review_reply',
           payload: {
