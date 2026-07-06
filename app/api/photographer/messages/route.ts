@@ -28,15 +28,22 @@ export async function GET() {
   const convIds = conversations.map((c: any) => c.id)
   const clientIds = Array.from(new Set(conversations.map((c: any) => c.client_id)))
 
-  // Fetch client info and last messages in parallel
-  const [clientsRes, messagesRes] = await Promise.all([
+  // Fetch client info, last messages, and blocks (clients who blocked this photographer) in parallel
+  const [clientsRes, messagesRes, blocksRes] = await Promise.all([
     db.from('users').select('id, full_name, avatar_url').in('id', clientIds),
     db
       .from('messages')
       .select('id, conversation_id, body, sender_type, read_at, created_at')
       .in('conversation_id', convIds)
       .order('created_at', { ascending: false }),
+    db
+      .from('client_blocks')
+      .select('client_id')
+      .eq('photographer_id', profile.id)
+      .in('client_id', clientIds),
   ])
+
+  const blockedByClientIds = new Set((blocksRes.data ?? []).map((r: any) => r.client_id))
 
   const clientMap: Record<string, { full_name: string; avatar_url: string | null }> = {}
   for (const c of clientsRes.data ?? []) {
@@ -78,6 +85,7 @@ export async function GET() {
       lastMessageAt: lastMsg?.created_at ?? conv.created_at,
       unread: msgData?.unread ?? 0,
       isFrozen: conv.is_frozen,
+      blockedByClient: blockedByClientIds.has(conv.client_id),
     }
   })
 

@@ -1031,7 +1031,7 @@ export default function ClientDashboard() {
                       return (
                         <Link
                           key={c.id}
-                          href={`/messages/${c.id}`}
+                          href={`/messages?conv=${c.id}`}
                           className="flex items-start gap-3 px-5 py-4 hover:bg-ink-50/60 transition-colors"
                         >
                           {/* Avatar */}

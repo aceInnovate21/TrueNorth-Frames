@@ -66,8 +66,8 @@ function notifHref(n: Notification, role: 'client' | 'photographer'): string | n
   switch (n.type) {
     case 'new_message':
       return role === 'client'
-        ? (n.entity_id ? `/messages/${n.entity_id}` : '/messages')
-        : `/dashboard/photographer?tab=messages${n.entity_id ? `&conv=${n.entity_id}` : ''}`
+        ? (n.entity_id ? `/messages?conv=${n.entity_id}` : '/messages')
+        : `/messages/photographer${n.entity_id ? `?conv=${n.entity_id}` : ''}`
 
     case 'booking_request':
     case 'booking_approved':

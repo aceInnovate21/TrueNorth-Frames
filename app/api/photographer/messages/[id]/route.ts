@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, serverError } from '@/lib/api-helpers'
+import { isPhotographerBlocked, sendBlockedReason } from '@/lib/messaging'
 
 // GET /api/photographer/messages/[id] — fetch full thread for a conversation
 export async function GET(
@@ -82,12 +83,23 @@ export async function POST(
 
   const { data: conv } = await db
     .from('conversations')
-    .select('id')
+    .select('id, client_id, is_frozen')
     .eq('id', conversationId)
     .eq('photographer_id', profile.id)
     .single()
 
   if (!conv) return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+
+  // Block / freeze enforcement — a client who blocked this photographer
+  // (or an admin freeze) stops the photographer from sending.
+  const blocked = await isPhotographerBlocked(db, conv.client_id, profile.id)
+  const blockReason = sendBlockedReason({ blocked, frozen: !!conv.is_frozen })
+  if (blockReason) {
+    const msg = blocked
+      ? 'You can no longer message this client.'
+      : blockReason
+    return NextResponse.json({ error: msg }, { status: 403 })
+  }
 
   const body = await request.json()
   const { text, attachment_url, attachment_type, attachment_name, attachment_size } = body

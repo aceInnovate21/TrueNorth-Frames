@@ -602,7 +602,7 @@ export function ContactModal({
                   {conversationId && (
                     <button
                       type="button"
-                      onClick={() => { setOpen(false); router.push(`/messages/${conversationId}`) }}
+                      onClick={() => { setOpen(false); router.push(`/messages?conv=${conversationId}`) }}
                       className="w-full flex items-center justify-center gap-2 px-5 py-2.5 bg-ink hover:bg-ink-800 text-white text-sm font-semibold rounded-xl transition-colors"
                     >
                       Go to conversation <ArrowRight className="w-4 h-4" />

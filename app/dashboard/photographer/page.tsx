@@ -139,6 +139,7 @@ function BookingRequestsTab({
   expandedId?: string | null
   setExpandedId?: React.Dispatch<React.SetStateAction<string | null>>
 }) {
+  const router = useRouter()
   const [filter, setFilter] = useState<BookingRequestStatus | 'all'>('all')
   const [_expandedId, _setExpandedId] = useState<string | null>(null)
   const expandedId = expandedIdProp !== undefined ? expandedIdProp : _expandedId
@@ -251,28 +252,9 @@ function BookingRequestsTab({
   }
 
   function openChat(req: BookingRequest) {
-    // If we have a real conversation ID, ensure the message thread is loaded then navigate to messages tab
-    if (req.conversationId) {
-      // Pre-populate the conversation in the messages list if not present
-      setMessages(msgs => {
-        const exists = msgs.find(m => m.id === req.conversationId)
-        if (!exists) {
-          return [...msgs, {
-            id: req.conversationId!,
-            from: req.clientName,
-            initials: req.clientInitials,
-            bg: req.clientBg,
-            preview: req.note || 'Booking enquiry',
-            time: 'Now',
-            unread: false,
-            thread: [],
-            threadLoaded: false,
-          }]
-        }
-        return msgs
-      })
-    }
-    setActiveTab('messages')
+    // Unified messaging lives at /messages/photographer. Deep-link to the
+    // conversation when we have its id, otherwise open the inbox.
+    router.push(req.conversationId ? `/messages/photographer?conv=${req.conversationId}` : '/messages/photographer')
   }
 
   const statusChip: Record<BookingRequestStatus, string> = {
@@ -4502,6 +4484,13 @@ function PhotographerDashboardInner() {
     return tabParam && validTabs.includes(tabParam) ? tabParam : 'overview'
   })
 
+  // Messaging is fully unified at /messages/photographer. Any path that selects
+  // the "messages" tab (nav button, overview quick-links, ?tab=messages) is
+  // redirected there so there is a single messaging surface for photographers.
+  useEffect(() => {
+    if (activeTab === 'messages') router.replace('/messages/photographer')
+  }, [activeTab, router])
+
   // Trust score data
   const [trustData, setTrustData] = useState<any>(null)
   const [trustLoading, setTrustLoading] = useState(false)
@@ -4939,9 +4928,11 @@ function PhotographerDashboardInner() {
               </div>
             )}
 
-            {/* ── Messages tab ─────────────────────────────────────── */}
+            {/* ── Messages tab → redirected to unified /messages/photographer ── */}
             {activeTab === 'messages' && (
-              <MessagesTab messages={messages} setMessages={setMessages} groups={groups} setGroups={setGroups} />
+              <div className="flex items-center justify-center py-24">
+                <Spinner />
+              </div>
             )}
 
             {/* ── Booking requests tab ──────────────────────────────── */}
