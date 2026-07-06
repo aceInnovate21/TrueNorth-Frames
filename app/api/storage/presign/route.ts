@@ -1,23 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createPresignedUploadUrl } from '@/lib/r2'
 import { getServerSession, unauthorized } from '@/lib/api-helpers'
+import { PLATFORM_CONFIG } from '@/lib/platform-config'
+import { checkQuota } from '@/lib/storage-quota'
 import { randomUUID } from 'crypto'
 
 const ALLOWED_ENTITY_TYPES = ['portfolio_photo', 'portfolio_video', 'avatar', 'cover'] as const
 type EntityType = typeof ALLOWED_ENTITY_TYPES[number]
 
 const CONTENT_TYPE_MAP: Record<EntityType, string[]> = {
-  portfolio_photo: ['image/jpeg', 'image/png', 'image/webp', 'image/heic'],
-  portfolio_video: ['video/mp4', 'video/quicktime', 'video/x-msvideo'],
-  avatar: ['image/jpeg', 'image/png', 'image/webp'],
-  cover: ['image/jpeg', 'image/png', 'image/webp'],
+  // Photos are compressed to WebP in the browser before upload.
+  portfolio_photo: ['image/webp', 'image/jpeg', 'image/png', 'image/heic', 'image/heif'],
+  portfolio_video: ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm', 'video/x-matroska'],
+  avatar: ['image/webp', 'image/jpeg', 'image/png'],
+  cover: ['image/webp', 'image/jpeg', 'image/png'],
 }
 
 const SIZE_LIMITS: Record<EntityType, number> = {
-  portfolio_photo: 5 * 1024 * 1024,   // 5 MB
-  portfolio_video: 100 * 1024 * 1024, // 100 MB
-  avatar: 3 * 1024 * 1024,            // 3 MB
-  cover: 8 * 1024 * 1024,             // 8 MB
+  portfolio_photo: PLATFORM_CONFIG.max_compressed_photo_bytes, // compressed artefact ceiling
+  portfolio_video: PLATFORM_CONFIG.max_video_bytes,
+  avatar: PLATFORM_CONFIG.max_avatar_bytes,
+  cover: PLATFORM_CONFIG.max_cover_bytes,
 }
 
 export async function POST(request: NextRequest) {
@@ -36,11 +39,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `Invalid content_type for ${entity_type}` }, { status: 400 })
   }
 
-  if (size_bytes > SIZE_LIMITS[entity_type as EntityType]) {
+  const incomingBytes = Number(size_bytes) || 0
+  if (incomingBytes <= 0) {
+    return NextResponse.json({ error: 'size_bytes is required' }, { status: 400 })
+  }
+  if (incomingBytes > SIZE_LIMITS[entity_type as EntityType]) {
     return NextResponse.json({ error: `File exceeds size limit for ${entity_type}` }, { status: 400 })
   }
 
-  const ext = content_type.split('/')[1].replace('quicktime', 'mov').replace('x-msvideo', 'avi')
+  // Per-photographer storage quota (portfolio + profile assets).
+  const quotaError = await checkQuota(db, user.id, incomingBytes)
+  if (quotaError) {
+    return NextResponse.json({ error: quotaError }, { status: 413 })
+  }
+
+  const ext = content_type.split('/')[1]
+    .replace('quicktime', 'mov')
+    .replace('x-msvideo', 'avi')
+    .replace('x-matroska', 'mkv')
   const key = `${entity_type}s/${user.id}/${randomUUID()}.${ext}`
   const expirySeconds = 900 // 15 min — matches platform_config r2_presigned_url_expiry_seconds
 

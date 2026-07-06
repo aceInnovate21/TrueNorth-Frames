@@ -9,14 +9,14 @@ import {
   FolderOpen, Image as ImageIcon, Plus, Upload, CheckCheck,
 } from 'lucide-react'
 import { PLATFORM_CONFIG } from '@/lib/platform-config'
+import { compressImageToWebp } from '@/lib/client-compress'
+import type { StorageUsage } from '@/lib/storage-quota'
 
 const MAX_ALBUMS           = PLATFORM_CONFIG.max_albums_per_photographer
 const MAX_PHOTOS_TOTAL     = PLATFORM_CONFIG.max_photos_per_photographer
 const MAX_VIDEOS_TOTAL     = PLATFORM_CONFIG.max_videos_per_photographer
 const MAX_VIDEOS_PER_ALBUM = PLATFORM_CONFIG.max_videos_per_album
-const MAX_PHOTO_BYTES      = PLATFORM_CONFIG.max_photo_bytes
 const MAX_VIDEO_BYTES      = PLATFORM_CONFIG.max_video_bytes
-const MAX_PHOTO_MB         = MAX_PHOTO_BYTES / 1024 / 1024
 const MAX_VIDEO_MB         = MAX_VIDEO_BYTES / 1024 / 1024
 const MAX_ALBUM_NAME       = PLATFORM_CONFIG.max_album_name_length
 const MAX_CAPTION          = PLATFORM_CONFIG.max_photo_caption_length
@@ -27,8 +27,14 @@ const MONTHS = [
   'July','August','September','October','November','December',
 ]
 
-const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo']
-const ACCEPTED_VIDEO_EXT   = '.mp4,.mov,.avi'
+const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm', 'video/x-matroska']
+const ACCEPTED_VIDEO_EXT   = '.mp4,.mov,.avi,.webm,.mkv'
+const ACCEPTED_PHOTO_EXT   = 'image/*,.heic,.heif'
+
+function fmtStorage(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 ** 3)).toFixed(2)} GB`
+  return `${Math.max(0, Math.round(bytes / (1024 * 1024)))} MB`
+}
 
 interface PortfolioPhoto {
   id: string
@@ -80,19 +86,56 @@ const INITIAL_UPLOAD_STATE: VideoUploadState = {
 function totalPhotos(albums: Album[]) { return albums.reduce((n, a) => n + a.photos.length, 0) }
 function totalVideos(albums: Album[]) { return albums.reduce((n, a) => n + a.videos.length, 0) }
 
+type UploadedPhoto = { id: string; src: string; caption: string; isCover: boolean; storage_asset_id: string }
+
+// Photo pipeline: compress to WebP in-browser → presigned direct-to-R2 upload → register.
+// This keeps large/HEIC originals off the serverless function (Vercel body limit)
+// and stores only the small optimized derivative.
 async function uploadPhoto(
   file: File, albumId: string
-): Promise<{ id: string; src: string; caption: string; isCover: boolean; storage_asset_id: string } | null> {
-  const form = new FormData()
-  form.append('file', file)
-  form.append('album_id', albumId)
-  const res = await fetch('/api/photographer/photos/upload', { method: 'POST', body: form })
-  if (!res.ok) { console.error('[photo upload]', res.status, await res.json().catch(() => ({}))); return null }
-  return res.json()
+): Promise<UploadedPhoto | { error: string } | null> {
+  // 1. Compress client-side (handles HEIC/HEIF too)
+  let compressed
+  try {
+    compressed = await compressImageToWebp(file, { maxDim: 2048, quality: 0.82 })
+  } catch (e: any) {
+    return { error: e?.message ?? `Could not process ${file.name}.` }
+  }
+
+  try {
+    // 2. Get a presigned URL (also enforces the storage quota)
+    const presignRes = await fetch('/api/storage/presign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entity_type: 'portfolio_photo', content_type: 'image/webp', size_bytes: compressed.blob.size }),
+    })
+    if (!presignRes.ok) {
+      const err = await presignRes.json().catch(() => ({}))
+      return { error: err.error ?? `Upload failed (${presignRes.status})` }
+    }
+    const { upload_url, key, asset_id } = await presignRes.json()
+
+    // 3. Upload the compressed blob straight to R2
+    await xhrUpload(upload_url, compressed.blob, 'image/webp', () => {})
+
+    // 4. Register the photo row + claim the asset
+    const regRes = await fetch('/api/photographer/photos/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ asset_id, key, album_id: albumId }),
+    })
+    if (!regRes.ok) {
+      const err = await regRes.json().catch(() => ({}))
+      return { error: err.error ?? 'Failed to save photo' }
+    }
+    return regRes.json()
+  } catch (e: any) {
+    return { error: e?.message ?? `Failed to upload ${file.name}.` }
+  }
 }
 
 // XHR-based upload so we get real upload progress
-function xhrUpload(url: string, file: File, contentType: string, onProgress: (pct: number) => void): Promise<void> {
+function xhrUpload(url: string, file: Blob, contentType: string, onProgress: (pct: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('PUT', url)
@@ -264,6 +307,36 @@ function UploadProgressBar({ progress }: { progress: number }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
+function StorageMeter({ usage }: { usage: StorageUsage | null }) {
+  if (!usage) return null
+  const near = usage.pct >= 80
+  const full = usage.pct >= 100
+  const barColor = full ? 'bg-red-500' : near ? 'bg-amber-500' : 'bg-ink'
+  return (
+    <div className="bg-white rounded-xl px-4 py-3 mb-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs font-semibold text-ink">Storage</p>
+        <p className={`text-xs font-medium ${full ? 'text-red-500' : near ? 'text-amber-600' : 'text-ink-400'}`}>
+          {fmtStorage(usage.used_bytes)} of {fmtStorage(usage.quota_bytes)} used
+        </p>
+      </div>
+      <div className="h-2 rounded-full bg-ink-100 overflow-hidden">
+        <div className={`h-full ${barColor} rounded-full transition-all`} style={{ width: `${Math.min(100, Math.max(2, usage.pct))}%` }} />
+      </div>
+      <div className="flex items-center gap-3 mt-2 text-[10px] text-ink-300">
+        <span>Photos {fmtStorage(usage.photos_bytes)}</span>
+        <span>Videos {fmtStorage(usage.videos_bytes)}</span>
+        {usage.profile_bytes > 0 && <span>Profile {fmtStorage(usage.profile_bytes)}</span>}
+        {near && (
+          <span className={`ml-auto font-semibold ${full ? 'text-red-500' : 'text-amber-600'}`}>
+            {full ? 'Quota full — delete to free space' : 'Almost full'}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function PortfolioPage() {
   const [albums, setAlbums]           = useState<Album[]>([])
   const [loading, setLoading]         = useState(true)
@@ -291,6 +364,14 @@ export default function PortfolioPage() {
   const [videoYear, setVideoYear]     = useState<number | ''>('')
   const [savingMeta, setSavingMeta]   = useState(false)
 
+  const [storage, setStorage] = useState<StorageUsage | null>(null)
+  const refreshStorage = useCallback(() => {
+    fetch('/api/photographer/storage')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d) setStorage(d) })
+      .catch(() => {})
+  }, [])
+
   const photoInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
 
@@ -304,7 +385,8 @@ export default function PortfolioPage() {
       .then(data => setAlbums(Array.isArray(data) ? data : []))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [])
+    refreshStorage()
+  }, [refreshStorage])
 
   // ─── Album actions ────────────────────────────────────────────────────────
 
@@ -348,12 +430,11 @@ export default function PortfolioPage() {
   async function handlePhotoFiles(files: FileList | null) {
     if (!files || !openAlbumId) return
 
-    const all = Array.from(files).filter(f => f.type.startsWith('image/'))
-    const oversized = all.filter(f => f.size > MAX_PHOTO_BYTES)
-    if (oversized.length) {
-      setPhotoError(`${oversized.map(f => f.name).join(', ')} exceed the ${MAX_PHOTO_MB} MB limit.`)
-      return
-    }
+    // No source size limit — images are compressed in the browser before upload.
+    const all = Array.from(files).filter(
+      f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name)
+    )
+    if (all.length === 0) { setPhotoError('Please choose image files.'); return }
     if (totalP + all.length > MAX_PHOTOS_TOTAL) {
       setPhotoError(`Portfolio limit is ${MAX_PHOTOS_TOTAL} photos. You have ${MAX_PHOTOS_TOTAL - totalP} slot(s) remaining.`)
       return
@@ -362,8 +443,10 @@ export default function PortfolioPage() {
     setPhotoError(null)
     setUploading(true)
     for (const file of all) {
-      const photo = await uploadPhoto(file, openAlbumId)
-      if (!photo) { setPhotoError(`Failed to upload ${file.name}. Try again.`); continue }
+      const result = await uploadPhoto(file, openAlbumId)
+      if (!result) { setPhotoError(`Failed to upload ${file.name}. Try again.`); continue }
+      if ('error' in result) { setPhotoError(result.error); continue }
+      const photo = result
       setAlbums(prev => prev.map(a => {
         if (a.id !== openAlbumId) return a
         const photos = a.photos.length === 0
@@ -373,6 +456,7 @@ export default function PortfolioPage() {
       }))
     }
     setUploading(false)
+    refreshStorage()
     if (photoInputRef.current) photoInputRef.current.value = ''
   }
 
@@ -385,6 +469,7 @@ export default function PortfolioPage() {
         if (next.length > 0) next[0] = { ...next[0], isCover: true }
         return { ...a, photos: next }
       }))
+      refreshStorage()
     }
   }
 
@@ -434,14 +519,16 @@ export default function PortfolioPage() {
     const rawType = file.type || ''
     const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
     const contentType = rawType || (
-      ext === 'mp4' ? 'video/mp4' :
-      ext === 'mov' ? 'video/quicktime' :
-      ext === 'avi' ? 'video/x-msvideo' : ''
+      ext === 'mp4'  ? 'video/mp4' :
+      ext === 'mov'  ? 'video/quicktime' :
+      ext === 'avi'  ? 'video/x-msvideo' :
+      ext === 'webm' ? 'video/webm' :
+      ext === 'mkv'  ? 'video/x-matroska' : ''
     )
 
     // Client-side guards
     if (!ACCEPTED_VIDEO_TYPES.includes(contentType)) {
-      setVideoUpload(s => ({ ...s, error: 'Only MP4, MOV, and AVI files are supported.' }))
+      setVideoUpload(s => ({ ...s, error: 'Supported video formats: MP4, MOV, AVI, WEBM, MKV.' }))
       return
     }
     if (file.size > MAX_VIDEO_BYTES) {
@@ -536,6 +623,7 @@ export default function PortfolioPage() {
       setAlbums(prev => prev.map(a =>
         a.id !== openAlbumId ? a : { ...a, videos: [...a.videos, newVideo] }
       ))
+      refreshStorage()
       setVideoUpload(s => ({ ...s, phase: 'done' }))
       setTimeout(() => resetVideoUpload(), 1800)
 
@@ -552,6 +640,7 @@ export default function PortfolioPage() {
       setAlbums(prev => prev.map(a =>
         a.id !== albumId ? a : { ...a, videos: a.videos.filter(v => v.id !== videoId) }
       ))
+      refreshStorage()
     }
   }
 
@@ -821,6 +910,8 @@ export default function PortfolioPage() {
               ))}
             </div>
 
+            <StorageMeter usage={storage} />
+
             {albums.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {albums.map(album => (
@@ -858,7 +949,7 @@ export default function PortfolioPage() {
         {openAlbum && (
           <>
             {/* Hidden file inputs */}
-            <input ref={photoInputRef} type="file" accept="image/*" multiple className="hidden"
+            <input ref={photoInputRef} type="file" accept={ACCEPTED_PHOTO_EXT} multiple className="hidden"
               onChange={e => handlePhotoFiles(e.target.files)} />
             <input ref={videoInputRef} type="file" accept={ACCEPTED_VIDEO_EXT} className="hidden"
               onChange={e => { if (e.target.files?.[0]) handleVideoFile(e.target.files[0]) }} />
@@ -919,7 +1010,7 @@ export default function PortfolioPage() {
                   <ImagePlus className="w-6 h-6 text-ink-400" />
                 </div>
                 <p className="font-semibold text-ink text-sm mb-1">Click to upload photos</p>
-                <p className="text-ink-300 text-xs">JPG, PNG, WEBP · max {MAX_PHOTO_MB} MB each</p>
+                <p className="text-ink-300 text-xs">JPG, PNG, WEBP, HEIC · any size, optimized automatically</p>
               </div>
             ) : (
               <>
@@ -966,7 +1057,7 @@ export default function PortfolioPage() {
                         >
                           <Video className="w-7 h-7 text-ink-300" />
                           <span className="text-sm text-ink-300 font-medium">Add video</span>
-                          <span className="text-xs text-ink-200">MP4, MOV · max {MAX_VIDEO_MB} MB</span>
+                          <span className="text-xs text-ink-200">MP4, MOV, WEBM · max {MAX_VIDEO_MB} MB</span>
                         </button>
                       )}
                     </div>
