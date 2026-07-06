@@ -35,6 +35,7 @@ interface FAQ {
 }
 
 import { PLATFORM_CONFIG } from '@/lib/platform-config'
+import { compressImageToWebp } from '@/lib/client-compress'
 
 const MAX_FAQS = PLATFORM_CONFIG.max_faqs_per_photographer
 
@@ -2555,26 +2556,22 @@ function ProfileSettingsTab({ profile, setProfile }: {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validate client-side before upload
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
-    if (!allowedTypes.includes(file.type)) {
-      setAvatarError('Only JPEG, PNG, or WebP images are allowed')
-      return
-    }
-    if (file.size > PLATFORM_CONFIG.max_avatar_bytes) {
-      setAvatarError(`File must be under ${PLATFORM_CONFIG.max_avatar_bytes / 1024 / 1024} MB`)
+    // Accept any image (incl. HEIC) — compressed to a small WebP in-browser. No size limit.
+    if (!file.type.startsWith('image/') && !/\.(heic|heif)$/i.test(file.name)) {
+      setAvatarError('Please choose an image file')
       return
     }
 
-    // Show local preview immediately
-    const previewUrl = URL.createObjectURL(file)
-    setLocal(l => ({ ...l, avatarUrl: previewUrl }))
     setAvatarError('')
     setAvatarUploading(true)
 
     try {
+      const { blob } = await compressImageToWebp(file, { maxDim: 512, quality: 0.85 })
+      const previewUrl = URL.createObjectURL(blob)
+      setLocal(l => ({ ...l, avatarUrl: previewUrl }))
+
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', new File([blob], 'avatar.webp', { type: 'image/webp' }))
       const res = await fetch('/api/photographer/profile/avatar', { method: 'POST', body: formData })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -2585,8 +2582,8 @@ function ProfileSettingsTab({ profile, setProfile }: {
       const { avatar_url } = await res.json()
       setLocal(l => ({ ...l, avatarUrl: avatar_url }))
       setProfile(prev => ({ ...prev, avatarUrl: avatar_url }))
-    } catch {
-      setAvatarError('Network error — please try again')
+    } catch (err: any) {
+      setAvatarError(err?.message ?? 'Upload failed — please try again')
       setLocal(l => ({ ...l, avatarUrl: profile.avatarUrl }))
     } finally {
       setAvatarUploading(false)
@@ -2610,22 +2607,20 @@ function ProfileSettingsTab({ profile, setProfile }: {
   async function handleCoverSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
-    if (!allowedTypes.includes(file.type)) {
-      setCoverError('Only JPEG, PNG, or WebP images are allowed')
+    // Accept any image (incl. HEIC) — compressed to WebP in-browser. No size limit.
+    if (!file.type.startsWith('image/') && !/\.(heic|heif)$/i.test(file.name)) {
+      setCoverError('Please choose an image file')
       return
     }
-    if (file.size > 8 * 1024 * 1024) {
-      setCoverError('File must be under 8 MB')
-      return
-    }
-    const previewUrl = URL.createObjectURL(file)
-    setLocal(l => ({ ...l, coverImageUrl: previewUrl }))
     setCoverError('')
     setCoverUploading(true)
     try {
+      const { blob } = await compressImageToWebp(file, { maxDim: 1600, quality: 0.82 })
+      const previewUrl = URL.createObjectURL(blob)
+      setLocal(l => ({ ...l, coverImageUrl: previewUrl }))
+
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', new File([blob], 'cover.webp', { type: 'image/webp' }))
       const res = await fetch('/api/photographer/profile/cover', { method: 'POST', body: formData })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -2636,8 +2631,8 @@ function ProfileSettingsTab({ profile, setProfile }: {
       const { cover_image_url } = await res.json()
       setLocal(l => ({ ...l, coverImageUrl: cover_image_url }))
       setProfile(prev => ({ ...prev, coverImageUrl: cover_image_url }))
-    } catch {
-      setCoverError('Network error — please try again')
+    } catch (err: any) {
+      setCoverError(err?.message ?? 'Upload failed — please try again')
       setLocal(l => ({ ...l, coverImageUrl: profile.coverImageUrl }))
     } finally {
       setCoverUploading(false)
@@ -2819,7 +2814,7 @@ function ProfileSettingsTab({ profile, setProfile }: {
             </div>
             <div>
               <p className="text-sm font-semibold text-ink mb-1">Profile photo</p>
-              <p className="text-xs text-ink-300 mb-2">JPEG, PNG or WebP · max {PLATFORM_CONFIG.max_avatar_bytes / 1024 / 1024} MB · square crops best</p>
+              <p className="text-xs text-ink-300 mb-2">JPG, PNG, WEBP, HEIC · any size, optimized automatically · square crops best</p>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={avatarUploading}
@@ -2844,7 +2839,7 @@ function ProfileSettingsTab({ profile, setProfile }: {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/*,.heic,.heif"
               className="hidden"
               onChange={handlePhotoSelect}
             />
@@ -2853,7 +2848,7 @@ function ProfileSettingsTab({ profile, setProfile }: {
           {/* Cover photo */}
           <div className="pb-4 border-b border-ink-50">
             <p className="text-sm font-semibold text-ink mb-1">Cover photo</p>
-            <p className="text-xs text-ink-300 mb-3">JPEG, PNG or WebP · max 8 MB · 3:1 wide banner crops best</p>
+            <p className="text-xs text-ink-300 mb-3">JPG, PNG, WEBP, HEIC · any size, optimized automatically · 3:1 wide banner crops best</p>
             <div
               className="relative w-full h-28 rounded-xl overflow-hidden bg-ink-50 border border-ink-100 cursor-pointer group"
               onClick={() => coverInputRef.current?.click()}
@@ -2902,7 +2897,7 @@ function ProfileSettingsTab({ profile, setProfile }: {
             <input
               ref={coverInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/*,.heic,.heif"
               className="hidden"
               onChange={handleCoverSelect}
             />

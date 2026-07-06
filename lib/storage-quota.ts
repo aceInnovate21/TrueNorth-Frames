@@ -67,9 +67,7 @@ export async function checkQuota(
 ): Promise<string | null> {
   const usage = await getStorageUsage(db, userId)
   if (incomingBytes > usage.remaining_bytes) {
-    const remainingMb = Math.max(0, Math.floor(usage.remaining_bytes / (1024 * 1024)))
-    const quotaMb = Math.round(usage.quota_bytes / (1024 * 1024))
-    return `Storage limit reached. You have ${remainingMb} MB left of your ${quotaMb} MB quota. Delete some photos or videos to free up space.`
+    return 'Your storage is full. Delete some photos or videos to free up space, then try again.'
   }
   return null
 }

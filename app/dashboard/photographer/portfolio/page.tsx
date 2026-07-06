@@ -31,11 +31,6 @@ const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo',
 const ACCEPTED_VIDEO_EXT   = '.mp4,.mov,.avi,.webm,.mkv'
 const ACCEPTED_PHOTO_EXT   = 'image/*,.heic,.heif'
 
-function fmtStorage(bytes: number): string {
-  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 ** 3)).toFixed(2)} GB`
-  return `${Math.max(0, Math.round(bytes / (1024 * 1024)))} MB`
-}
-
 interface PortfolioPhoto {
   id: string
   src: string
@@ -312,24 +307,26 @@ function StorageMeter({ usage }: { usage: StorageUsage | null }) {
   const near = usage.pct >= 80
   const full = usage.pct >= 100
   const barColor = full ? 'bg-red-500' : near ? 'bg-amber-500' : 'bg-ink'
+  const pctOf = (bytes: number) =>
+    usage.quota_bytes > 0 ? Math.round((bytes / usage.quota_bytes) * 100) : 0
   return (
     <div className="bg-white rounded-xl px-4 py-3 mb-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
       <div className="flex items-center justify-between mb-2">
-        <p className="text-xs font-semibold text-ink">Storage</p>
-        <p className={`text-xs font-medium ${full ? 'text-red-500' : near ? 'text-amber-600' : 'text-ink-400'}`}>
-          {fmtStorage(usage.used_bytes)} of {fmtStorage(usage.quota_bytes)} used
+        <p className="text-xs font-semibold text-ink">Storage used</p>
+        <p className={`text-xs font-bold tabular-nums ${full ? 'text-red-500' : near ? 'text-amber-600' : 'text-ink'}`}>
+          {usage.pct}%
         </p>
       </div>
       <div className="h-2 rounded-full bg-ink-100 overflow-hidden">
         <div className={`h-full ${barColor} rounded-full transition-all`} style={{ width: `${Math.min(100, Math.max(2, usage.pct))}%` }} />
       </div>
       <div className="flex items-center gap-3 mt-2 text-[10px] text-ink-300">
-        <span>Photos {fmtStorage(usage.photos_bytes)}</span>
-        <span>Videos {fmtStorage(usage.videos_bytes)}</span>
-        {usage.profile_bytes > 0 && <span>Profile {fmtStorage(usage.profile_bytes)}</span>}
+        <span>Photos {pctOf(usage.photos_bytes)}%</span>
+        <span>Videos {pctOf(usage.videos_bytes)}%</span>
+        {usage.profile_bytes > 0 && <span>Profile {pctOf(usage.profile_bytes)}%</span>}
         {near && (
           <span className={`ml-auto font-semibold ${full ? 'text-red-500' : 'text-amber-600'}`}>
-            {full ? 'Quota full — delete to free space' : 'Almost full'}
+            {full ? 'Storage full — delete to free space' : 'Almost full'}
           </span>
         )}
       </div>

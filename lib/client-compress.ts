@@ -51,6 +51,16 @@ async function loadDrawable(
   }
 }
 
+async function heicToJpeg(file: File): Promise<Blob> {
+  try {
+    const heic2any = (await import('heic2any')).default
+    const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 })
+    return Array.isArray(converted) ? converted[0] : converted
+  } catch {
+    throw new Error('Could not read this HEIC image. Please export it as JPG and try again.')
+  }
+}
+
 export async function compressImageToWebp(
   file: File,
   opts?: { maxDim?: number; quality?: number }
@@ -58,19 +68,23 @@ export async function compressImageToWebp(
   const maxDim = opts?.maxDim ?? 2048
   const quality = opts?.quality ?? 0.82
 
-  // HEIC/HEIF: decode to JPEG first (Chrome/Firefox can't render HEIC on canvas).
-  let source: Blob = file
-  if (isHeic(file)) {
-    try {
-      const heic2any = (await import('heic2any')).default
-      const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 })
-      source = Array.isArray(converted) ? converted[0] : converted
-    } catch {
-      throw new Error('Could not read this HEIC image. Please export it as JPG and try again.')
+  // Try the browser's native decoder FIRST. This is the fast path for JPEG/PNG/
+  // WebP everywhere, and for HEIC on WebKit (iOS Safari + all iOS browsers, and
+  // desktop Safari) — so the iPhone-majority audience never pays the WASM cost.
+  // Only when native decode fails on a real HEIC (desktop Chrome/Firefox) do we
+  // fall back to the heic2any WASM decoder.
+  let drawable: Awaited<ReturnType<typeof loadDrawable>>
+  try {
+    drawable = await loadDrawable(file)
+  } catch (nativeErr) {
+    if (isHeic(file)) {
+      drawable = await loadDrawable(await heicToJpeg(file))
+    } else {
+      throw nativeErr instanceof Error ? nativeErr : new Error('Could not read this image.')
     }
   }
 
-  const { img, width, height, cleanup } = await loadDrawable(source)
+  const { img, width, height, cleanup } = drawable
   try {
     const scale = Math.min(1, maxDim / Math.max(width, height || 1))
     const w = Math.max(1, Math.round(width * scale))
