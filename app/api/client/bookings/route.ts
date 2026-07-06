@@ -11,7 +11,7 @@ export async function GET() {
 
   const { data: bookings, error } = await db
     .from('booking_requests')
-    .select('id, photographer_id, package_id, occasion, description, billing_type, billing_detail, requested_date, time_slot, location_note, status, photographer_note, cancellation_reason, created_at')
+    .select('id, photographer_id, package_id, occasion, description, billing_type, billing_detail, requested_date, requested_end_date, time_slot, location_note, status, photographer_note, cancellation_reason, created_at')
     .eq('client_id', user.id)
     .order('created_at', { ascending: false })
 
@@ -57,13 +57,16 @@ export async function POST(request: NextRequest) {
   const db = adminDb as any
 
   const body = await request.json()
-  const { photographer_id, package_id, occasion, description, billing_type, billing_detail, requested_date, time_slot, location_note } = body
+  const { photographer_id, package_id, occasion, description, billing_type, billing_detail, requested_date, requested_end_date, time_slot, location_note } = body
 
   if (!photographer_id) return badRequest('photographer_id is required')
   if (!occasion?.trim()) return badRequest('occasion is required')
   if (!billing_type) return badRequest('billing_type is required')
   if (!requested_date) return badRequest('requested_date is required')
   if (!time_slot?.trim()) return badRequest('time_slot is required')
+  // Optional multi-day range: end date, when present, must be after the start.
+  const endDate: string | null =
+    requested_end_date && requested_end_date > requested_date ? requested_end_date : null
 
   const { data, error } = await db
     .from('booking_requests')
@@ -76,6 +79,7 @@ export async function POST(request: NextRequest) {
       billing_type,
       billing_detail: billing_detail?.trim() ?? null,
       requested_date,
+      requested_end_date: endDate,
       time_slot: time_slot.trim(),
       location_note: location_note?.trim() ?? null,
       status: 'pending',
@@ -118,9 +122,10 @@ export async function POST(request: NextRequest) {
 
     if (conversationId) {
       // 2a. Insert booking summary card (system info — date/time/location)
-      const dateLabel = requested_date
-        ? new Date(requested_date + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
-        : requested_date
+      const fmtLong = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+      const dateLabel = endDate
+        ? `${fmtLong(requested_date)} → ${fmtLong(endDate)}`
+        : fmtLong(requested_date)
       const locationPart = location_note?.trim() ? ` · ${location_note.trim()}` : ''
       const cardBody = `📅 Booking request · ${dateLabel} · ${time_slot.trim()}${locationPart}`
 

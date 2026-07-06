@@ -4096,7 +4096,12 @@ function PhotographerDashboardInner() {
           setBookingRequests(bookingData.map((b: any) => {
             const d = new Date(b.date)
             const dateKey = isNaN(d.getTime()) ? b.date : `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-            const displayDate = isNaN(d.getTime()) ? b.date : d.toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' })
+            const startLabel = isNaN(d.getTime()) ? b.date : d.toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' })
+            // Multi-day bookings render as a "start → end" range label.
+            const endD = b.endDate ? new Date(b.endDate) : null
+            const displayDate = endD && !isNaN(endD.getTime())
+              ? `${startLabel} → ${endD.toLocaleDateString('en-CA', { month: 'long', day: 'numeric' })}`
+              : startLabel
             // Deterministic bg colour from clientId
             const palette = ['bg-slate-600','bg-violet-600','bg-emerald-600','bg-rose-500','bg-amber-600','bg-sky-600','bg-teal-600','bg-indigo-600']
             const code = (b.clientId ?? '').split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0)
@@ -4575,7 +4580,12 @@ function PhotographerDashboardInner() {
     }
   }
 
-  const { sections, pct } = computeScore({ ...profile, hasPortfolio, faqCount: faqs.length })
+  // Availability counts as "set" when the photographer has any weekly time slot
+  // OR any day override — derived live so the completion bar updates immediately.
+  const availabilitySet =
+    Object.values(weeklySchedule).some(d => (d?.slots?.length ?? 0) > 0) ||
+    Object.values(bookedDates).some(v => v === 'available' || v === 'busy' || v === 'tentative')
+  const { sections, pct } = computeScore({ ...profile, availabilitySet, hasPortfolio, faqCount: faqs.length })
   const incomplete = sections.filter(s => !s.done)
   const unreadCount = messages.filter(m => m.unread).length
   const groupUnreadCount = groups.reduce((acc, g) => acc + (g.unread ?? 0), 0)

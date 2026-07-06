@@ -794,20 +794,21 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 }
 
 function AvailabilityStrip({ availability }: { availability: { date: string; status: string }[] }) {
-  const statusMap: Record<string, string> = {}
-  for (const d of availability) statusMap[d.date] = d.status
+  const todayKey = new Date().toISOString().slice(0, 10)
 
-  const days = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date()
-    d.setDate(d.getDate() + i)
-    const key = d.toISOString().slice(0, 10)
-    return {
-      date: key,
-      label: d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' }),
-      day: d.toLocaleDateString('en-CA', { weekday: 'short' }),
-      status: statusMap[key] ?? 'unknown',
-    }
-  })
+  // Every future/today date the photographer has explicitly set, sorted ascending.
+  const days = (availability ?? [])
+    .filter(d => d.date >= todayKey && ['available', 'busy', 'tentative'].includes(d.status))
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
+
+  if (days.length === 0) {
+    return (
+      <div className="rounded-xl border border-ink-100 bg-ink-50/50 px-4 py-6 text-center">
+        <p className="text-sm font-medium text-ink-500">Availability not set yet</p>
+        <p className="text-xs text-ink-300 mt-1">Send a booking request to check open dates.</p>
+      </div>
+    )
+  }
 
   const color = (s: string) => {
     if (s === 'available') return 'bg-emerald-50 text-emerald-700 border-emerald-200 ring-emerald-100'
@@ -815,18 +816,30 @@ function AvailabilityStrip({ availability }: { availability: { date: string; sta
     if (s === 'tentative') return 'bg-amber-50 text-amber-600 border-amber-100 ring-amber-50'
     return 'bg-ink-50 text-ink-300 border-ink-100 ring-ink-50'
   }
+  const fmt = (key: string) => {
+    const d = new Date(key + 'T00:00:00')
+    return {
+      day: d.toLocaleDateString('en-CA', { weekday: 'short' }),
+      num: d.getDate(),
+      mon: d.toLocaleDateString('en-CA', { month: 'short' }),
+    }
+  }
 
   return (
     <div className="grid grid-cols-7 gap-1.5">
-      {days.map(d => (
-        <div key={d.date} className={`flex flex-col items-center py-2 px-1 rounded-xl border text-center ring-1 ${color(d.status)}`}>
-          <span className="text-[9px] font-semibold uppercase tracking-wide">{d.day}</span>
-          <span className="text-[13px] font-bold mt-0.5">{d.label.split(' ')[1]}</span>
-          <span className="text-[9px] mt-0.5">
-            {d.status === 'available' ? '✓' : d.status === 'busy' ? '✗' : d.status === 'tentative' ? '~' : '·'}
-          </span>
-        </div>
-      ))}
+      {days.map(d => {
+        const f = fmt(d.date)
+        return (
+          <div key={d.date} className={`flex flex-col items-center py-2 px-1 rounded-xl border text-center ring-1 ${color(d.status)}`}>
+            <span className="text-[9px] font-semibold uppercase tracking-wide">{f.day}</span>
+            <span className="text-[13px] font-bold mt-0.5">{f.num}</span>
+            <span className="text-[8px] opacity-70 leading-none">{f.mon}</span>
+            <span className="text-[9px] mt-0.5">
+              {d.status === 'available' ? '✓' : d.status === 'busy' ? '✗' : '~'}
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -1127,20 +1140,22 @@ export default function ProfilePage({ params }: { params: { username: string } }
                 </section>
 
                 {/* Availability */}
-                {hasAvailability && (
+                {(
                   <section className="bg-white rounded-2xl p-6 border border-ink-50"
                     style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                     <div className="flex items-center gap-2 mb-4">
                       <Calendar className="w-4 h-4 text-ink-400" />
                       <h2 className="font-semibold text-ink text-base">Availability</h2>
-                      <span className="text-ink-300 text-xs">Next 14 days</span>
+                      {hasAvailability && <span className="text-ink-300 text-xs">Upcoming</span>}
                     </div>
-                    <AvailabilityStrip availability={p.availability} />
+                    <AvailabilityStrip availability={p.availability ?? []} />
+                    {hasAvailability && (
                     <div className="flex items-center gap-5 mt-4 text-[10px] text-ink-400">
                       <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400" />Available</span>
                       <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-400" />Tentative</span>
                       <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-400" />Busy</span>
                     </div>
+                    )}
                     <div className="mt-5 pt-4 border-t border-ink-50">
                       <ContactModal
                       photographerId={p.id}

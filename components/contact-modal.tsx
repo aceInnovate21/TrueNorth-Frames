@@ -71,11 +71,13 @@ const MONTHS = ['January','February','March','April','May','June','July',
 
 function AvailCalendar({
   availability,
-  selected,
+  selectedStart,
+  selectedEnd,
   onSelect,
 }: {
   availability: AvailabilityDay[]
-  selected: string | null
+  selectedStart: string | null
+  selectedEnd: string | null
   onSelect: (date: string) => void
 }) {
   const today = new Date()
@@ -106,8 +108,12 @@ function AvailCalendar({
   }
 
   function dayClass(dateStr: string, isPast: boolean) {
-    if (selected === dateStr)
+    const isEndpoint = dateStr === selectedStart || (selectedEnd && dateStr === selectedEnd)
+    const inRange = selectedStart && selectedEnd && dateStr > selectedStart && dateStr < selectedEnd
+    if (isEndpoint)
       return 'bg-ink text-white font-bold ring-2 ring-ink ring-offset-1'
+    if (inRange)
+      return 'bg-ink-100 text-ink font-semibold cursor-pointer'
     if (isPast)
       return 'text-ink-200 cursor-not-allowed'
     return 'hover:bg-ink-100 text-ink cursor-pointer'
@@ -178,7 +184,7 @@ function AvailCalendar({
         <span className="flex items-center gap-1 text-[10px] text-ink-400">
           <span className="w-2 h-2 rounded-full bg-red-400 inline-block" />Busy
         </span>
-        <span className="text-[10px] text-ink-300 ml-auto">Any date selectable</span>
+        <span className="text-[10px] text-ink-300 ml-auto">Tap a start then end date for multiple days</span>
       </div>
     </div>
   )
@@ -237,6 +243,7 @@ export function ContactModal({
   const [open, setOpen]               = useState(false)
   const [selectedPkg, setSelectedPkg] = useState<string | null>(preselectedPackageId)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [selectedEndDate, setSelectedEndDate] = useState<string | null>(null)
   const [timeSlot, setTimeSlot]       = useState(TIME_SLOTS[TIME_SLOTS.length - 1])
   const [location, setLocation]       = useState('')
   const [message, setMessage]         = useState('')
@@ -324,6 +331,7 @@ export function ContactModal({
 
     setSelectedPkg(preselectedPackageId)
     setSelectedDate(null)
+    setSelectedEndDate(null)
     setTimeSlot(TIME_SLOTS[TIME_SLOTS.length - 1])
     setLocation('')
     setMessage('')
@@ -369,6 +377,7 @@ export function ContactModal({
           billing_type:    pkg?.billingType ?? 'package',
           billing_detail:  null,
           requested_date:  selectedDate,
+          requested_end_date: selectedEndDate,
           time_slot:       timeSlot,
           location_note:   location.trim() || null,
         }),
@@ -683,23 +692,42 @@ export function ContactModal({
                 <div>
                   <label className="text-xs font-semibold text-ink-500 uppercase tracking-wide mb-2 flex items-center gap-1">
                     <Calendar className="w-3 h-3" />
-                    Anticipated date <span className="text-red-400 ml-0.5">*</span>
+                    Anticipated date(s) <span className="text-red-400 ml-0.5">*</span>
                   </label>
                   <div className="border border-ink-100 rounded-xl p-3 bg-white">
                     <AvailCalendar
                       availability={availability}
-                      selected={selectedDate}
-                      onSelect={setSelectedDate}
+                      selectedStart={selectedDate}
+                      selectedEnd={selectedEndDate}
+                      onSelect={(date) => {
+                        // Range state machine: first tap = start, second = end.
+                        if (!selectedDate || selectedEndDate) {
+                          setSelectedDate(date); setSelectedEndDate(null)
+                        } else if (date < selectedDate) {
+                          setSelectedDate(date); setSelectedEndDate(null)
+                        } else if (date > selectedDate) {
+                          setSelectedEndDate(date)
+                        }
+                        // tapping the same start again keeps it a single day
+                      }}
                     />
                   </div>
-                  {selectedDate && (
-                    <p className="text-xs text-ink-500 mt-1.5 flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                      {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-CA', {
-                        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
-                      })}
-                    </p>
-                  )}
+                  {selectedDate && (() => {
+                    const fmt = (s: string) => new Date(s + 'T00:00:00').toLocaleDateString('en-CA', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })
+                    const nDays = selectedEndDate
+                      ? Math.round((new Date(selectedEndDate).getTime() - new Date(selectedDate).getTime()) / 86400000) + 1
+                      : 1
+                    return (
+                      <p className="text-xs text-ink-500 mt-1.5 flex items-center gap-1 flex-wrap">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500 flex-shrink-0" />
+                        <span>{fmt(selectedDate)}</span>
+                        {selectedEndDate && <span>→ {fmt(selectedEndDate)} <span className="text-ink-300">· {nDays} days</span></span>}
+                        {selectedEndDate && (
+                          <button type="button" onClick={() => setSelectedEndDate(null)} className="text-ink-300 hover:text-ink underline ml-1">clear range</button>
+                        )}
+                      </p>
+                    )
+                  })()}
                 </div>
 
                 {/* Time of day */}
