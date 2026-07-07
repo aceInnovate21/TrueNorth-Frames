@@ -5,6 +5,7 @@ import { useRef, useState } from 'react'
 import { CheckCircle2, ImagePlus, Package, Plus, Save, Trash2, X } from 'lucide-react'
 
 import { PLATFORM_CONFIG } from '@/lib/platform-config'
+import { compressImageToWebp } from '@/lib/client-compress'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -97,22 +98,33 @@ function PackageCard({
   async function handleBannerChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!file.type.startsWith('image/')) { setBannerError('Only image files are allowed'); return }
-    if (file.size > 5 * 1024 * 1024) { setBannerError('Image must be under 5 MB'); return }
+    // Accept any image (incl. HEIC) — compressed to a small WebP in-browser. No size limit.
+    if (!file.type.startsWith('image/') && !/\.(heic|heif)$/i.test(file.name)) {
+      setBannerError('Please choose an image file'); return
+    }
     setBannerError('')
+    setBannerUploading(true)
 
-    // If the package hasn't been persisted yet, use an object URL preview and
-    // the upload will happen after the package is saved (caller handles it via onSave)
-    if (pkg.id.startsWith('pkg-new-')) {
-      const preview = URL.createObjectURL(file)
-      setDraft(d => ({ ...d, banner_url: preview }))
-      // Store the file on the element so the parent can read it if needed
+    let blob: Blob
+    try {
+      const compressed = await compressImageToWebp(file, { maxDim: 1200, quality: 0.82 })
+      blob = compressed.blob
+    } catch (err: any) {
+      setBannerUploading(false)
+      setBannerError(err?.message ?? 'Could not process image. Try a different file.')
       return
     }
 
-    setBannerUploading(true)
+    // If the package hasn't been persisted yet, use an object URL preview; the
+    // upload happens after the package is saved (caller handles it via onSave).
+    if (pkg.id.startsWith('pkg-new-')) {
+      setDraft(d => ({ ...d, banner_url: URL.createObjectURL(blob) }))
+      setBannerUploading(false)
+      return
+    }
+
     const fd = new FormData()
-    fd.append('file', file)
+    fd.append('file', new File([blob], 'banner.webp', { type: 'image/webp' }))
     fd.append('package_id', pkg.id)
     const res = await fetch('/api/photographer/packages/banner', { method: 'POST', body: fd })
     setBannerUploading(false)
@@ -226,7 +238,7 @@ function PackageCard({
 
       {/* Banner upload */}
       <div>
-        <p className="text-xs font-medium text-ink mb-2">Banner image <span className="text-ink-300 font-normal">(optional, 5 MB max)</span></p>
+        <p className="text-xs font-medium text-ink mb-2">Banner image <span className="text-ink-300 font-normal">(optional · any size, optimized automatically)</span></p>
         {draft.banner_url ? (
           <div className="relative w-full h-28 rounded-xl overflow-hidden border border-ink-100 group">
             <Image src={draft.banner_url} alt="Banner" fill className="object-cover" sizes="400px" />
@@ -258,7 +270,7 @@ function PackageCard({
             <span className="text-[11px] font-medium">{bannerUploading ? 'Uploading…' : 'Upload banner image'}</span>
           </button>
         )}
-        <input ref={bannerInputRef} type="file" accept="image/*" className="hidden" onChange={handleBannerChange} />
+        <input ref={bannerInputRef} type="file" accept="image/*,.heic,.heif" className="hidden" onChange={handleBannerChange} />
         {bannerError && <p className="text-xs text-red-500 mt-1">{bannerError}</p>}
       </div>
 
