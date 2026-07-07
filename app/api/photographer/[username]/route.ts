@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from '@/lib/api-helpers'
 import { computeBadge, BadgeSignals } from '@/lib/badges'
+import { todayInMarket, daysFromTodayInMarket } from '@/lib/date'
 
 // Public read-only route — no auth required, uses service role for reliable reads
 function getDb() {
@@ -50,8 +51,8 @@ export async function GET(
 
   const photographerId = profile.id
 
-  const today = new Date().toISOString().slice(0, 10)
-  const in90 = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const today = todayInMarket()
+  const in90 = daysFromTodayInMarket(90)
 
   const [
     { data: specialties },
@@ -60,6 +61,7 @@ export async function GET(
     { data: packages },
     { data: faqs },
     { data: dayStatuses },
+    { data: weeklySlots },
     { data: portfolioPhotos },
     { data: portfolioAlbums },
     { data: portfolioVideos },
@@ -70,10 +72,31 @@ export async function GET(
     db.from('packages').select('id, name, description, billing_type, price, deliverables, is_popular, banner_url, specialty').eq('photographer_id', photographerId).eq('is_active', true).order('sort_order', { ascending: true }),
     db.from('photographer_faqs').select('id, question, answer, sort_order').eq('photographer_id', photographerId).eq('is_published', true).order('sort_order', { ascending: true }),
     db.from('availability_day_status').select('date, status').eq('photographer_id', photographerId).gte('date', today).lte('date', in90),
+    db.from('weekly_time_slots').select('day_of_week').eq('photographer_id', photographerId).eq('is_active', true),
     db.from('portfolio_photos').select('id, album_id, caption, tags, photo_taken_month, photo_taken_year, sort_order, storage_asset_id').eq('photographer_id', photographerId).order('sort_order', { ascending: true }),
     db.from('portfolio_albums').select('id, title, sort_order').eq('photographer_id', photographerId).eq('is_published', true).order('sort_order', { ascending: true }),
     db.from('portfolio_videos').select('id, album_id, title, sort_order, duration_seconds, storage_asset_id').eq('photographer_id', photographerId).order('sort_order', { ascending: true }),
   ])
+
+  // ── Availability: merge recurring weekly slots + explicit day overrides ─────
+  // Weekly slots expand into concrete 'available' dates across the public window;
+  // an explicit day override (available/busy/tentative) always wins for its date.
+  const activeDows = new Set<number>((weeklySlots ?? []).map((s: any) => s.day_of_week))
+  const overrideMap = new Map<string, string>()
+  for (const d of dayStatuses ?? []) overrideMap.set(d.date, d.status)
+
+  const mergedAvailability: { date: string; status: string }[] = []
+  {
+    const start = new Date(today + 'T12:00:00Z') // UTC-noon anchor avoids day slips
+    for (let i = 0; i <= 90; i++) {
+      const dt = new Date(start.getTime() + i * 24 * 60 * 60 * 1000)
+      const dateStr = dt.toISOString().slice(0, 10)
+      if (dateStr > in90) break
+      const override = overrideMap.get(dateStr)
+      if (override) mergedAvailability.push({ date: dateStr, status: override })
+      else if (activeDows.has(dt.getUTCDay())) mergedAvailability.push({ date: dateStr, status: 'available' })
+    }
+  }
 
   // ── Badge signals for this profile ────────────────────────────────────────
   const gbpLink = (links ?? []).find((l: any) => l.platform === 'google')
@@ -225,10 +248,7 @@ export async function GET(
       question: f.question,
       answer: f.answer,
     })),
-    availability: (dayStatuses ?? []).map((d: any) => ({
-      date: d.date,
-      status: d.status,
-    })),
+    availability: mergedAvailability,
     // Standalone (not in any album)
     standalone_photos: standalonePhotos.map((ph: any) => ({
       id: ph.id,

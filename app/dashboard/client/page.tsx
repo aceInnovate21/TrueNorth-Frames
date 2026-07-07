@@ -83,6 +83,7 @@ interface Booking {
   billing_type: BillingType
   billing_detail: string | null
   requested_date: string
+  requested_end_date: string | null
   time_slot: string
   location_note: string | null
   status: BookingStatus
@@ -1164,7 +1165,7 @@ export default function ClientDashboard() {
                           <div className="px-4 py-3 space-y-2.5">
                             <div className="flex items-center gap-3 flex-wrap">
                               <span className="flex items-center gap-1.5 text-xs text-ink-400">
-                                <Calendar className="w-3.5 h-3.5" />{formatDate(b.requested_date)}
+                                <Calendar className="w-3.5 h-3.5" />{formatDate(b.requested_date)}{b.requested_end_date ? ` → ${formatDate(b.requested_end_date)}` : ''}
                               </span>
                               <span className="flex items-center gap-1.5 text-xs text-ink-400">
                                 <Clock className="w-3.5 h-3.5" />{b.time_slot}

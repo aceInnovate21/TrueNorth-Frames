@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError, notFound } from '@/lib/api-helpers'
+import { todayInMarket } from '@/lib/date'
 
 async function getPhotographerId(db: any, userId: string): Promise<string | null> {
   const { data } = await db.from('photographer_profiles').select('id').eq('user_id', userId).single()
@@ -24,7 +25,7 @@ export async function GET() {
     db.from('availability_day_status')
       .select('id, date, status, note')
       .eq('photographer_id', photographerId)
-      .gte('date', new Date().toISOString().slice(0, 10)),
+      .gte('date', todayInMarket()),
   ])
 
   const weekly: Record<number, { id: string; start_time: string; end_time: string; slot_label: string; is_active: boolean }[]> = {}

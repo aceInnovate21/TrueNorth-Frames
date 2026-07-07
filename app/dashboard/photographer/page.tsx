@@ -35,6 +35,10 @@ interface FAQ {
 }
 
 import { PLATFORM_CONFIG } from '@/lib/platform-config'
+import { compressImageToWebp } from '@/lib/client-compress'
+import { uploadPortfolioPhoto, uploadPortfolioVideo } from '@/lib/portfolio-upload'
+import { StorageMeter } from '@/components/storage-meter'
+import type { StorageUsage } from '@/lib/storage-quota'
 
 const MAX_FAQS = PLATFORM_CONFIG.max_faqs_per_photographer
 
@@ -42,8 +46,6 @@ const MAX_FAQS = PLATFORM_CONFIG.max_faqs_per_photographer
 const MAX_ALBUMS           = PLATFORM_CONFIG.max_albums_per_photographer
 const MAX_PHOTOS_TOTAL     = PLATFORM_CONFIG.max_photos_per_photographer
 const MAX_VIDEOS_TOTAL     = PLATFORM_CONFIG.max_videos_per_photographer
-const MAX_PHOTO_BYTES      = PLATFORM_CONFIG.max_photo_bytes
-const MAX_PHOTO_MB         = MAX_PHOTO_BYTES / 1024 / 1024
 const MAX_ALBUM_NAME       = PLATFORM_CONFIG.max_album_name_length
 const MAX_CAPTION          = PLATFORM_CONFIG.max_photo_caption_length
 
@@ -66,15 +68,6 @@ interface PortfolioAlbum {
 }
 function totalPortfolioPhotos(albums: PortfolioAlbum[]) { return albums.reduce((n, a) => n + a.photos.length, 0) }
 function totalPortfolioVideos(albums: PortfolioAlbum[]) { return albums.reduce((n, a) => n + a.videos.length, 0) }
-
-async function uploadPortfolioPhoto(file: File, albumId: string): Promise<PortfolioPhoto | null> {
-  const form = new FormData()
-  form.append('file', file)
-  form.append('album_id', albumId)
-  const res = await fetch('/api/photographer/photos/upload', { method: 'POST', body: form })
-  if (!res.ok) return null
-  return res.json()
-}
 
 // ─── Booking request types ───────────────────────────────────────────────────
 
@@ -2555,26 +2548,22 @@ function ProfileSettingsTab({ profile, setProfile }: {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validate client-side before upload
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
-    if (!allowedTypes.includes(file.type)) {
-      setAvatarError('Only JPEG, PNG, or WebP images are allowed')
-      return
-    }
-    if (file.size > PLATFORM_CONFIG.max_avatar_bytes) {
-      setAvatarError(`File must be under ${PLATFORM_CONFIG.max_avatar_bytes / 1024 / 1024} MB`)
+    // Accept any image (incl. HEIC) — compressed to a small WebP in-browser. No size limit.
+    if (!file.type.startsWith('image/') && !/\.(heic|heif)$/i.test(file.name)) {
+      setAvatarError('Please choose an image file')
       return
     }
 
-    // Show local preview immediately
-    const previewUrl = URL.createObjectURL(file)
-    setLocal(l => ({ ...l, avatarUrl: previewUrl }))
     setAvatarError('')
     setAvatarUploading(true)
 
     try {
+      const { blob } = await compressImageToWebp(file, { maxDim: 512, quality: 0.85 })
+      const previewUrl = URL.createObjectURL(blob)
+      setLocal(l => ({ ...l, avatarUrl: previewUrl }))
+
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', new File([blob], 'avatar.webp', { type: 'image/webp' }))
       const res = await fetch('/api/photographer/profile/avatar', { method: 'POST', body: formData })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -2585,8 +2574,8 @@ function ProfileSettingsTab({ profile, setProfile }: {
       const { avatar_url } = await res.json()
       setLocal(l => ({ ...l, avatarUrl: avatar_url }))
       setProfile(prev => ({ ...prev, avatarUrl: avatar_url }))
-    } catch {
-      setAvatarError('Network error — please try again')
+    } catch (err: any) {
+      setAvatarError(err?.message ?? 'Upload failed — please try again')
       setLocal(l => ({ ...l, avatarUrl: profile.avatarUrl }))
     } finally {
       setAvatarUploading(false)
@@ -2610,22 +2599,20 @@ function ProfileSettingsTab({ profile, setProfile }: {
   async function handleCoverSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
-    if (!allowedTypes.includes(file.type)) {
-      setCoverError('Only JPEG, PNG, or WebP images are allowed')
+    // Accept any image (incl. HEIC) — compressed to WebP in-browser. No size limit.
+    if (!file.type.startsWith('image/') && !/\.(heic|heif)$/i.test(file.name)) {
+      setCoverError('Please choose an image file')
       return
     }
-    if (file.size > 8 * 1024 * 1024) {
-      setCoverError('File must be under 8 MB')
-      return
-    }
-    const previewUrl = URL.createObjectURL(file)
-    setLocal(l => ({ ...l, coverImageUrl: previewUrl }))
     setCoverError('')
     setCoverUploading(true)
     try {
+      const { blob } = await compressImageToWebp(file, { maxDim: 1600, quality: 0.82 })
+      const previewUrl = URL.createObjectURL(blob)
+      setLocal(l => ({ ...l, coverImageUrl: previewUrl }))
+
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', new File([blob], 'cover.webp', { type: 'image/webp' }))
       const res = await fetch('/api/photographer/profile/cover', { method: 'POST', body: formData })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -2636,8 +2623,8 @@ function ProfileSettingsTab({ profile, setProfile }: {
       const { cover_image_url } = await res.json()
       setLocal(l => ({ ...l, coverImageUrl: cover_image_url }))
       setProfile(prev => ({ ...prev, coverImageUrl: cover_image_url }))
-    } catch {
-      setCoverError('Network error — please try again')
+    } catch (err: any) {
+      setCoverError(err?.message ?? 'Upload failed — please try again')
       setLocal(l => ({ ...l, coverImageUrl: profile.coverImageUrl }))
     } finally {
       setCoverUploading(false)
@@ -2819,7 +2806,7 @@ function ProfileSettingsTab({ profile, setProfile }: {
             </div>
             <div>
               <p className="text-sm font-semibold text-ink mb-1">Profile photo</p>
-              <p className="text-xs text-ink-300 mb-2">JPEG, PNG or WebP · max {PLATFORM_CONFIG.max_avatar_bytes / 1024 / 1024} MB · square crops best</p>
+              <p className="text-xs text-ink-300 mb-2">JPG, PNG, WEBP, HEIC · any size, optimized automatically · square crops best</p>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={avatarUploading}
@@ -2844,7 +2831,7 @@ function ProfileSettingsTab({ profile, setProfile }: {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/*,.heic,.heif"
               className="hidden"
               onChange={handlePhotoSelect}
             />
@@ -2853,7 +2840,7 @@ function ProfileSettingsTab({ profile, setProfile }: {
           {/* Cover photo */}
           <div className="pb-4 border-b border-ink-50">
             <p className="text-sm font-semibold text-ink mb-1">Cover photo</p>
-            <p className="text-xs text-ink-300 mb-3">JPEG, PNG or WebP · max 8 MB · 3:1 wide banner crops best</p>
+            <p className="text-xs text-ink-300 mb-3">JPG, PNG, WEBP, HEIC · any size, optimized automatically · 3:1 wide banner crops best</p>
             <div
               className="relative w-full h-28 rounded-xl overflow-hidden bg-ink-50 border border-ink-100 cursor-pointer group"
               onClick={() => coverInputRef.current?.click()}
@@ -2902,7 +2889,7 @@ function ProfileSettingsTab({ profile, setProfile }: {
             <input
               ref={coverInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/*,.heic,.heif"
               className="hidden"
               onChange={handleCoverSelect}
             />
@@ -4109,7 +4096,12 @@ function PhotographerDashboardInner() {
           setBookingRequests(bookingData.map((b: any) => {
             const d = new Date(b.date)
             const dateKey = isNaN(d.getTime()) ? b.date : `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-            const displayDate = isNaN(d.getTime()) ? b.date : d.toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' })
+            const startLabel = isNaN(d.getTime()) ? b.date : d.toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' })
+            // Multi-day bookings render as a "start → end" range label.
+            const endD = b.endDate ? new Date(b.endDate) : null
+            const displayDate = endD && !isNaN(endD.getTime())
+              ? `${startLabel} → ${endD.toLocaleDateString('en-CA', { month: 'long', day: 'numeric' })}`
+              : startLabel
             // Deterministic bg colour from clientId
             const palette = ['bg-slate-600','bg-violet-600','bg-emerald-600','bg-rose-500','bg-amber-600','bg-sky-600','bg-teal-600','bg-indigo-600']
             const code = (b.clientId ?? '').split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0)
@@ -4206,6 +4198,13 @@ function PhotographerDashboardInner() {
   const [portfolioAlbums, setPortfolioAlbums] = useState<PortfolioAlbum[]>([])
   const [standalonePhotos, setStandalonePhotos] = useState<PortfolioPhoto[]>([])
   const [standaloneVideos, setStandaloneVideos] = useState<PortfolioVideo[]>([])
+  const [storage, setStorage] = useState<StorageUsage | null>(null)
+  const refreshStorage = () => {
+    fetch('/api/photographer/storage')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d) setStorage(d) })
+      .catch(() => {})
+  }
   const [portfolioLoading, setPortfolioLoading] = useState(false)
   const [portfolioLoaded, setPortfolioLoaded] = useState(false)
   const [openAlbumId, setOpenAlbumId] = useState<string | null>(null)
@@ -4268,18 +4267,22 @@ function PhotographerDashboardInner() {
   async function handlePortfolioPhotoFiles(files: FileList | null) {
     if (!files || !openAlbumId) return
     setPortfolioUploadError(null)
-    const all = Array.from(files).filter(f => f.type.startsWith('image/'))
-    const oversized = all.filter(f => f.size > MAX_PHOTO_BYTES)
-    if (oversized.length > 0) { setPortfolioUploadError(`${oversized.map(f => f.name).join(', ')} exceed the ${MAX_PHOTO_MB} MB limit.`); return }
-    const tp = totalPortfolioPhotos(portfolioAlbums)
+    // No source size limit — images are compressed to WebP in the browser.
+    const all = Array.from(files).filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name))
+    if (all.length === 0) { setPortfolioUploadError('Please choose image files.'); return }
+    const tp = totalPortfolioPhotos(portfolioAlbums) + standalonePhotos.length
     if (tp + all.length > MAX_PHOTOS_TOTAL) { setPortfolioUploadError(`Portfolio limit is ${MAX_PHOTOS_TOTAL} photos. You have ${MAX_PHOTOS_TOTAL - tp} slot(s) remaining.`); return }
     setPortfolioUploading(true)
     for (const file of all) {
-      const photo = await uploadPortfolioPhoto(file, openAlbumId)
-      if (!photo) { setPortfolioUploadError(`Failed to upload ${file.name}. Try again.`); continue }
-      setPortfolioAlbums(prev => prev.map(a => a.id === openAlbumId ? { ...a, photos: [...a.photos, { ...photo, isCover: a.photos.length === 0 }] } : a))
+      try {
+        const photo = await uploadPortfolioPhoto(file, openAlbumId)
+        setPortfolioAlbums(prev => prev.map(a => a.id === openAlbumId ? { ...a, photos: [...a.photos, { ...photo, isCover: a.photos.length === 0 }] } : a))
+      } catch (e: any) {
+        setPortfolioUploadError(e?.message ?? `Failed to upload ${file.name}.`)
+      }
     }
     setPortfolioUploading(false)
+    refreshStorage()
     if (portfolioPhotoInputRef.current) portfolioPhotoInputRef.current.value = ''
   }
 
@@ -4292,6 +4295,7 @@ function PhotographerDashboardInner() {
         if (next.length > 0) next[0] = { ...next[0], isCover: true }
         return { ...a, photos: next }
       }))
+      refreshStorage()
     }
   }
 
@@ -4385,28 +4389,21 @@ function PhotographerDashboardInner() {
   async function handlePortfolioVideoFile(file: File | null) {
     if (!file || !openAlbumId) return
     setPortfolioUploadError(null)
-    if (!file.type.startsWith('video/')) { setPortfolioUploadError('Only video files are allowed.'); return }
+    const okType = file.type.startsWith('video/') || /\.(mp4|mov|avi|webm|mkv)$/i.test(file.name)
+    if (!okType) { setPortfolioUploadError('Only video files are allowed.'); return }
     const maxBytes = PLATFORM_CONFIG.max_video_bytes
     if (file.size > maxBytes) { setPortfolioUploadError(`Video exceeds the ${maxBytes / 1024 / 1024} MB limit.`); return }
-    const tv = totalPortfolioVideos(portfolioAlbums)
+    const tv = totalPortfolioVideos(portfolioAlbums) + standaloneVideos.length
     if (tv >= MAX_VIDEOS_TOTAL) { setPortfolioUploadError(`Maximum ${MAX_VIDEOS_TOTAL} videos allowed.`); return }
     setVideoUploading(true)
-    const form = new FormData()
-    form.append('file', file)
-    form.append('album_id', openAlbumId)
     try {
-      const res = await fetch('/api/photographer/videos/upload', { method: 'POST', body: form })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        setPortfolioUploadError(err.error ?? 'Failed to upload video.')
-        return
-      }
-      const video: PortfolioVideo = await res.json()
+      const video = await uploadPortfolioVideo(file, openAlbumId)
       setPortfolioAlbums(prev => prev.map(a => a.id === openAlbumId ? { ...a, videos: [...a.videos, video] } : a))
-    } catch {
-      setPortfolioUploadError('Upload failed. Try again.')
+    } catch (e: any) {
+      setPortfolioUploadError(e?.message ?? 'Failed to upload video.')
     } finally {
       setVideoUploading(false)
+      refreshStorage()
       if (portfolioVideoInputRef.current) portfolioVideoInputRef.current.value = ''
     }
   }
@@ -4415,67 +4412,62 @@ function PhotographerDashboardInner() {
     const res = await fetch(`/api/photographer/videos?id=${videoId}`, { method: 'DELETE' })
     if (res.ok) {
       setPortfolioAlbums(prev => prev.map(a => a.id !== albumId ? a : { ...a, videos: a.videos.filter(v => v.id !== videoId) }))
+      refreshStorage()
     }
   }
 
   async function handleStandalonePhotoFiles(files: FileList | null) {
     if (!files) return
     setPortfolioUploadError(null)
-    const all = Array.from(files).filter(f => f.type.startsWith('image/'))
-    const oversized = all.filter(f => f.size > MAX_PHOTO_BYTES)
-    if (oversized.length > 0) { setPortfolioUploadError(`${oversized.map(f => f.name).join(', ')} exceed the ${MAX_PHOTO_MB} MB limit.`); return }
+    const all = Array.from(files).filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name))
+    if (all.length === 0) { setPortfolioUploadError('Please choose image files.'); return }
     const totalExisting = totalPortfolioPhotos(portfolioAlbums) + standalonePhotos.length
     if (totalExisting + all.length > MAX_PHOTOS_TOTAL) {
       setPortfolioUploadError(`Portfolio limit is ${MAX_PHOTOS_TOTAL} photos.`); return
     }
     setStandaloneUploading(true)
     for (const file of all) {
-      const form = new FormData()
-      form.append('file', file)
-      const res = await fetch('/api/photographer/photos/upload', { method: 'POST', body: form })
-      if (!res.ok) { setPortfolioUploadError(`Failed to upload ${file.name}.`); continue }
-      const photo: PortfolioPhoto = await res.json()
-      setStandalonePhotos(prev => [...prev, photo])
+      try {
+        const photo = await uploadPortfolioPhoto(file, null)
+        setStandalonePhotos(prev => [...prev, photo])
+      } catch (e: any) {
+        setPortfolioUploadError(e?.message ?? `Failed to upload ${file.name}.`)
+      }
     }
     setStandaloneUploading(false)
+    refreshStorage()
     if (standalonePhotoInputRef.current) standalonePhotoInputRef.current.value = ''
   }
 
   async function removeStandalonePhoto(photoId: string) {
     const res = await fetch(`/api/photographer/photos?id=${photoId}`, { method: 'DELETE' })
-    if (res.ok) setStandalonePhotos(prev => prev.filter(p => p.id !== photoId))
+    if (res.ok) { setStandalonePhotos(prev => prev.filter(p => p.id !== photoId)); refreshStorage() }
   }
 
   async function handleStandaloneVideoFile(file: File | null) {
     if (!file) return
     setPortfolioUploadError(null)
-    if (!file.type.startsWith('video/')) { setPortfolioUploadError('Only video files are allowed.'); return }
+    const okType = file.type.startsWith('video/') || /\.(mp4|mov|avi|webm|mkv)$/i.test(file.name)
+    if (!okType) { setPortfolioUploadError('Only video files are allowed.'); return }
     if (file.size > PLATFORM_CONFIG.max_video_bytes) { setPortfolioUploadError(`Video exceeds the ${PLATFORM_CONFIG.max_video_bytes / 1024 / 1024} MB limit.`); return }
     const totalVids = totalPortfolioVideos(portfolioAlbums) + standaloneVideos.length
     if (totalVids >= MAX_VIDEOS_TOTAL) { setPortfolioUploadError(`Maximum ${MAX_VIDEOS_TOTAL} videos allowed.`); return }
     setStandaloneVideoUploading(true)
-    const form = new FormData()
-    form.append('file', file)
     try {
-      const res = await fetch('/api/photographer/videos/upload', { method: 'POST', body: form })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        setPortfolioUploadError(err.error ?? 'Failed to upload video.')
-        return
-      }
-      const video: PortfolioVideo = await res.json()
+      const video = await uploadPortfolioVideo(file, null)
       setStandaloneVideos(prev => [...prev, video])
-    } catch {
-      setPortfolioUploadError('Upload failed. Try again.')
+    } catch (e: any) {
+      setPortfolioUploadError(e?.message ?? 'Failed to upload video.')
     } finally {
       setStandaloneVideoUploading(false)
+      refreshStorage()
       if (standaloneVideoInputRef.current) standaloneVideoInputRef.current.value = ''
     }
   }
 
   async function removeStandaloneVideo(videoId: string) {
     const res = await fetch(`/api/photographer/videos?id=${videoId}`, { method: 'DELETE' })
-    if (res.ok) setStandaloneVideos(prev => prev.filter(v => v.id !== videoId))
+    if (res.ok) { setStandaloneVideos(prev => prev.filter(v => v.id !== videoId)); refreshStorage() }
   }
 
   const validTabs: DashboardTab[] = ['overview','portfolio','messages','requests','availability','packages','reviews','network','faq','settings','trust']
@@ -4552,6 +4544,7 @@ function PhotographerDashboardInner() {
       })
       .catch(() => {})
       .finally(() => { setPortfolioLoading(false); setPortfolioLoaded(true) })
+    refreshStorage()
   }
 
   // Load portfolio on mount so hasPortfolio reflects reality from the start
@@ -4587,7 +4580,12 @@ function PhotographerDashboardInner() {
     }
   }
 
-  const { sections, pct } = computeScore({ ...profile, hasPortfolio, faqCount: faqs.length })
+  // Availability counts as "set" when the photographer has any weekly time slot
+  // OR any day override — derived live so the completion bar updates immediately.
+  const availabilitySet =
+    Object.values(weeklySchedule).some(d => (d?.slots?.length ?? 0) > 0) ||
+    Object.values(bookedDates).some(v => v === 'available' || v === 'busy' || v === 'tentative')
+  const { sections, pct } = computeScore({ ...profile, availabilitySet, hasPortfolio, faqCount: faqs.length })
   const incomplete = sections.filter(s => !s.done)
   const unreadCount = messages.filter(m => m.unread).length
   const groupUnreadCount = groups.reduce((acc, g) => acc + (g.unread ?? 0), 0)
@@ -5116,14 +5114,16 @@ function PhotographerDashboardInner() {
               return (
                 <div className="space-y-6">
                   {/* Hidden inputs */}
-                  <input ref={portfolioPhotoInputRef} type="file" accept="image/*" multiple className="hidden"
+                  <input ref={portfolioPhotoInputRef} type="file" accept="image/*,.heic,.heif" multiple className="hidden"
                     onChange={e => handlePortfolioPhotoFiles(e.target.files)} />
-                  <input ref={portfolioVideoInputRef} type="file" accept="video/*" className="hidden"
+                  <input ref={portfolioVideoInputRef} type="file" accept="video/*,.mkv,.webm" className="hidden"
                     onChange={e => handlePortfolioVideoFile(e.target.files?.[0] ?? null)} />
-                  <input ref={standalonePhotoInputRef} type="file" accept="image/*" multiple className="hidden"
+                  <input ref={standalonePhotoInputRef} type="file" accept="image/*,.heic,.heif" multiple className="hidden"
                     onChange={e => handleStandalonePhotoFiles(e.target.files)} />
-                  <input ref={standaloneVideoInputRef} type="file" accept="video/*" className="hidden"
+                  <input ref={standaloneVideoInputRef} type="file" accept="video/*,.mkv,.webm" className="hidden"
                     onChange={e => handleStandaloneVideoFile(e.target.files?.[0] ?? null)} />
+
+                  <StorageMeter usage={storage} />
 
                   {/* Album modal */}
                   {albumModal && (
@@ -5386,7 +5386,7 @@ function PhotographerDashboardInner() {
                             <ImagePlus className="w-6 h-6 text-ink-400" />
                           </div>
                           <p className="font-semibold text-ink text-sm mb-1">Click to upload photos</p>
-                          <p className="text-ink-300 text-xs">JPG, PNG, WEBP · max {MAX_PHOTO_MB} MB per photo</p>
+                          <p className="text-ink-300 text-xs">JPG, PNG, WEBP, HEIC · any size, optimized automatically</p>
                         </div>
                       ) : (
                         <>
@@ -5464,7 +5464,7 @@ function PhotographerDashboardInner() {
                             className="border-2 border-dashed border-ink-200 rounded-xl p-8 text-center cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all">
                             <Video className="w-8 h-8 text-ink-200 mx-auto mb-2" />
                             <p className="text-sm font-medium text-ink-400">Click to add a video to this album</p>
-                            <p className="text-xs text-ink-300 mt-1">MP4, MOV · max {PLATFORM_CONFIG.max_video_bytes / 1024 / 1024} MB</p>
+                            <p className="text-xs text-ink-300 mt-1">MP4, MOV, WEBM · max {PLATFORM_CONFIG.max_video_bytes / 1024 / 1024} MB</p>
                           </div>
                         ) : (
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -5620,7 +5620,7 @@ function PhotographerDashboardInner() {
                             className="border-2 border-dashed border-ink-200 rounded-xl p-8 text-center cursor-pointer hover:border-purple-300 hover:bg-purple-50/30 transition-all">
                             <Video className="w-8 h-8 text-ink-200 mx-auto mb-2" />
                             <p className="text-sm font-medium text-ink-400">Click to upload a standalone video</p>
-                            <p className="text-xs text-ink-300 mt-1">MP4, MOV · max {PLATFORM_CONFIG.max_video_bytes / 1024 / 1024} MB</p>
+                            <p className="text-xs text-ink-300 mt-1">MP4, MOV, WEBM · max {PLATFORM_CONFIG.max_video_bytes / 1024 / 1024} MB</p>
                           </div>
                         ) : (
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">

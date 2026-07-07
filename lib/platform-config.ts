@@ -39,11 +39,18 @@ export const PLATFORM_CONFIG = {
 
   // ── portfolio ─────────────────────────────────────────────────────────────
   max_albums_per_photographer:          3,
-  max_photos_per_photographer:          50,
+  max_photos_per_photographer:          150,  // byte quota is the real governor; this is a sanity bound
   max_videos_per_photographer:          3,
   max_videos_per_album:                 2,
-  max_photo_bytes:                      5  * 1024 * 1024,   // 5 MB
-  max_video_bytes:                      100 * 1024 * 1024,  // 100 MB
+  // Per-photographer STORED (post-compression) budget. Keeps the whole
+  // marketplace under the R2 free-tier / budget-guard ceiling: 10 × 500 MB = 5 GB.
+  max_storage_bytes_per_photographer:   500 * 1024 * 1024,  // 500 MB
+  // Ceiling on the COMPRESSED artefact accepted by presign. Photos are
+  // compressed to WebP in the browser before upload, so the raw source has no
+  // user-facing size limit — this just guards against absurd/abusive payloads.
+  max_compressed_photo_bytes:           15 * 1024 * 1024,   // 15 MB
+  max_photo_bytes:                      5  * 1024 * 1024,   // 5 MB (legacy server-side POST path)
+  max_video_bytes:                      100 * 1024 * 1024,  // 100 MB (raw video, direct-to-R2)
   max_avatar_bytes:                     3  * 1024 * 1024,   // 3 MB
   max_cover_bytes:                      8  * 1024 * 1024,   // 8 MB
   max_photo_caption_length:             255,
