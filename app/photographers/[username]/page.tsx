@@ -376,6 +376,7 @@ import { ContactModal } from '@/components/contact-modal'
 import { SaveButton } from '@/components/save-button'
 import { PhotographerBadge } from '@/components/photographer-badge'
 import { InfoTooltip } from '@/components/tooltip'
+import { todayInMarket } from '@/lib/date'
 
 // ─── Portfolio preview card (extracted to avoid hooks-in-IIFE violation) ─────
 
@@ -794,7 +795,7 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 }
 
 function AvailabilityStrip({ availability }: { availability: { date: string; status: string }[] }) {
-  const todayKey = new Date().toISOString().slice(0, 10)
+  const todayKey = todayInMarket()
 
   // Every future/today date the photographer has explicitly set, sorted ascending.
   const days = (availability ?? [])

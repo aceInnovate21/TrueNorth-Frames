@@ -6,9 +6,10 @@ import { useRouter } from 'next/navigation'
 import {
   X, Calendar, MapPin, MessageSquare, ArrowRight, CheckCircle2,
   ChevronLeft, ChevronRight, Loader2, Package, Clock,
-  ShieldCheck, BellRing, MessagesSquare, CheckCheck,
+  ShieldCheck, BellRing, MessagesSquare, CheckCheck, AlertCircle,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { todayInMarket } from '@/lib/date'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -87,15 +88,22 @@ function AvailCalendar({
   const statusMap: Record<string, string> = {}
   for (const d of availability) statusMap[d.date] = d.status
 
-  const todayStr = today.toISOString().slice(0, 10)
+  const todayStr = todayInMarket()
   const days = buildCalendarMonth(viewYear, viewMonth)
   const isCurrentMonth = viewYear === today.getFullYear() && viewMonth === today.getMonth()
+
+  // Cap forward navigation to ~the availability window (4 months out).
+  const maxNav = new Date(today.getFullYear(), today.getMonth() + 4, 1)
+  const atMaxMonth =
+    viewYear > maxNav.getFullYear() ||
+    (viewYear === maxNav.getFullYear() && viewMonth >= maxNav.getMonth())
 
   function prevMonth() {
     if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11) }
     else setViewMonth(m => m - 1)
   }
   function nextMonth() {
+    if (atMaxMonth) return
     if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0) }
     else setViewMonth(m => m + 1)
   }
@@ -137,7 +145,8 @@ function AvailCalendar({
         <button
           type="button"
           onClick={nextMonth}
-          className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-ink-100"
+          disabled={atMaxMonth}
+          className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:bg-ink-100"
         >
           <ChevronRight className="w-4 h-4 text-ink" />
         </button>
@@ -726,6 +735,28 @@ export function ContactModal({
                           <button type="button" onClick={() => setSelectedEndDate(null)} className="text-ink-300 hover:text-ink underline ml-1">clear range</button>
                         )}
                       </p>
+                    )
+                  })()}
+                  {selectedDate && (() => {
+                    // Warn if the selected day/range overlaps days the photographer marked busy.
+                    const statusMap: Record<string, string> = {}
+                    for (const d of availability) statusMap[d.date] = d.status
+                    const end = selectedEndDate ?? selectedDate
+                    let busyCount = 0
+                    const cur = new Date(selectedDate + 'T12:00:00Z')
+                    const endDt = new Date(end + 'T12:00:00Z')
+                    while (cur <= endDt) {
+                      if (statusMap[cur.toISOString().slice(0, 10)] === 'busy') busyCount++
+                      cur.setUTCDate(cur.getUTCDate() + 1)
+                    }
+                    if (busyCount === 0) return null
+                    return (
+                      <div className="mt-2 flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5">
+                        <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                        <span>
+                          {busyCount === 1 ? 'This date is' : `${busyCount} days in this range are`} marked busy — you can still request, but they may not be available.
+                        </span>
+                      </div>
                     )
                   })()}
                 </div>
