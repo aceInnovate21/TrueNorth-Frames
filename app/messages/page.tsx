@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 
 import { PLATFORM_CONFIG } from '@/lib/platform-config'
+import { uploadMessageAttachment } from '@/lib/message-attachment-upload'
 import {
   MessageThread, MessageComposer, ConversationRow, Avatar,
   ConvMenu, BlockModal, ReportModal,
@@ -70,7 +71,10 @@ function ClientMessagesInner() {
   const [mobileView, setMobileView] = useState<'list' | 'thread'>('list')
   const [sending, setSending] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const uploadAbortRef = useRef<AbortController | null>(null)
 
   const [showMenu, setShowMenu] = useState(false)
   const [showBlockModal, setShowBlockModal] = useState(false)
@@ -185,42 +189,44 @@ function ClientMessagesInner() {
     if (atRateLimit) return
 
     setSending(true)
-    setInput('')
     setShowEmoji(false)
 
-    let attachmentUrl: string | null = null
+    let attachmentKey: string | null = null
     let attachmentType: string | null = null
     let attachmentName: string | null = null
     let attachmentSize: number | null = null
+    let attachmentPreview: string | null = null
 
     if (pendingFile) {
       setUploading(true)
+      setUploadProgress(0)
+      const controller = new AbortController()
+      uploadAbortRef.current = controller
       try {
-        const fd = new FormData()
-        fd.append('file', pendingFile)
-        fd.append('conversation_id', activeId)
-        const upRes = await fetch('/api/client/messages/upload', { method: 'POST', body: fd })
-        if (upRes.ok) {
-          const up = await upRes.json()
-          attachmentUrl = up.url; attachmentType = up.type; attachmentName = up.name; attachmentSize = up.size
-        }
-      } finally {
-        setPendingFile(null)
-        setUploading(false)
+        const up = await uploadMessageAttachment(pendingFile, { type: 'conversation', id: activeId }, { onProgress: setUploadProgress, signal: controller.signal })
+        attachmentKey = up.key; attachmentType = up.type; attachmentName = up.name; attachmentSize = up.size
+        if (up.type === 'image') attachmentPreview = URL.createObjectURL(pendingFile)
+      } catch (err: any) {
+        setUploading(false); setUploadProgress(null); uploadAbortRef.current = null; setSending(false)
+        if (err?.name !== 'AbortError') setUploadError(err?.message ?? 'Attachment failed. Try again.')
+        return
       }
+      setPendingFile(null); setUploading(false); setUploadProgress(null); uploadAbortRef.current = null
     }
+
+    setInput('')
 
     const optimisticId = Date.now()
     setConversations(prev => prev.map(c =>
       c.id === activeId
         ? {
             ...c,
-            lastMessage: text,
+            lastMessage: text || (attachmentType ? `📎 ${attachmentName}` : ''),
             lastTime: 'now',
             hourlyMessageCount: c.hourlyMessageCount + 1,
             messages: [...c.messages, {
               id: optimisticId, from: 'me', text, time: new Date().toISOString(), status: 'sent',
-              attachmentUrl, attachmentType, attachmentName, attachmentSize,
+              attachmentUrl: attachmentPreview, attachmentType, attachmentName, attachmentSize,
             }],
           }
         : c
@@ -230,7 +236,7 @@ function ClientMessagesInner() {
       const res = await fetch(`/api/client/messages/${activeId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, attachment_url: attachmentUrl, attachment_type: attachmentType, attachment_name: attachmentName, attachment_size: attachmentSize }),
+        body: JSON.stringify({ text, attachment_key: attachmentKey, attachment_type: attachmentType, attachment_name: attachmentName, attachment_size: attachmentSize }),
       })
       if (res.ok) {
         const msg = await res.json()
@@ -457,6 +463,14 @@ function ClientMessagesInner() {
 
               <MessageThread messages={active.messages} peer={peer} loading={!active.messagesLoaded} />
 
+              {uploadError && (
+                <button type="button" onClick={() => setUploadError(null)}
+                  className="w-full text-left px-4 py-2 bg-red-50 border-t border-red-100 flex items-center gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+                  <span className="text-xs text-red-600 flex-1">{uploadError}</span>
+                  <span className="text-[10px] text-red-400">dismiss</span>
+                </button>
+              )}
               <MessageComposer
                 value={input}
                 onChange={setInput}
@@ -468,8 +482,10 @@ function ClientMessagesInner() {
                 showEmoji={showEmoji}
                 onToggleEmoji={setShowEmoji}
                 pendingFile={pendingFile}
-                onPickFile={setPendingFile}
+                onPickFile={(f) => { setUploadError(null); setPendingFile(f) }}
                 onRemoveFile={() => setPendingFile(null)}
+                uploadProgress={uploadProgress}
+                onCancelUpload={() => uploadAbortRef.current?.abort()}
                 rateRemaining={active ? MAX_MESSAGES_PER_HOUR - active.hourlyMessageCount : undefined}
                 rateWarnThreshold={RATE_WARN}
                 atRateLimit={atRateLimit}

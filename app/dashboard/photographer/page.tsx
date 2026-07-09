@@ -1594,7 +1594,7 @@ function MessagesTab({ messages, setMessages, groups, setGroups }: {
     }).catch(() => {})
   }
 
-  function sendGroupMessage(groupId: string, text: string, attachment?: { url: string; type: string; name: string; size: number }) {
+  function sendGroupMessage(groupId: string, text: string, attachment?: { key: string; type: string; name: string; size: number; previewUrl?: string | null }) {
     const now = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     const nowIso = new Date().toISOString()
     setGroups(prev => prev.map(g => g.id !== groupId ? g : {
@@ -1608,7 +1608,7 @@ function MessagesTab({ messages, setMessages, groups, setGroups }: {
         senderBg: 'bg-ink',
         text,
         time: now,
-        attachmentUrl: attachment?.url ?? null,
+        attachmentUrl: attachment?.previewUrl ?? null,
         attachmentType: (attachment?.type ?? null) as GroupMessage['attachmentType'],
         attachmentName: attachment?.name ?? null,
         attachmentSize: attachment?.size ?? null,
@@ -1620,7 +1620,7 @@ function MessagesTab({ messages, setMessages, groups, setGroups }: {
       body: JSON.stringify({
         group_id: groupId,
         body: text,
-        attachment_url: attachment?.url ?? null,
+        attachment_key: attachment?.key ?? null,
         attachment_type: attachment?.type ?? null,
         attachment_name: attachment?.name ?? null,
         attachment_size: attachment?.size ?? null,

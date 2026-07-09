@@ -1,9 +1,13 @@
 'use client'
 
 import { useRef } from 'react'
-import { Send, Smile, Paperclip, Loader2, Clock } from 'lucide-react'
+import { Send, Smile, Paperclip, Loader2, Clock, X } from 'lucide-react'
 import { AttachmentPreview } from '@/components/message-attachment'
 import { EmojiPicker } from './ui'
+
+// Accepted attachment types — restricts the OS file picker so unsupported files
+// are greyed out. HEIC is added explicitly since `image/*` misses it on some OSes.
+export const ATTACHMENT_ACCEPT = 'image/*,.heic,.heif,video/*,.pdf'
 
 // Shared message composer: textarea + emoji + attachment + optional rate-limit meter.
 // When `disabledNode` is provided it replaces the input entirely (blocked/frozen states).
@@ -13,6 +17,7 @@ export function MessageComposer({
   sending = false, uploading = false,
   showEmoji, onToggleEmoji,
   pendingFile, onPickFile, onRemoveFile,
+  uploadProgress = null, onCancelUpload,
   rateRemaining, rateWarnThreshold, atRateLimit = false,
   disabledNode,
 }: {
@@ -28,6 +33,8 @@ export function MessageComposer({
   pendingFile: File | null
   onPickFile: (f: File) => void
   onRemoveFile: () => void
+  uploadProgress?: number | null
+  onCancelUpload?: () => void
   rateRemaining?: number
   rateWarnThreshold?: number
   atRateLimit?: boolean
@@ -65,7 +72,26 @@ export function MessageComposer({
         </div>
       )}
 
-      {pendingFile && <AttachmentPreview file={pendingFile} onRemove={onRemoveFile} />}
+      {pendingFile && (
+        uploadProgress != null ? (
+          <div className="mb-2 px-3 py-2.5 bg-ink-50 rounded-xl border border-ink-100">
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-xs font-medium text-ink truncate flex-1 mr-2">{pendingFile.name}</p>
+              <span className="text-[10px] text-ink-400 tabular-nums mr-2">{uploadProgress}%</span>
+              {onCancelUpload && (
+                <button type="button" onClick={onCancelUpload} className="text-ink-300 hover:text-ink transition-colors" aria-label="Cancel upload">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="h-1.5 rounded-full bg-ink-100 overflow-hidden">
+              <div className="h-full bg-ink rounded-full transition-all" style={{ width: `${Math.max(4, uploadProgress)}%` }} />
+            </div>
+          </div>
+        ) : (
+          <AttachmentPreview file={pendingFile} onRemove={onRemoveFile} />
+        )
+      )}
 
       <div className="flex items-end gap-2.5">
         <button
@@ -78,7 +104,7 @@ export function MessageComposer({
         <input
           ref={fileRef}
           type="file"
-          accept="image/*,video/*,.pdf"
+          accept={ATTACHMENT_ACCEPT}
           className="hidden"
           onChange={e => {
             const f = e.target.files?.[0]

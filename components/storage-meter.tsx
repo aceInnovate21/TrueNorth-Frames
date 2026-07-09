@@ -26,6 +26,7 @@ export function StorageMeter({ usage, className = '' }: { usage: StorageUsage | 
         <span>Photos {pctOf(usage.photos_bytes)}%</span>
         <span>Videos {pctOf(usage.videos_bytes)}%</span>
         {usage.profile_bytes > 0 && <span>Profile {pctOf(usage.profile_bytes)}%</span>}
+        {usage.messages_bytes > 0 && <span>Messages {pctOf(usage.messages_bytes)}%</span>}
         {near && (
           <span className={`ml-auto font-semibold ${full ? 'text-red-500' : 'text-amber-600'}`}>
             {full ? 'Storage full — delete to free space' : 'Almost full'}

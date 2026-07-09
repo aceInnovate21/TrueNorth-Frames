@@ -24,6 +24,12 @@ export const PLATFORM_CONFIG = {
 
   // ── messaging ─────────────────────────────────────────────────────────────
   max_message_length:                   1000,
+  // Attachment ceilings (private bucket). Images are compressed to WebP in the
+  // browser first, so their limit is on the small derivative. Video is stored
+  // raw (no transcode) so its cap is the real source size.
+  max_message_image_bytes:              10 * 1024 * 1024,  // 10 MB (compressed webp)
+  max_message_video_bytes:              50 * 1024 * 1024,  // 50 MB (raw source)
+  max_message_pdf_bytes:                15 * 1024 * 1024,  // 15 MB
   max_messages_per_hour:                20,   // DM cap (client → photographer)
   max_group_messages_per_hour:          30,   // group chat cap (photographer sender) — higher, collaborative context
   max_unread_conversations_shown:       15,
