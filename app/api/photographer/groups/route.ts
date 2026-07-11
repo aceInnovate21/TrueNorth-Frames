@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
 import { PLATFORM_CONFIG } from '@/lib/platform-config'
+import { resolveAttachmentUrl } from '@/lib/messaging'
 
 function initials(name: string): string {
   return name.split(' ').filter(Boolean).map(w => w[0].toUpperCase()).slice(0, 2).join('')
@@ -99,10 +100,16 @@ export async function GET() {
     // Fetch recent messages (last 20 per group)
     const { data: allMessages } = await db
       .from('group_messages')
-      .select('id, group_id, sender_id, body, created_at, attachment_url, attachment_type, attachment_name, attachment_size')
+      .select('id, group_id, sender_id, body, created_at, attachment_key, attachment_url, attachment_type, attachment_name, attachment_size')
       .in('group_id', groupIds)
       .order('created_at', { ascending: false })
       .limit(100)
+
+    // Pre-resolve signed URLs for any attachments (private-bucket keys → signed GET)
+    const attachmentUrlByMsg: Record<string, string | null> = {}
+    await Promise.all((allMessages ?? []).map(async (m: any) => {
+      if (m.attachment_key || m.attachment_url) attachmentUrlByMsg[m.id] = await resolveAttachmentUrl(m)
+    }))
 
     // Fetch sender display names
     const senderIds = Array.from(new Set((allMessages ?? []).map((m: any) => m.sender_id)))
@@ -170,7 +177,7 @@ export async function GET() {
           text: m.body,
           time: relativeTime(m.created_at),
           isSystem,
-          attachmentUrl: m.attachment_url ?? null,
+          attachmentUrl: attachmentUrlByMsg[m.id] ?? null,
           attachmentType: m.attachment_type ?? null,
           attachmentName: m.attachment_name ?? null,
           attachmentSize: m.attachment_size ?? null,

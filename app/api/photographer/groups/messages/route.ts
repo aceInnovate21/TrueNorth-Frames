@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
 import { PLATFORM_CONFIG } from '@/lib/platform-config'
 import { notify } from '@/lib/notify'
+import { claimMessageAttachment, resolveAttachmentUrl } from '@/lib/messaging'
 
 // POST /api/photographer/groups/messages — send a message to a group
 export async function POST(request: NextRequest) {
@@ -9,9 +10,9 @@ export async function POST(request: NextRequest) {
   if (!user) return unauthorized()
 
   const body = await request.json()
-  const { group_id, body: messageBody, is_system, is_leave, attachment_url, attachment_type, attachment_name, attachment_size } = body
+  const { group_id, body: messageBody, is_system, is_leave, attachment_key, attachment_type, attachment_name, attachment_size } = body
   if (!group_id) return badRequest('group_id is required')
-  if (!messageBody?.trim() && !attachment_url) return badRequest('body or attachment is required')
+  if (!messageBody?.trim() && !attachment_key) return badRequest('body or attachment is required')
 
   const db = adminDb as any
 
@@ -48,15 +49,17 @@ export async function POST(request: NextRequest) {
       group_id,
       sender_id: me.id,
       body: finalBody,
-      attachment_url: attachment_url ?? null,
+      attachment_key: attachment_key ?? null,
       attachment_type: attachment_type ?? null,
       attachment_name: attachment_name ?? null,
       attachment_size: attachment_size ?? null,
     })
-    .select('id, group_id, sender_id, body, created_at, attachment_url, attachment_type, attachment_name, attachment_size')
+    .select('id, group_id, sender_id, body, created_at, attachment_key, attachment_url, attachment_type, attachment_name, attachment_size')
     .single()
 
   if (error) return serverError('Failed to send message')
+
+  if (attachment_key) await claimMessageAttachment(db, attachment_key, user.id, data.id)
 
   // For DM groups: notify the other member
   if (!is_system && !is_leave) {
@@ -102,5 +105,5 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json(data)
+  return NextResponse.json({ ...data, attachment_url: await resolveAttachmentUrl(data) })
 }

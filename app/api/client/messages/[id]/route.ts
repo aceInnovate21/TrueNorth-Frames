@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, serverError } from '@/lib/api-helpers'
 import { notify } from '@/lib/notify'
-import { isPhotographerBlocked, sendBlockedReason } from '@/lib/messaging'
+import { isPhotographerBlocked, sendBlockedReason, claimMessageAttachment, resolveAttachmentUrl } from '@/lib/messaging'
 
 // GET /api/client/messages/[id] — fetch messages for a conversation, mark photographer messages as read
 export async function GET(
@@ -34,24 +34,24 @@ export async function GET(
 
   const { data: msgs, error } = await db
     .from('messages')
-    .select('id, body, sender_type, created_at, attachment_url, attachment_type, attachment_name, attachment_size')
+    .select('id, body, sender_type, created_at, attachment_key, attachment_url, attachment_type, attachment_name, attachment_size')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true })
 
   if (error) return serverError('Failed to load messages')
 
   return NextResponse.json(
-    (msgs ?? []).map((m: any) => ({
+    await Promise.all((msgs ?? []).map(async (m: any) => ({
       id: m.id,
       from: m.sender_type === 'client' ? 'me' : 'them',
       text: m.body,
       time: m.created_at,
       isSystem: (m.body as string).startsWith('📅'),
-      attachmentUrl: m.attachment_url ?? null,
+      attachmentUrl: await resolveAttachmentUrl(m),
       attachmentType: m.attachment_type ?? null,
       attachmentName: m.attachment_name ?? null,
       attachmentSize: m.attachment_size ?? null,
-    }))
+    })))
   )
 }
 
@@ -82,9 +82,9 @@ export async function POST(
   if (blockReason) return NextResponse.json({ error: blockReason }, { status: 403 })
 
   const body = await request.json()
-  const { text, attachment_url, attachment_type, attachment_name, attachment_size } = body
+  const { text, attachment_key, attachment_type, attachment_name, attachment_size } = body
 
-  if (!text?.trim() && !attachment_url) {
+  if (!text?.trim() && !attachment_key) {
     return NextResponse.json({ error: 'Message body is required' }, { status: 400 })
   }
 
@@ -95,15 +95,18 @@ export async function POST(
       sender_id: user.id,
       sender_type: 'client',
       body: text?.trim() ?? '',
-      attachment_url: attachment_url ?? null,
+      attachment_key: attachment_key ?? null,
       attachment_type: attachment_type ?? null,
       attachment_name: attachment_name ?? null,
       attachment_size: attachment_size ?? null,
     })
-    .select('id, body, sender_type, created_at, attachment_url, attachment_type, attachment_name, attachment_size')
+    .select('id, body, sender_type, created_at, attachment_key, attachment_url, attachment_type, attachment_name, attachment_size')
     .single()
 
   if (error) return serverError('Failed to send message')
+
+  // Link the attachment's storage asset to this message (quota + cleanup)
+  if (attachment_key) await claimMessageAttachment(db, attachment_key, user.id, msg.id)
 
   // Update conversation last_message_at
   await db
@@ -143,7 +146,7 @@ export async function POST(
     text: msg.body,
     time: msg.created_at,
     isSystem: false,
-    attachmentUrl: msg.attachment_url ?? null,
+    attachmentUrl: await resolveAttachmentUrl(msg),
     attachmentType: msg.attachment_type ?? null,
     attachmentName: msg.attachment_name ?? null,
     attachmentSize: msg.attachment_size ?? null,

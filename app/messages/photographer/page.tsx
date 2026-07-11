@@ -8,6 +8,7 @@ import {
   Plus, UserPlus, Loader2, Ban,
 } from 'lucide-react'
 import { PLATFORM_CONFIG } from '@/lib/platform-config'
+import { uploadMessageAttachment } from '@/lib/message-attachment-upload'
 import {
   MessageThread, MessageComposer, ConversationRow, Avatar,
   initialsOf, avatarBg, timeAgo,
@@ -161,6 +162,9 @@ function PhotographerMessagesInner() {
   const [loadingList, setLoadingList] = useState(true)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const uploadAbortRef = useRef<AbortController | null>(null)
 
   // Load list + connections
   useEffect(() => {
@@ -225,48 +229,52 @@ function PhotographerMessagesInner() {
     const text = input.trim()
     if ((!text && !pendingFile) || text.length > MAX_MESSAGE_LENGTH || sending || uploading) return
     if (activeKind === 'client' && (blockedByClient || frozen)) return
-    setSending(true); setInput(''); setShowEmoji(false)
+    setSending(true); setShowEmoji(false)
 
-    let attachmentUrl: string | null = null, attachmentType: string | null = null, attachmentName: string | null = null, attachmentSize: number | null = null
+    let attachmentKey: string | null = null, attachmentType: string | null = null, attachmentName: string | null = null, attachmentSize: number | null = null, attachmentPreview: string | null = null
 
-    async function upload(endpoint: string, key: 'conversation_id' | 'group_id') {
-      setUploading(true)
+    if (pendingFile && activeId) {
+      setUploading(true); setUploadProgress(0)
+      const controller = new AbortController(); uploadAbortRef.current = controller
+      const target = activeKind === 'group'
+        ? { type: 'group' as const, id: activeId }
+        : { type: 'conversation' as const, id: activeId }
       try {
-        const fd = new FormData()
-        fd.append('file', pendingFile as File)
-        fd.append(key, activeId as string)
-        const upRes = await fetch(endpoint, { method: 'POST', body: fd })
-        if (upRes.ok) {
-          const up = await upRes.json()
-          attachmentUrl = up.url; attachmentType = up.type; attachmentName = up.name; attachmentSize = up.size
-        }
-      } finally { setPendingFile(null); setUploading(false) }
+        const up = await uploadMessageAttachment(pendingFile, target, { onProgress: setUploadProgress, signal: controller.signal })
+        attachmentKey = up.key; attachmentType = up.type; attachmentName = up.name; attachmentSize = up.size
+        if (up.type === 'image') attachmentPreview = URL.createObjectURL(pendingFile)
+      } catch (err: any) {
+        setUploading(false); setUploadProgress(null); uploadAbortRef.current = null; setSending(false)
+        if (err?.name !== 'AbortError') setUploadError(err?.message ?? 'Attachment failed. Try again.')
+        return
+      }
+      setPendingFile(null); setUploading(false); setUploadProgress(null); uploadAbortRef.current = null
     }
 
+    setInput('')
+
     if (activeKind === 'client' && activeId) {
-      if (pendingFile) await upload('/api/photographer/messages/upload', 'conversation_id')
-      const optimistic: ClientMsg = { id: `opt-${Date.now()}`, from: 'me', text, time: new Date().toISOString(), attachmentUrl, attachmentType, attachmentName, attachmentSize }
+      const optimistic: ClientMsg = { id: `opt-${Date.now()}`, from: 'me', text, time: new Date().toISOString(), attachmentUrl: attachmentPreview, attachmentType, attachmentName, attachmentSize }
       setClientThread(prev => [...prev, optimistic])
       const res = await fetch(`/api/photographer/messages/${activeId}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, attachment_url: attachmentUrl, attachment_type: attachmentType, attachment_name: attachmentName, attachment_size: attachmentSize }),
+        body: JSON.stringify({ text, attachment_key: attachmentKey, attachment_type: attachmentType, attachment_name: attachmentName, attachment_size: attachmentSize }),
       })
       if (res.ok) {
         const msg = await res.json()
         setClientThread(prev => prev.map(m => (m.id === optimistic.id ? msg : m)))
-        setClientConvs(prev => prev.map(c => (c.id === activeId ? { ...c, lastMessage: text, lastMessageAt: new Date().toISOString() } : c)))
+        setClientConvs(prev => prev.map(c => (c.id === activeId ? { ...c, lastMessage: text || (attachmentName ? `📎 ${attachmentName}` : ''), lastMessageAt: new Date().toISOString() } : c)))
       } else {
         setClientThread(prev => prev.filter(m => m.id !== optimistic.id))
         setInput(text)
       }
     } else if (activeKind === 'group' && activeId) {
-      if (pendingFile) await upload('/api/photographer/groups/messages/upload', 'group_id')
       const tempId = -Date.now()
-      const optimistic: GroupMsg = { id: tempId, senderId: 'me', senderName: 'You', senderInitials: '?', senderBg: 'bg-ink', text, time: new Date().toISOString(), isSystem: false, attachmentUrl, attachmentType, attachmentName, attachmentSize }
+      const optimistic: GroupMsg = { id: tempId, senderId: 'me', senderName: 'You', senderInitials: '?', senderBg: 'bg-ink', text, time: new Date().toISOString(), isSystem: false, attachmentUrl: attachmentPreview, attachmentType, attachmentName, attachmentSize }
       setGroups(prev => prev.map(g => (g.id === activeId ? { ...g, messages: [...g.messages, optimistic], lastActivityAt: new Date().toISOString() } : g)))
       const res = await fetch('/api/photographer/groups/messages', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ group_id: activeId, body: text, attachment_url: attachmentUrl, attachment_type: attachmentType, attachment_name: attachmentName, attachment_size: attachmentSize }),
+        body: JSON.stringify({ group_id: activeId, body: text, attachment_key: attachmentKey, attachment_type: attachmentType, attachment_name: attachmentName, attachment_size: attachmentSize }),
       })
       if (res.ok) {
         const msg = await res.json()
@@ -448,6 +456,13 @@ function PhotographerMessagesInner() {
                 emptyState={<p className="text-center text-xs text-ink-300 pt-8">{activeKind === 'group' ? 'No messages yet — say hello!' : 'No messages yet'}</p>}
               />
 
+              {uploadError && (
+                <button type="button" onClick={() => setUploadError(null)}
+                  className="w-full text-left px-4 py-2 bg-red-50 border-t border-red-100 flex items-center gap-2">
+                  <span className="text-xs text-red-600 flex-1">{uploadError}</span>
+                  <span className="text-[10px] text-red-400">dismiss</span>
+                </button>
+              )}
               <MessageComposer
                 value={input}
                 onChange={setInput}
@@ -459,8 +474,10 @@ function PhotographerMessagesInner() {
                 showEmoji={showEmoji}
                 onToggleEmoji={setShowEmoji}
                 pendingFile={pendingFile}
-                onPickFile={setPendingFile}
+                onPickFile={(f) => { setUploadError(null); setPendingFile(f) }}
                 onRemoveFile={() => setPendingFile(null)}
+                uploadProgress={uploadProgress}
+                onCancelUpload={() => uploadAbortRef.current?.abort()}
                 disabledNode={composerDisabledNode}
               />
             </>

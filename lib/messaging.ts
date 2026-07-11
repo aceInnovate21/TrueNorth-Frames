@@ -11,6 +11,36 @@
  * Admin freeze (`conversations.is_frozen`) also hard-stops both parties.
  */
 
+import { createPrivateDownloadUrl } from './r2'
+
+/**
+ * Link a just-uploaded attachment's orphan storage_asset to its message so it
+ * counts against quota and survives orphan cleanup.
+ */
+export async function claimMessageAttachment(
+  db: any, key: string, ownerId: string, messageId: string
+): Promise<void> {
+  await db
+    .from('storage_assets')
+    .update({ orphan_expires_at: null, entity_id: messageId })
+    .eq('key', key)
+    .eq('owner_id', ownerId)
+    .eq('entity_type', 'message_attachment')
+}
+
+/**
+ * Resolve a message row's attachment to a viewable URL: a short-lived signed
+ * URL for private-bucket keys, or the legacy public URL for pre-migration rows.
+ */
+export async function resolveAttachmentUrl(
+  m: { attachment_key?: string | null; attachment_url?: string | null }
+): Promise<string | null> {
+  if (m.attachment_key) {
+    try { return await createPrivateDownloadUrl(m.attachment_key) } catch { return null }
+  }
+  return m.attachment_url ?? null
+}
+
 export interface ConversationModeration {
   /** Client has blocked the photographer in this conversation. */
   blocked: boolean

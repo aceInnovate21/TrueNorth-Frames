@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { PLATFORM_CONFIG } from '@/lib/platform-config'
+import { uploadMessageAttachment } from '@/lib/message-attachment-upload'
 import {
   Ban, CheckCircle2, ChevronLeft, ChevronRight, LogOut, Paperclip, Plus, Search,
   Send, Shield, Trash2, UserCheck, UserMinus, UserPlus, Users, X, Zap, FileText, Play,
@@ -472,7 +473,7 @@ export function GroupChat({
   allPhotographers: Photographer[]
   connected: Photographer[]
   isOwner: boolean
-  onSend: (groupId: string, text: string, attachment?: { url: string; type: string; name: string; size: number }) => void
+  onSend: (groupId: string, text: string, attachment?: { key: string; type: string; name: string; size: number; previewUrl?: string | null }) => void
   onClose: () => void
   onLeave: (groupId: string) => void
   onRemoveMember: (groupId: string, memberId: string) => void
@@ -516,29 +517,23 @@ export function GroupChat({
   }
 
   async function sendFile(file: File) {
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('group_id', group.id)
     setUploading(true)
     setUploadProgress('Uploading…')
     try {
-      const res = await fetch('/api/photographer/groups/messages/upload', { method: 'POST', body: fd })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        setUploadProgress(err.error ?? 'Upload failed')
-        setTimeout(() => setUploadProgress(null), 3000)
-        return
-      }
-      const att = await res.json()
-      onSend(group.id, draft.trim(), { url: att.url, type: att.type, name: att.name, size: att.size })
+      const att = await uploadMessageAttachment(file, { type: 'group', id: group.id }, {
+        onProgress: pct => setUploadProgress(`Uploading… ${pct}%`),
+      })
+      const previewUrl = att.type === 'image' ? URL.createObjectURL(file) : null
+      onSend(group.id, draft.trim(), { key: att.key, type: att.type, name: att.name, size: att.size, previewUrl })
       setDraft('')
-    } catch {
-      setUploadProgress('Upload failed')
+    } catch (err: any) {
+      setUploadProgress(err?.message ?? 'Upload failed')
       setTimeout(() => setUploadProgress(null), 3000)
+      return
     } finally {
       setUploading(false)
-      if (!uploadProgress?.includes('failed')) setUploadProgress(null)
     }
+    setUploadProgress(null)
   }
 
   const members = allPhotographers.filter(p => group.memberIds.includes(p.id) && p.id !== 'me')
@@ -846,7 +841,7 @@ export function GroupChat({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*,video/*,application/pdf"
+              accept="image/*,.heic,.heif,video/*,.pdf"
               className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) sendFile(f); e.target.value = '' }}
             />
@@ -1091,7 +1086,7 @@ export function PhotographerConnections({
     }).catch(() => {})
   }
 
-  function sendMessage(groupId: string, text: string, attachment?: { url: string; type: string; name: string; size: number }) {
+  function sendMessage(groupId: string, text: string, attachment?: { key: string; type: string; name: string; size: number; previewUrl?: string | null }) {
     setGroups(prev => prev.map(g =>
       g.id === groupId
         ? {
@@ -1104,7 +1099,7 @@ export function PhotographerConnections({
               senderBg: 'bg-ink',
               text,
               time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-              attachmentUrl: attachment?.url ?? null,
+              attachmentUrl: attachment?.previewUrl ?? null,
               attachmentType: (attachment?.type ?? null) as GroupMessage['attachmentType'],
               attachmentName: attachment?.name ?? null,
               attachmentSize: attachment?.size ?? null,
@@ -1118,7 +1113,7 @@ export function PhotographerConnections({
       body: JSON.stringify({
         group_id: groupId,
         body: text,
-        attachment_url: attachment?.url ?? null,
+        attachment_key: attachment?.key ?? null,
         attachment_type: attachment?.type ?? null,
         attachment_name: attachment?.name ?? null,
         attachment_size: attachment?.size ?? null,

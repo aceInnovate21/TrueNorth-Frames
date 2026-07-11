@@ -10,16 +10,20 @@ import { PLATFORM_CONFIG } from './platform-config'
 
 export const STORAGE_QUOTA_BYTES = PLATFORM_CONFIG.max_storage_bytes_per_photographer
 
-const COUNTED_ENTITY_TYPES = ['portfolio_photo', 'portfolio_video', 'avatar', 'cover'] as const
+// A photographer's own sent message attachments count toward their quota.
+// (Client-sent attachments have a different owner_id, so they're tracked for
+// cleanup but never gate a client's messaging.)
+const COUNTED_ENTITY_TYPES = ['portfolio_photo', 'portfolio_video', 'avatar', 'cover', 'message_attachment'] as const
 
 export interface StorageUsage {
   photos_bytes: number
   videos_bytes: number
-  profile_bytes: number   // avatar + cover
+  profile_bytes: number    // avatar + cover
+  messages_bytes: number   // sent message/DM attachments
   used_bytes: number
   quota_bytes: number
   remaining_bytes: number
-  pct: number             // 0–100, rounded
+  pct: number              // 0–100, rounded
 }
 
 export async function getStorageUsage(db: any, userId: string): Promise<StorageUsage> {
@@ -33,14 +37,16 @@ export async function getStorageUsage(db: any, userId: string): Promise<StorageU
   let photos = 0
   let videos = 0
   let profile = 0
+  let messages = 0
   for (const row of data ?? []) {
     const bytes = Number(row.size_bytes) || 0
     if (row.entity_type === 'portfolio_photo') photos += bytes
     else if (row.entity_type === 'portfolio_video') videos += bytes
+    else if (row.entity_type === 'message_attachment') messages += bytes
     else profile += bytes // avatar | cover
   }
 
-  const used = photos + videos + profile
+  const used = photos + videos + profile + messages
   const quota = STORAGE_QUOTA_BYTES
   const remaining = Math.max(0, quota - used)
   const pct = quota > 0 ? Math.min(100, Math.round((used / quota) * 100)) : 0
@@ -49,6 +55,7 @@ export async function getStorageUsage(db: any, userId: string): Promise<StorageU
     photos_bytes: photos,
     videos_bytes: videos,
     profile_bytes: profile,
+    messages_bytes: messages,
     used_bytes: used,
     quota_bytes: quota,
     remaining_bytes: remaining,
