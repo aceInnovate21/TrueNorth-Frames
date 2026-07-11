@@ -8,6 +8,10 @@ export const r2 = new S3Client({
     accessKeyId: process.env.R2_ACCESS_KEY_ID!,
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
   },
+  // Disable SDK checksum — R2 doesn't require it and the browser XHR
+  // can't send the signed checksum headers, causing CORS preflight failures.
+  requestChecksumCalculation: 'WHEN_REQUIRED',
+  responseChecksumValidation: 'WHEN_REQUIRED',
 })
 
 // Public bucket — portfolio photos/videos, avatars, covers, package banners.
