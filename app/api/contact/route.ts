@@ -38,11 +38,11 @@ export async function POST(request: NextRequest) {
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
               <tr>
                 <td style="padding: 6px 0; color: #666; font-size: 13px; width: 100px;">Name</td>
-                <td style="padding: 6px 0; font-size: 13px; font-weight: 600;">${name.trim()}</td>
+                <td style="padding: 6px 0; font-size: 13px; font-weight: 600;">${name.trim().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</td>
               </tr>
               <tr>
                 <td style="padding: 6px 0; color: #666; font-size: 13px;">Email</td>
-                <td style="padding: 6px 0; font-size: 13px;"><a href="mailto:${email.trim()}" style="color: #0a0a0a;">${email.trim()}</a></td>
+                <td style="padding: 6px 0; font-size: 13px;">${email.trim().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</td>
               </tr>
               <tr>
                 <td style="padding: 6px 0; color: #666; font-size: 13px;">Category</td>
@@ -51,9 +51,9 @@ export async function POST(request: NextRequest) {
             </table>
             <div style="background: white; border: 1px solid #e5e5e0; border-radius: 8px; padding: 16px;">
               <p style="margin: 0 0 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #999;">Message</p>
-              <p style="margin: 0; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${message.trim()}</p>
+              <p style="margin: 0; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${message.trim().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>
             </div>
-            <p style="margin: 16px 0 0; font-size: 11px; color: #aaa;">Reply directly to this email to respond to ${name.trim()}.</p>
+            <p style="margin: 16px 0 0; font-size: 11px; color: #aaa;">Reply directly to this email to respond to ${name.trim().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}.</p>
           </div>
         </div>
       `,

@@ -109,7 +109,7 @@ export async function PATCH(request: NextRequest) {
   const { id, status, photographer_note } = body
   if (!id || !status) return NextResponse.json({ error: 'id and status are required' }, { status: 400 })
 
-  const allowed = ['approved', 'declined', 'completed', 'pending', 'cancelled']
+  const allowed = ['approved', 'declined', 'completed', 'pending', 'cancelled', 'cancellation_pending']
   if (!allowed.includes(status)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
   }

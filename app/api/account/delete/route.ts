@@ -26,7 +26,7 @@ export async function POST() {
   await db
     .from('photographer_profiles')
     .update({ profile_status: 'banned' })
-    .eq('id', user.id)
+    .eq('user_id', user.id)
 
   // Revoke Supabase auth session using the service-role admin client
   const supabaseAdmin = createClient(

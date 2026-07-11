@@ -15,9 +15,14 @@ async function getUserInfo(userId: string) {
 
   const { data: userData } = await admin
     .from('users')
-    .select('role')
+    .select('role, account_status')
     .eq('id', userId)
     .maybeSingle()
+
+  // Suspended or deactivated accounts are treated as signed-out
+  if (userData?.account_status === 'suspended' || userData?.account_status === 'deactivated') {
+    return { role: '__suspended__', photographerStatus: null }
+  }
 
   const role = userData?.role ?? null
 
@@ -94,16 +99,14 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
+  // Suspended or deactivated account — force sign out
+  if (role === '__suspended__') {
+    return forceSignOut(request, 'suspended')
+  }
+
   // Rejected photographer — clear session
   if (role === 'photographer' && photographerStatus === 'rejected') {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    url.searchParams.set('error', 'rejected')
-    const res = NextResponse.redirect(url)
-    request.cookies.getAll().forEach(({ name }) => {
-      if (name.startsWith('sb-')) res.cookies.set(name, '', { maxAge: 0, path: '/' })
-    })
-    return res
+    return forceSignOut(request, 'rejected')
   }
 
   // Already logged in — bounce off auth pages to dashboard

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError, notFound } from '@/lib/api-helpers'
-import { uploadToR2 } from '@/lib/r2'
+import { uploadToR2, deleteFromR2, BUCKET } from '@/lib/r2'
 import { randomUUID } from 'crypto'
 
 const MAX_BANNER_BYTES = 5 * 1024 * 1024 // 5 MB
@@ -10,8 +10,15 @@ async function getPhotographerId(db: any, userId: string): Promise<string | null
   return data?.id ?? null
 }
 
+function keyFromUrl(url: string): string | null {
+  try {
+    const r2Base = process.env.R2_PUBLIC_URL ?? ''
+    if (r2Base && url.startsWith(r2Base + '/')) return url.slice(r2Base.length + 1)
+    return null
+  } catch { return null }
+}
+
 // POST /api/photographer/packages/banner
-// multipart/form-data: file (image), package_id
 export async function POST(request: NextRequest) {
   const { adminDb, user } = await getServerSession()
   if (!user) return unauthorized()
@@ -29,10 +36,9 @@ export async function POST(request: NextRequest) {
   if (!file.type.startsWith('image/')) return badRequest('Only image files are allowed')
   if (file.size > MAX_BANNER_BYTES) return badRequest('Banner image must be under 5 MB')
 
-  // Verify the package belongs to this photographer
   const { data: pkg } = await db
     .from('packages')
-    .select('id')
+    .select('id, banner_url')
     .eq('id', packageId)
     .eq('photographer_id', photographerId)
     .single()
@@ -51,6 +57,12 @@ export async function POST(request: NextRequest) {
   const r2PublicBase = process.env.R2_PUBLIC_URL ?? ''
   const bannerUrl = `${r2PublicBase}/${key}`
 
+  // Delete old banner from R2 if one existed
+  if (pkg.banner_url) {
+    const oldKey = keyFromUrl(pkg.banner_url)
+    if (oldKey) deleteFromR2(oldKey).catch(() => {})
+  }
+
   const { error } = await db
     .from('packages')
     .update({ banner_url: bannerUrl })
@@ -58,6 +70,17 @@ export async function POST(request: NextRequest) {
     .eq('photographer_id', photographerId)
 
   if (error) return serverError('Failed to save banner URL')
+
+  // Track in storage_assets so quota and orphan cleanup apply
+  await db.from('storage_assets').insert({
+    owner_id: user.id,
+    bucket: BUCKET,
+    key,
+    content_type: file.type,
+    size_bytes: buffer.byteLength,
+    entity_type: 'cover',
+    orphan_expires_at: null,
+  }).catch(() => {})
 
   return NextResponse.json({ banner_url: bannerUrl })
 }
@@ -73,6 +96,19 @@ export async function DELETE(request: NextRequest) {
 
   const packageId = request.nextUrl.searchParams.get('package_id')
   if (!packageId) return badRequest('package_id is required')
+
+  const { data: pkg } = await db
+    .from('packages')
+    .select('banner_url')
+    .eq('id', packageId)
+    .eq('photographer_id', photographerId)
+    .single()
+
+  // Delete from R2 if we have the key
+  if (pkg?.banner_url) {
+    const oldKey = keyFromUrl(pkg.banner_url)
+    if (oldKey) deleteFromR2(oldKey).catch(() => {})
+  }
 
   const { error } = await db
     .from('packages')

@@ -64,6 +64,17 @@ export async function POST(request: NextRequest) {
   if (!billing_type) return badRequest('billing_type is required')
   if (!requested_date) return badRequest('requested_date is required')
   if (!time_slot?.trim()) return badRequest('time_slot is required')
+
+  // Verify photographer is approved and active before accepting a booking
+  const { data: photProfile } = await db
+    .from('photographer_profiles')
+    .select('profile_status, user_id')
+    .eq('id', photographer_id)
+    .maybeSingle()
+  if (!photProfile) return badRequest('Photographer not found')
+  if (photProfile.profile_status !== 'approved') {
+    return NextResponse.json({ error: 'This photographer is not currently accepting bookings' }, { status: 422 })
+  }
   // Optional multi-day range: end date, when present, must be after the start.
   const endDate: string | null =
     requested_end_date && requested_end_date > requested_date ? requested_end_date : null
