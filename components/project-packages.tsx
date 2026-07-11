@@ -415,7 +415,25 @@ export function ProjectPackages({
     const isNew = p.id.startsWith(TEMP_PREFIX)
     if (isNew && onPersistCreate) {
       const realId = await onPersistCreate(p)
-      if (realId) setPackages(prev => prev.map(x => x.id === p.id ? { ...p, id: realId } : x))
+      if (realId) {
+        // If a banner was selected before save (stored as blob: URL), upload it now
+        // that we have a real package ID
+        let finalBannerUrl = p.banner_url
+        if (p.banner_url?.startsWith('blob:')) {
+          try {
+            const blob = await fetch(p.banner_url).then(r => r.blob())
+            const fd = new FormData()
+            fd.append('file', new File([blob], 'banner.webp', { type: 'image/webp' }))
+            fd.append('package_id', realId)
+            const res = await fetch('/api/photographer/packages/banner', { method: 'POST', body: fd })
+            if (res.ok) {
+              const data = await res.json()
+              finalBannerUrl = data.banner_url
+            }
+          } catch { /* non-fatal — banner just won't show */ }
+        }
+        setPackages(prev => prev.map(x => x.id === p.id ? { ...p, id: realId, banner_url: finalBannerUrl } : x))
+      }
     } else {
       if (p.popular) {
         setPackages(prev => prev.map(x => {
