@@ -6,6 +6,21 @@ import type { NextRequest } from 'next/server'
 const PROTECTED_PREFIXES = ['/dashboard', '/messages', '/admin']
 const ADMIN_PUBLIC = ['/admin/login']
 
+function forceSignOut(request: NextRequest, reason: string): NextResponse {
+  const url = request.nextUrl.clone()
+  url.pathname = '/login'
+  url.search = ''
+  url.searchParams.set('error', reason)
+  const res = NextResponse.redirect(url)
+  // Clear all Supabase auth cookies
+  for (const cookie of request.cookies.getAll()) {
+    if (cookie.name.startsWith('sb-')) {
+      res.cookies.set(cookie.name, '', { maxAge: 0, path: '/' })
+    }
+  }
+  return res
+}
+
 async function getUserInfo(userId: string) {
   const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
