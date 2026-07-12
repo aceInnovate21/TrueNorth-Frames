@@ -103,6 +103,28 @@ export async function POST(request: NextRequest) {
     return serverError('Failed to submit review')
   }
 
+  // Recalculate and persist native_avg_rating + native_review_count
+  try {
+    const { data: allReviews } = await db
+      .from('reviews')
+      .select('rating')
+      .eq('photographer_id', booking.photographer_id)
+      .eq('flag_status', 'none')
+
+    if (allReviews && allReviews.length > 0) {
+      const avg = allReviews.reduce((sum: number, r: any) => sum + r.rating, 0) / allReviews.length
+      await db
+        .from('photographer_profiles')
+        .update({
+          native_avg_rating: Math.round(avg * 100) / 100,
+          native_review_count: allReviews.length,
+        })
+        .eq('id', booking.photographer_id)
+    }
+  } catch (e) {
+    console.error('[reviews POST] rating sync error:', e)
+  }
+
   // Email photographer — fire and forget
   try {
     const { data: photProfile } = await db
