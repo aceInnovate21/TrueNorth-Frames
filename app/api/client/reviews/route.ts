@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
       .from('reviews')
       .select('rating')
       .eq('photographer_id', booking.photographer_id)
-      .eq('flag_status', 'none')
+      .in('flag_status', ['none', 'flagged'])
 
     if (allReviews && allReviews.length > 0) {
       const avg = allReviews.reduce((sum: number, r: any) => sum + r.rating, 0) / allReviews.length

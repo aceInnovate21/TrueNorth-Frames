@@ -74,29 +74,28 @@ export async function PATCH(request: NextRequest) {
 
   if (reviewError) return serverError('Failed to update review')
 
-  // Resync native_avg_rating + native_review_count after remove/dismiss
-  if (action === 'remove') {
-    try {
-      const { data: removedReview } = await db
-        .from('reviews').select('photographer_id').eq('id', review_id).single()
-      if (removedReview?.photographer_id) {
-        const { data: remaining } = await db
-          .from('reviews')
-          .select('rating')
-          .eq('photographer_id', removedReview.photographer_id)
-          .eq('flag_status', 'none')
-        const count = remaining?.length ?? 0
-        const avg = count > 0
-          ? remaining.reduce((s: number, r: any) => s + r.rating, 0) / count
-          : 0
-        await db.from('photographer_profiles').update({
-          native_avg_rating: Math.round(avg * 100) / 100,
-          native_review_count: count,
-        }).eq('id', removedReview.photographer_id)
-      }
-    } catch (e) {
-      console.error('[admin/reviews PATCH] rating sync error:', e)
+  // Resync native_avg_rating + native_review_count after any flag action
+  try {
+    const { data: targetReview } = await db
+      .from('reviews').select('photographer_id').eq('id', review_id).single()
+    if (targetReview?.photographer_id) {
+      // Count reviews that are visible on public profile (none or flagged-but-pending)
+      const { data: remaining } = await db
+        .from('reviews')
+        .select('rating')
+        .eq('photographer_id', targetReview.photographer_id)
+        .in('flag_status', ['none', 'flagged'])
+      const count = remaining?.length ?? 0
+      const avg = count > 0
+        ? remaining.reduce((s: number, r: any) => s + r.rating, 0) / count
+        : 0
+      await db.from('photographer_profiles').update({
+        native_avg_rating: Math.round(avg * 100) / 100,
+        native_review_count: count,
+      }).eq('id', targetReview.photographer_id)
     }
+  } catch (e) {
+    console.error('[admin/reviews PATCH] rating sync error:', e)
   }
 
   // If a ticket_id is supplied, auto-resolve the support ticket
