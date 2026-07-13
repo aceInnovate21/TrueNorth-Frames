@@ -696,7 +696,7 @@ function MiniStars({ value }: { value: number }) {
   )
 }
 
-function ReviewCard({ r }: { r: any }) {
+function ReviewCard({ r, photographerName, photographerAvatar }: { r: any; photographerName: string; photographerAvatar: string | null }) {
   const subRatings = SUB_LABELS.filter(s => r[s.key] != null)
   return (
     <div className="bg-white rounded-2xl p-5 border border-ink-50"
@@ -740,11 +740,17 @@ function ReviewCard({ r }: { r: any }) {
       {r.public_reply && (
         <div className="mt-3 pt-3 border-t border-ink-50 space-y-2.5">
           <div className="flex gap-2.5">
-            <div className="w-6 h-6 rounded-lg bg-ink flex items-center justify-center flex-shrink-0 mt-0.5">
-              <span className="text-white text-[9px] font-bold">P</span>
+            <div className="w-6 h-6 rounded-lg overflow-hidden flex-shrink-0 mt-0.5">
+              {photographerAvatar ? (
+                <img src={photographerAvatar} alt={photographerName} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-ink flex items-center justify-center">
+                  <span className="text-white text-[9px] font-bold">{initials(photographerName)}</span>
+                </div>
+              )}
             </div>
             <div>
-              <p className="text-[10px] font-semibold text-ink mb-0.5">Photographer's reply</p>
+              <p className="text-[10px] font-semibold text-ink mb-0.5">{photographerName}</p>
               <p className="text-xs text-ink-500 leading-relaxed">{r.public_reply}</p>
             </div>
           </div>
@@ -1175,7 +1181,7 @@ export default function ProfilePage({ params }: { params: { username: string } }
                   </div>
                   {hasReviews ? (
                     <div className="space-y-3">
-                      {p.native_reviews.map((r: any) => <ReviewCard key={r.id} r={r} />)}
+                      {p.native_reviews.map((r: any) => <ReviewCard key={r.id} r={r} photographerName={p.display_name} photographerAvatar={p.avatar_url} />)}
                     </div>
                   ) : (
                     <div className="bg-white rounded-2xl py-12 text-center border border-ink-50"
