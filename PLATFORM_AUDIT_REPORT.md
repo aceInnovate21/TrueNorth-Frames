@@ -43,7 +43,13 @@ The `message_rate_limits` and `group_message_rate_limits` tables exist, and `pla
 
 ---
 
-### C2. `/api/auth/register` trusts a client-supplied `user_id`
+### C2. `/api/auth/register` trusts a client-supplied `user_id` — ✅ FIXED (2026-07-13)
+
+**Resolution:** The route now requires `access_token` and derives both user id and email **only** from the verified token — the body's `user_id`/`email` are no longer trusted for identity. All three callers (email signup, Google role-select, login auto-create) updated to send the token. An unauthenticated caller with a fake `user_id` is now rejected with 401.
+
+---
+
+### C2 (original). `/api/auth/register` trusts a client-supplied `user_id`
 
 **Where:** `app/api/auth/register/route.ts:21`
 

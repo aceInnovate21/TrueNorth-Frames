@@ -139,11 +139,9 @@ function SignupForm() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        user_id:      data.user.id,
         access_token: data.session.access_token,
         role,
         full_name:    fullName,
-        email,
       }),
     })
 

@@ -44,10 +44,9 @@ function RoleSelectForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id:   session.user.id,
+          access_token: session.access_token,
           role,
-          full_name: fullName || session.user.user_metadata?.full_name || 'User',
-          email:     email    || session.user.email,
+          full_name:    fullName || session.user.user_metadata?.full_name || 'User',
         }),
       })
 
