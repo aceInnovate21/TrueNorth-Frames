@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   ArrowLeft, Star, MapPin, Shield, Camera, CheckCircle2,
   Globe, Instagram, ExternalLink, Award, Calendar, DollarSign,
@@ -395,6 +395,7 @@ function PortfolioPreview({
 }) {
   const [portfolioExpanded, setPortfolioExpanded] = useState(false)
   const [openAlbum, setOpenAlbum] = useState<{ album: PortfolioAlbum; slideIdx: number } | null>(null)
+  const slideRef = useRef<HTMLDivElement>(null)
 
   const postCount  = standalonePhotos.length + standaloneVideos.length
   const albumCount = portfolioAlbums.length
@@ -406,11 +407,39 @@ function PortfolioPreview({
       ]
     : []
 
+  // Scroll the native snap container to a given index and update state.
+  function scrollToSlide(idx: number, smooth = true) {
+    const el = slideRef.current
+    if (!el) return
+    el.scrollTo({ left: idx * el.clientWidth, behavior: smooth ? 'smooth' : 'auto' })
+  }
+
   function goSlide(dir: 1 | -1) {
     if (!openAlbum) return
     const next = Math.max(0, Math.min(albumSlides.length - 1, openAlbum.slideIdx + dir))
     setOpenAlbum({ ...openAlbum, slideIdx: next })
+    scrollToSlide(next)
   }
+
+  // Derive the active index from native scroll position (drives swipe → counter
+  // + which slide gets a live <video>). Throttled to animation frames.
+  const scrollRaf = useRef<number | null>(null)
+  function onSliderScroll() {
+    const el = slideRef.current
+    if (!el || !openAlbum) return
+    if (scrollRaf.current) return
+    scrollRaf.current = requestAnimationFrame(() => {
+      scrollRaf.current = null
+      const idx = Math.round(el.scrollLeft / el.clientWidth)
+      setOpenAlbum(prev => (prev && prev.slideIdx !== idx ? { ...prev, slideIdx: idx } : prev))
+    })
+  }
+
+  // When an album opens, snap to slide 0 without animation.
+  useEffect(() => {
+    if (openAlbum) scrollToSlide(openAlbum.slideIdx, false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openAlbum?.album.id])
 
   useEffect(() => {
     if (!portfolioExpanded) return
@@ -423,6 +452,7 @@ function PortfolioPreview({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portfolioExpanded, openAlbum, albumSlides.length])
 
   const masonryItems = [
@@ -525,47 +555,60 @@ function PortfolioPreview({
                   <X className="w-4 h-4 text-white" />
                 </button>
               </div>
-              <div className="relative flex-1 min-h-0 flex items-center justify-center bg-black" style={{ height: '100%' }}>
-                {(() => {
-                  const slide = albumSlides[openAlbum.slideIdx]
-                  if (!slide) return null
-                  const mediaStyle: React.CSSProperties = { maxWidth: '100%', maxHeight: 'calc(100vh - 140px)', width: 'auto', height: 'auto', display: 'block', borderRadius: '12px' }
-                  return 'duration_seconds' in slide ? (
-                    <video
-                      key={slide.id}
-                      src={slide.src}
-                      style={mediaStyle}
-                      controls
-                      playsInline
-                      autoPlay={false}
-                      preload="metadata"
-                    />
-                  ) : (
-                    <img key={slide.id} src={slide.src} alt={(slide as any).caption || ''} style={mediaStyle} />
-                  )
-                })()}
+              <div className="relative flex-1 min-h-0">
+                {/* Native horizontal scroll-snap track — gives free, smooth iOS swipe.
+                    Every slide occupies one full-width page. Videos only mount a live
+                    <video> element for the ACTIVE slide; inactive video slides show a
+                    static poster, so iOS never renders offscreen .mov frames (the cause
+                    of the black-screen bug) and no ghost audio can play. */}
+                <div
+                  ref={slideRef}
+                  onScroll={onSliderScroll}
+                  className="flex h-full w-full overflow-x-auto overflow-y-hidden [&::-webkit-scrollbar]:hidden"
+                  style={{ scrollSnapType: 'x mandatory', scrollbarWidth: 'none' }}
+                >
+                  {albumSlides.map((slide, i) => {
+                    const isVideo = 'duration_seconds' in slide
+                    const isActive = i === openAlbum.slideIdx
+                    const mediaStyle: React.CSSProperties = { maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', display: 'block', borderRadius: '12px' }
+                    return (
+                      <div
+                        key={slide.id}
+                        className="flex-shrink-0 w-full h-full flex items-center justify-center p-3 sm:p-8"
+                        style={{ scrollSnapAlign: 'center', scrollSnapStop: 'always' }}
+                      >
+                        {isVideo ? (
+                          isActive ? (
+                            <video src={slide.src} style={mediaStyle} controls playsInline preload="metadata" />
+                          ) : (
+                            <div className="flex items-center justify-center w-full h-full">
+                              <div className="w-14 h-14 rounded-full bg-white/15 flex items-center justify-center">
+                                <svg className="w-6 h-6 text-white ml-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                              </div>
+                            </div>
+                          )
+                        ) : (
+                          <img src={slide.src} alt={(slide as any).caption || ''} style={mediaStyle} className="object-contain" />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
                 {openAlbum.slideIdx > 0 && (
-                  <button onClick={() => goSlide(-1)} className="hidden sm:flex absolute left-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 items-center justify-center transition-colors z-10">
+                  <button onClick={() => goSlide(-1)} className="hidden sm:flex absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 items-center justify-center transition-colors z-10">
                     <ChevronLeft className="w-5 h-5 text-white" />
                   </button>
                 )}
                 {openAlbum.slideIdx < albumSlides.length - 1 && (
-                  <button onClick={() => goSlide(1)} className="hidden sm:flex absolute right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 items-center justify-center transition-colors z-10">
+                  <button onClick={() => goSlide(1)} className="hidden sm:flex absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 items-center justify-center transition-colors z-10">
                     <ChevronRight className="w-5 h-5 text-white" />
                   </button>
-                )}
-                {/* Touch swipe areas for mobile */}
-                {openAlbum.slideIdx > 0 && (
-                  <div className="absolute left-0 top-0 bottom-0 w-1/3 sm:hidden" onClick={() => goSlide(-1)} />
-                )}
-                {openAlbum.slideIdx < albumSlides.length - 1 && (
-                  <div className="absolute right-0 top-0 bottom-0 w-1/3 sm:hidden" onClick={() => goSlide(1)} />
                 )}
               </div>
               {albumSlides.length > 1 && (
                 <div className="flex justify-center gap-1 py-3 flex-shrink-0">
                   {albumSlides.map((_, i) => (
-                    <button key={i} onClick={() => setOpenAlbum({ ...openAlbum!, slideIdx: i })}
+                    <button key={i} onClick={() => { setOpenAlbum({ ...openAlbum!, slideIdx: i }); scrollToSlide(i) }}
                       className={`rounded-full transition-all ${i === openAlbum.slideIdx ? 'w-4 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/30'}`} />
                   ))}
                 </div>
