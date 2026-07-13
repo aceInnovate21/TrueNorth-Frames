@@ -4205,6 +4205,10 @@ function PhotographerDashboardInner() {
       .then(d => { if (d) setStorage(d) })
       .catch(() => {})
   }
+  // Quota gate — the server rejects over-quota uploads at presign; the UI
+  // disables the controls up front so the photographer never hits that error.
+  const storageFull = !!storage && storage.remaining_bytes <= 0
+  const STORAGE_FULL_MSG = 'Storage is full. Delete some photos or videos to free up space.'
   const [portfolioLoading, setPortfolioLoading] = useState(false)
   const [portfolioLoaded, setPortfolioLoaded] = useState(false)
   const [openAlbumId, setOpenAlbumId] = useState<string | null>(null)
@@ -4267,6 +4271,7 @@ function PhotographerDashboardInner() {
   async function handlePortfolioPhotoFiles(files: FileList | null) {
     if (!files || !openAlbumId) return
     setPortfolioUploadError(null)
+    if (storageFull) { setPortfolioUploadError(STORAGE_FULL_MSG); return }
     // No source size limit — images are compressed to WebP in the browser.
     const all = Array.from(files).filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name))
     if (all.length === 0) { setPortfolioUploadError('Please choose image files.'); return }
@@ -4389,6 +4394,7 @@ function PhotographerDashboardInner() {
   async function handlePortfolioVideoFile(file: File | null) {
     if (!file || !openAlbumId) return
     setPortfolioUploadError(null)
+    if (storageFull) { setPortfolioUploadError(STORAGE_FULL_MSG); return }
     const okType = file.type.startsWith('video/') || /\.(mp4|mov|avi|webm|mkv)$/i.test(file.name)
     if (!okType) { setPortfolioUploadError('Only video files are allowed.'); return }
     const maxBytes = PLATFORM_CONFIG.max_video_bytes
@@ -4419,6 +4425,7 @@ function PhotographerDashboardInner() {
   async function handleStandalonePhotoFiles(files: FileList | null) {
     if (!files) return
     setPortfolioUploadError(null)
+    if (storageFull) { setPortfolioUploadError(STORAGE_FULL_MSG); return }
     const all = Array.from(files).filter(f => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name))
     if (all.length === 0) { setPortfolioUploadError('Please choose image files.'); return }
     const totalExisting = totalPortfolioPhotos(portfolioAlbums) + standalonePhotos.length
@@ -4447,6 +4454,7 @@ function PhotographerDashboardInner() {
   async function handleStandaloneVideoFile(file: File | null) {
     if (!file) return
     setPortfolioUploadError(null)
+    if (storageFull) { setPortfolioUploadError(STORAGE_FULL_MSG); return }
     const okType = file.type.startsWith('video/') || /\.(mp4|mov|avi|webm|mkv)$/i.test(file.name)
     if (!okType) { setPortfolioUploadError('Only video files are allowed.'); return }
     if (file.size > PLATFORM_CONFIG.max_video_bytes) { setPortfolioUploadError(`Video exceeds the ${PLATFORM_CONFIG.max_video_bytes / 1024 / 1024} MB limit.`); return }
@@ -5345,13 +5353,13 @@ function PhotographerDashboardInner() {
                         </div>
                         <div className="flex items-center gap-2">
                           {totalV < MAX_VIDEOS_TOTAL && openAlbum.videos.length < PLATFORM_CONFIG.max_videos_per_album && (
-                            <button onClick={() => portfolioVideoInputRef.current?.click()} disabled={videoUploading}
+                            <button onClick={() => portfolioVideoInputRef.current?.click()} disabled={videoUploading || storageFull}
                               className="flex items-center gap-1.5 bg-purple-600 text-white text-xs font-semibold px-3 py-2 rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50">
                               {videoUploading ? <><Spinner /> Uploading…</> : <><Video className="w-3.5 h-3.5" /> Add video</>}
                             </button>
                           )}
                           {totalP < MAX_PHOTOS_TOTAL && (
-                            <button onClick={() => portfolioPhotoInputRef.current?.click()} disabled={portfolioUploading}
+                            <button onClick={() => portfolioPhotoInputRef.current?.click()} disabled={portfolioUploading || storageFull}
                               className="flex items-center gap-1.5 bg-ink text-white text-xs font-semibold px-3 py-2 rounded-xl hover:bg-ink-800 transition-colors disabled:opacity-50">
                               {portfolioUploading ? <><Spinner /> Uploading…</> : <><ImagePlus className="w-3.5 h-3.5" /> Add photos</>}
                             </button>
@@ -5453,7 +5461,7 @@ function PhotographerDashboardInner() {
                         <div className="flex items-center justify-between mb-3">
                           <p className="text-[11px] font-semibold text-ink-300 uppercase tracking-wide">Videos in album ({openAlbum.videos.length} / {PLATFORM_CONFIG.max_videos_per_album})</p>
                           {totalV < MAX_VIDEOS_TOTAL && openAlbum.videos.length < PLATFORM_CONFIG.max_videos_per_album && (
-                            <button onClick={() => portfolioVideoInputRef.current?.click()} disabled={videoUploading}
+                            <button onClick={() => portfolioVideoInputRef.current?.click()} disabled={videoUploading || storageFull}
                               className="flex items-center gap-1.5 text-xs font-semibold text-purple-600 border border-purple-200 px-3 py-1.5 rounded-lg hover:bg-purple-50 transition-colors disabled:opacity-50">
                               {videoUploading ? 'Uploading…' : <><Video className="w-3 h-3" /> Add video</>}
                             </button>
@@ -5549,7 +5557,7 @@ function PhotographerDashboardInner() {
                             </div>
                           </div>
                           {totalP < MAX_PHOTOS_TOTAL && (
-                            <button onClick={() => standalonePhotoInputRef.current?.click()} disabled={standaloneUploading}
+                            <button onClick={() => standalonePhotoInputRef.current?.click()} disabled={standaloneUploading || storageFull}
                               className="flex items-center gap-1.5 bg-ink text-white text-xs font-semibold px-3.5 py-2 rounded-xl hover:bg-ink-800 transition-colors disabled:opacity-50">
                               {standaloneUploading ? <><Spinner /> Uploading…</> : <><ImagePlus className="w-3.5 h-3.5" /> Upload photos</>}
                             </button>
@@ -5609,7 +5617,7 @@ function PhotographerDashboardInner() {
                             </div>
                           </div>
                           {totalV < MAX_VIDEOS_TOTAL && (
-                            <button onClick={() => standaloneVideoInputRef.current?.click()} disabled={standaloneVideoUploading}
+                            <button onClick={() => standaloneVideoInputRef.current?.click()} disabled={standaloneVideoUploading || storageFull}
                               className="flex items-center gap-1.5 bg-purple-600 text-white text-xs font-semibold px-3.5 py-2 rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50">
                               {standaloneVideoUploading ? <><Spinner /> Uploading…</> : <><Video className="w-3.5 h-3.5" /> Upload video</>}
                             </button>
