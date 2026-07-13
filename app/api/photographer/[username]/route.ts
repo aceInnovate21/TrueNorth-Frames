@@ -81,7 +81,7 @@ export async function GET(
   console.log('[profile/reviews] photographerId:', photographerId, 'count:', nativeReviews?.length)
 
   // Fetch reviewer names separately to avoid inner-join silently dropping rows
-  const clientIds = [...new Set((nativeReviews ?? []).map((r: any) => r.client_id).filter(Boolean))]
+  const clientIds = Array.from(new Set((nativeReviews ?? []).map((r: any) => r.client_id).filter(Boolean)))
   const clientNameMap: Record<string, string> = {}
   if (clientIds.length > 0) {
     const { data: clientRows } = await db.from('users').select('id, full_name').in('id', clientIds)
