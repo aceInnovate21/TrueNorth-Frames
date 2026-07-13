@@ -78,6 +78,8 @@ export async function GET(
     db.from('portfolio_videos').select('id, album_id, title, sort_order, duration_seconds, storage_asset_id').eq('photographer_id', photographerId).order('sort_order', { ascending: true }),
   ])
 
+  console.log('[profile/reviews] photographerId:', photographerId, 'count:', nativeReviews?.length, 'raw:', JSON.stringify(nativeReviews))
+
   // ── Availability: merge recurring weekly slots + explicit day overrides ─────
   // Weekly slots expand into concrete 'available' dates across the public window;
   // an explicit day override (available/busy/tentative) always wins for its date.
