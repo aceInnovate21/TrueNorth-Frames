@@ -408,10 +408,10 @@ function PortfolioPreview({
     : []
 
   function goSlide(dir: 1 | -1) {
-    if (!openAlbum) return
+    if (!openAlbum || !slideRef.current) return
     const next = Math.max(0, Math.min(albumSlides.length - 1, openAlbum.slideIdx + dir))
     setOpenAlbum({ ...openAlbum, slideIdx: next })
-    slideRef.current?.children[next]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' })
+    slideRef.current.scrollTo({ left: next * slideRef.current.offsetWidth, behavior: 'smooth' })
   }
 
   useEffect(() => {
@@ -527,14 +527,14 @@ function PortfolioPreview({
                   <X className="w-4 h-4 text-white" />
                 </button>
               </div>
-              <div className="relative flex-1 flex items-center">
-                <div ref={slideRef} className="flex w-full h-full overflow-x-auto" style={{ scrollSnapType: 'x mandatory', scrollBehavior: 'smooth' }}>
+              <div className="relative flex-1 min-h-0 flex items-center overflow-hidden">
+                <div ref={slideRef} className="flex w-full h-full overflow-x-hidden" style={{ scrollSnapType: 'x mandatory' }}>
                   {albumSlides.map((slide) => (
-                    <div key={slide.id} className="flex-shrink-0 w-full h-full flex items-center justify-center p-2 sm:p-6" style={{ scrollSnapAlign: 'start' }}>
+                    <div key={slide.id} className="flex-shrink-0 w-full h-full flex items-center justify-center p-4 sm:p-8" style={{ scrollSnapAlign: 'start' }}>
                       {'duration_seconds' in slide ? (
                         <video src={slide.src} className="max-w-full max-h-full w-auto h-auto rounded-xl" controls preload="metadata" />
                       ) : (
-                        <img src={slide.src} alt={(slide as any).caption || ''} className="max-w-full max-h-full w-auto h-auto rounded-xl object-contain" />
+                        <img src={slide.src} alt={(slide as any).caption || ''} className="max-w-full max-h-full w-auto h-auto rounded-xl object-contain" style={{ maxHeight: 'calc(100vh - 120px)' }} />
                       )}
                     </div>
                   ))}
@@ -553,7 +553,7 @@ function PortfolioPreview({
               {albumSlides.length > 1 && (
                 <div className="flex justify-center gap-1 py-3 flex-shrink-0">
                   {albumSlides.map((_, i) => (
-                    <button key={i} onClick={() => { setOpenAlbum({ ...openAlbum, slideIdx: i }); slideRef.current?.children[i]?.scrollIntoView({ behavior: 'smooth', inline: 'start' }) }}
+                    <button key={i} onClick={() => { setOpenAlbum({ ...openAlbum!, slideIdx: i }); if (slideRef.current) slideRef.current.scrollTo({ left: i * slideRef.current.offsetWidth, behavior: 'smooth' }) }}
                       className={`rounded-full transition-all ${i === openAlbum.slideIdx ? 'w-4 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/30'}`} />
                   ))}
                 </div>
