@@ -410,8 +410,14 @@ function PortfolioPreview({
   function goSlide(dir: 1 | -1) {
     if (!openAlbum || !slideRef.current) return
     const next = Math.max(0, Math.min(albumSlides.length - 1, openAlbum.slideIdx + dir))
-    setOpenAlbum({ ...openAlbum, slideIdx: next })
     slideRef.current.scrollTo({ left: next * slideRef.current.offsetWidth, behavior: 'smooth' })
+    setOpenAlbum({ ...openAlbum, slideIdx: next })
+  }
+
+  function onSliderScroll() {
+    if (!slideRef.current || !openAlbum) return
+    const idx = Math.round(slideRef.current.scrollLeft / slideRef.current.offsetWidth)
+    if (idx !== openAlbum.slideIdx) setOpenAlbum({ ...openAlbum, slideIdx: idx })
   }
 
   useEffect(() => {
@@ -440,13 +446,13 @@ function PortfolioPreview({
           <div key={item.id} className="break-inside-avoid mb-1.5 relative rounded-xl overflow-hidden bg-ink-100 group cursor-pointer"
             onClick={() => { if (clickable) setPortfolioExpanded(true) }}>
             {item.type === 'video' ? (
-              <div className="relative">
-                <video src={item.src} className="w-full h-auto block" muted preload="metadata" />
-                <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/50 transition-colors pointer-events-none">
-                  <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center shadow">
-                    <svg className="w-3.5 h-3.5 text-ink ml-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+              <div className="relative aspect-[4/3] bg-ink-800 flex items-center justify-center">
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 group-hover:bg-black/60 transition-colors">
+                  <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+                    <svg className="w-4 h-4 text-ink ml-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
                   </div>
                 </div>
+                {item.label && <p className="absolute bottom-2 left-0 right-0 text-center text-white/70 text-[10px] px-2 truncate">{item.label}</p>}
               </div>
             ) : (
               <div className="relative">
@@ -527,8 +533,8 @@ function PortfolioPreview({
                   <X className="w-4 h-4 text-white" />
                 </button>
               </div>
-              <div className="relative flex-1 min-h-0 flex items-center overflow-hidden">
-                <div ref={slideRef} className="flex w-full h-full overflow-x-hidden" style={{ scrollSnapType: 'x mandatory' }}>
+              <div className="relative flex-1 min-h-0 flex items-center">
+                <div ref={slideRef} onScroll={onSliderScroll} className="flex w-full h-full overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollSnapType: 'x mandatory', scrollbarWidth: 'none' }}>
                   {albumSlides.map((slide) => (
                     <div key={slide.id} className="flex-shrink-0 w-full h-full flex items-center justify-center p-4 sm:p-8" style={{ scrollSnapAlign: 'start' }}>
                       {'duration_seconds' in slide ? (
