@@ -654,8 +654,14 @@ function ReviewCard({ r }: { r: any }) {
       style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
-            {initials(r.reviewer_name)}
+          <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0">
+            {r.reviewer_avatar ? (
+              <img src={r.reviewer_avatar} alt={r.reviewer_name} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-white text-[10px] font-bold">
+                {initials(r.reviewer_name)}
+              </div>
+            )}
           </div>
           <div>
             <p className="font-semibold text-ink text-sm">{r.reviewer_name}</p>

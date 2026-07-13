@@ -78,14 +78,16 @@ export async function GET(
     db.from('portfolio_videos').select('id, album_id, title, sort_order, duration_seconds, storage_asset_id').eq('photographer_id', photographerId).order('sort_order', { ascending: true }),
   ])
 
-  console.log('[profile/reviews] photographerId:', photographerId, 'count:', nativeReviews?.length)
-
-  // Fetch reviewer names separately to avoid inner-join silently dropping rows
+  // Fetch reviewer names + avatars separately to avoid inner-join silently dropping rows
   const clientIds = Array.from(new Set((nativeReviews ?? []).map((r: any) => r.client_id).filter(Boolean)))
   const clientNameMap: Record<string, string> = {}
+  const clientAvatarMap: Record<string, string | null> = {}
   if (clientIds.length > 0) {
-    const { data: clientRows } = await db.from('users').select('id, full_name').in('id', clientIds)
-    for (const c of clientRows ?? []) clientNameMap[c.id] = c.full_name
+    const { data: clientRows } = await db.from('users').select('id, full_name, avatar_url').in('id', clientIds)
+    for (const c of clientRows ?? []) {
+      clientNameMap[c.id] = c.full_name
+      clientAvatarMap[c.id] = c.avatar_url ?? null
+    }
   }
 
   // ── Availability: merge recurring weekly slots + explicit day overrides ─────
@@ -237,6 +239,7 @@ export async function GET(
       client_reply: r.client_reply ?? null,
       created_at: r.created_at,
       reviewer_name: clientNameMap[r.client_id] ?? 'Anonymous',
+      reviewer_avatar: clientAvatarMap[r.client_id] ?? null,
       communication_rating: r.communication_rating ?? null,
       quality_rating: r.quality_rating ?? null,
       value_rating: r.value_rating ?? null,
