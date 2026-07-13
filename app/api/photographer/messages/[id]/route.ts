@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, serverError } from '@/lib/api-helpers'
-import { isPhotographerBlocked, sendBlockedReason, claimMessageAttachment, resolveAttachmentUrl } from '@/lib/messaging'
+import { isPhotographerBlocked, sendBlockedReason, claimMessageAttachment, resolveAttachmentUrl, checkMessageRateLimit, clampMessageBody } from '@/lib/messaging'
 
 // GET /api/photographer/messages/[id] — fetch full thread for a conversation
 export async function GET(
@@ -101,6 +101,15 @@ export async function POST(
     return NextResponse.json({ error: msg }, { status: 403 })
   }
 
+  // Hourly rate limit (spam guard)
+  const rate = await checkMessageRateLimit(db, user.id)
+  if (rate.exceeded) {
+    return NextResponse.json(
+      { error: "You've reached the hourly message limit. Please try again later." },
+      { status: 429 }
+    )
+  }
+
   const body = await request.json()
   const { text, attachment_key, attachment_type, attachment_name, attachment_size } = body
 
@@ -108,13 +117,15 @@ export async function POST(
     return NextResponse.json({ error: 'Message body or attachment required' }, { status: 400 })
   }
 
+  const cleanBody = clampMessageBody(text)
+
   const { data: msg, error } = await db
     .from('messages')
     .insert({
       conversation_id: conversationId,
       sender_id: user.id,
       sender_type: 'photographer',
-      body: text?.trim() ?? '',
+      body: cleanBody,
       attachment_key: attachment_key ?? null,
       attachment_type: attachment_type ?? null,
       attachment_name: attachment_name ?? null,

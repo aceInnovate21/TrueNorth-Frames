@@ -12,6 +12,45 @@
  */
 
 import { createPrivateDownloadUrl } from './r2'
+import { PLATFORM_CONFIG } from './platform-config'
+
+export interface RateLimitResult {
+  /** True when the sender is over the hourly cap and must be blocked. */
+  exceeded: boolean
+  /** Messages remaining in the current hour window (0 when exceeded). */
+  remaining: number
+}
+
+/**
+ * Rolling 1-hour rate limit for a sender in a conversation, counted directly
+ * from the `messages` table (no separate counter table to keep in sync).
+ * Returns whether the sender is over `max_messages_per_hour` and how many
+ * sends remain. Caps and body-length enforcement live in the send routes.
+ */
+export async function checkMessageRateLimit(
+  db: any,
+  senderId: string
+): Promise<RateLimitResult> {
+  const windowStart = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  const { count } = await db
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('sender_id', senderId)
+    .gte('created_at', windowStart)
+
+  const sent = count ?? 0
+  const cap = PLATFORM_CONFIG.max_messages_per_hour
+  return { exceeded: sent >= cap, remaining: Math.max(0, cap - sent) }
+}
+
+/**
+ * Trim a message body to the platform maximum. Returns null when there is no
+ * text (attachment-only messages are valid).
+ */
+export function clampMessageBody(text: unknown): string {
+  if (typeof text !== 'string') return ''
+  return text.trim().slice(0, PLATFORM_CONFIG.max_message_length)
+}
 
 /**
  * Link a just-uploaded attachment's orphan storage_asset to its message so it

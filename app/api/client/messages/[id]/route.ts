@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, serverError } from '@/lib/api-helpers'
 import { notify } from '@/lib/notify'
-import { isPhotographerBlocked, sendBlockedReason, claimMessageAttachment, resolveAttachmentUrl } from '@/lib/messaging'
+import { isPhotographerBlocked, sendBlockedReason, claimMessageAttachment, resolveAttachmentUrl, checkMessageRateLimit, clampMessageBody } from '@/lib/messaging'
 
 // GET /api/client/messages/[id] — fetch messages for a conversation, mark photographer messages as read
 export async function GET(
@@ -81,6 +81,15 @@ export async function POST(
   const blockReason = sendBlockedReason({ blocked, frozen: !!conv.is_frozen })
   if (blockReason) return NextResponse.json({ error: blockReason }, { status: 403 })
 
+  // Hourly rate limit (spam / harassment guard)
+  const rate = await checkMessageRateLimit(db, user.id)
+  if (rate.exceeded) {
+    return NextResponse.json(
+      { error: "You've reached the hourly message limit. Please try again later." },
+      { status: 429 }
+    )
+  }
+
   const body = await request.json()
   const { text, attachment_key, attachment_type, attachment_name, attachment_size } = body
 
@@ -88,13 +97,15 @@ export async function POST(
     return NextResponse.json({ error: 'Message body is required' }, { status: 400 })
   }
 
+  const cleanBody = clampMessageBody(text)
+
   const { data: msg, error } = await db
     .from('messages')
     .insert({
       conversation_id: conversationId,
       sender_id: user.id,
       sender_type: 'client',
-      body: text?.trim() ?? '',
+      body: cleanBody,
       attachment_key: attachment_key ?? null,
       attachment_type: attachment_type ?? null,
       attachment_name: attachment_name ?? null,
@@ -134,7 +145,7 @@ export async function POST(
       userId: photProfile.user_id,
       type: 'new_message',
       title: 'New message',
-      body: `${clientName}: ${text.trim().slice(0, 80)}`,
+      body: `${clientName}: ${cleanBody ? cleanBody.slice(0, 80) : 'sent an attachment'}`,
       entityType: 'conversation',
       entityId: conversationId,
     })
