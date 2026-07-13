@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import {
   ArrowLeft, Star, MapPin, Shield, Camera, CheckCircle2,
   Globe, Instagram, ExternalLink, Award, Calendar, DollarSign,
@@ -395,7 +395,6 @@ function PortfolioPreview({
 }) {
   const [portfolioExpanded, setPortfolioExpanded] = useState(false)
   const [openAlbum, setOpenAlbum] = useState<{ album: PortfolioAlbum; slideIdx: number } | null>(null)
-  const slideRef = useRef<HTMLDivElement>(null)
 
   const postCount  = standalonePhotos.length + standaloneVideos.length
   const albumCount = portfolioAlbums.length
@@ -408,16 +407,9 @@ function PortfolioPreview({
     : []
 
   function goSlide(dir: 1 | -1) {
-    if (!openAlbum || !slideRef.current) return
+    if (!openAlbum) return
     const next = Math.max(0, Math.min(albumSlides.length - 1, openAlbum.slideIdx + dir))
-    slideRef.current.scrollTo({ left: next * slideRef.current.offsetWidth, behavior: 'smooth' })
     setOpenAlbum({ ...openAlbum, slideIdx: next })
-  }
-
-  function onSliderScroll() {
-    if (!slideRef.current || !openAlbum) return
-    const idx = Math.round(slideRef.current.scrollLeft / slideRef.current.offsetWidth)
-    if (idx !== openAlbum.slideIdx) setOpenAlbum({ ...openAlbum, slideIdx: idx })
   }
 
   useEffect(() => {
@@ -533,25 +525,25 @@ function PortfolioPreview({
                   <X className="w-4 h-4 text-white" />
                 </button>
               </div>
-              <div className="relative flex-1 min-h-0 flex items-center" style={{ height: '100%' }}>
-                <div ref={slideRef} onScroll={onSliderScroll} className="flex w-full overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollSnapType: 'x mandatory', scrollbarWidth: 'none', height: '100%', alignItems: 'center' }}>
-                  {albumSlides.map((slide) => (
-                    <div key={slide.id} className="flex-shrink-0 w-full flex items-center justify-center p-4 sm:p-8" style={{ scrollSnapAlign: 'start', minHeight: '100%' }}>
-                      {'duration_seconds' in slide ? (
-                        <video
-                          src={slide.src}
-                          className="rounded-xl"
-                          style={{ maxWidth: '100%', maxHeight: 'calc(100vh - 140px)', width: 'auto', height: 'auto', display: 'block' }}
-                          controls
-                          playsInline
-                          preload="metadata"
-                        />
-                      ) : (
-                        <img src={slide.src} alt={(slide as any).caption || ''} className="rounded-xl object-contain" style={{ maxWidth: '100%', maxHeight: 'calc(100vh - 140px)', width: 'auto', height: 'auto', display: 'block' }} />
-                      )}
-                    </div>
-                  ))}
-                </div>
+              <div className="relative flex-1 min-h-0 flex items-center justify-center bg-black" style={{ height: '100%' }}>
+                {(() => {
+                  const slide = albumSlides[openAlbum.slideIdx]
+                  if (!slide) return null
+                  const mediaStyle: React.CSSProperties = { maxWidth: '100%', maxHeight: 'calc(100vh - 140px)', width: 'auto', height: 'auto', display: 'block', borderRadius: '12px' }
+                  return 'duration_seconds' in slide ? (
+                    <video
+                      key={slide.id}
+                      src={slide.src}
+                      style={mediaStyle}
+                      controls
+                      playsInline
+                      autoPlay={false}
+                      preload="metadata"
+                    />
+                  ) : (
+                    <img key={slide.id} src={slide.src} alt={(slide as any).caption || ''} style={mediaStyle} />
+                  )
+                })()}
                 {openAlbum.slideIdx > 0 && (
                   <button onClick={() => goSlide(-1)} className="hidden sm:flex absolute left-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/25 items-center justify-center transition-colors z-10">
                     <ChevronLeft className="w-5 h-5 text-white" />
@@ -562,11 +554,18 @@ function PortfolioPreview({
                     <ChevronRight className="w-5 h-5 text-white" />
                   </button>
                 )}
+                {/* Touch swipe areas for mobile */}
+                {openAlbum.slideIdx > 0 && (
+                  <div className="absolute left-0 top-0 bottom-0 w-1/3 sm:hidden" onClick={() => goSlide(-1)} />
+                )}
+                {openAlbum.slideIdx < albumSlides.length - 1 && (
+                  <div className="absolute right-0 top-0 bottom-0 w-1/3 sm:hidden" onClick={() => goSlide(1)} />
+                )}
               </div>
               {albumSlides.length > 1 && (
                 <div className="flex justify-center gap-1 py-3 flex-shrink-0">
                   {albumSlides.map((_, i) => (
-                    <button key={i} onClick={() => { setOpenAlbum({ ...openAlbum!, slideIdx: i }); if (slideRef.current) slideRef.current.scrollTo({ left: i * slideRef.current.offsetWidth, behavior: 'smooth' }) }}
+                    <button key={i} onClick={() => setOpenAlbum({ ...openAlbum!, slideIdx: i })}
                       className={`rounded-full transition-all ${i === openAlbum.slideIdx ? 'w-4 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/30'}`} />
                   ))}
                 </div>
