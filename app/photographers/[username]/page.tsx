@@ -484,7 +484,7 @@ function PortfolioPreview({
           </button>
         ) : item.type === 'video' ? (
           <div className="relative w-full">
-            <video src={item.src} className="w-full h-auto block" controls preload="metadata" />
+            <video src={item.src} className="w-full h-auto block rounded-lg" controls playsInline preload="metadata" />
             {item.label && <p className="text-white/60 text-xs px-1 pt-1.5">{item.label}</p>}
           </div>
         ) : (
@@ -533,14 +533,21 @@ function PortfolioPreview({
                   <X className="w-4 h-4 text-white" />
                 </button>
               </div>
-              <div className="relative flex-1 min-h-0 flex items-center">
-                <div ref={slideRef} onScroll={onSliderScroll} className="flex w-full h-full overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollSnapType: 'x mandatory', scrollbarWidth: 'none' }}>
+              <div className="relative flex-1 min-h-0 flex items-center" style={{ height: '100%' }}>
+                <div ref={slideRef} onScroll={onSliderScroll} className="flex w-full overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollSnapType: 'x mandatory', scrollbarWidth: 'none', height: '100%', alignItems: 'center' }}>
                   {albumSlides.map((slide) => (
-                    <div key={slide.id} className="flex-shrink-0 w-full h-full flex items-center justify-center p-4 sm:p-8" style={{ scrollSnapAlign: 'start' }}>
+                    <div key={slide.id} className="flex-shrink-0 w-full flex items-center justify-center p-4 sm:p-8" style={{ scrollSnapAlign: 'start', minHeight: '100%' }}>
                       {'duration_seconds' in slide ? (
-                        <video src={slide.src} className="max-w-full max-h-full w-auto h-auto rounded-xl" controls preload="metadata" />
+                        <video
+                          src={slide.src}
+                          className="rounded-xl"
+                          style={{ maxWidth: '100%', maxHeight: 'calc(100vh - 140px)', width: 'auto', height: 'auto', display: 'block' }}
+                          controls
+                          playsInline
+                          preload="metadata"
+                        />
                       ) : (
-                        <img src={slide.src} alt={(slide as any).caption || ''} className="max-w-full max-h-full w-auto h-auto rounded-xl object-contain" style={{ maxHeight: 'calc(100vh - 120px)' }} />
+                        <img src={slide.src} alt={(slide as any).caption || ''} className="rounded-xl object-contain" style={{ maxWidth: '100%', maxHeight: 'calc(100vh - 140px)', width: 'auto', height: 'auto', display: 'block' }} />
                       )}
                     </div>
                   ))}
