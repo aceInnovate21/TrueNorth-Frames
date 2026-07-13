@@ -68,7 +68,7 @@ export async function GET(
   ] = await Promise.all([
     db.from('photographer_specialties').select('specialty').eq('photographer_id', photographerId),
     db.from('external_platform_links').select('platform, profile_url, platform_rating, platform_review_count, platform_username, follower_count, engagement_rate, posting_consistency, account_age_days, is_verified, is_oauth_connected').eq('photographer_id', photographerId),
-    db.from('reviews').select('id, rating, body, public_reply, client_reply, client_replied_at, created_at, communication_rating, quality_rating, value_rating, punctuality_rating, client:users!left(full_name)').eq('photographer_id', photographerId).in('flag_status', ['none', 'flagged']).order('created_at', { ascending: false }).limit(10),
+    db.from('reviews').select('id, rating, body, public_reply, client_reply, client_replied_at, created_at, communication_rating, quality_rating, value_rating, punctuality_rating, client_id').eq('photographer_id', photographerId).in('flag_status', ['none', 'flagged']).order('created_at', { ascending: false }).limit(10),
     db.from('packages').select('id, name, description, billing_type, price, deliverables, is_popular, banner_url, specialty').eq('photographer_id', photographerId).eq('is_active', true).order('sort_order', { ascending: true }),
     db.from('photographer_faqs').select('id, question, answer, sort_order').eq('photographer_id', photographerId).eq('is_published', true).order('sort_order', { ascending: true }),
     db.from('availability_day_status').select('date, status').eq('photographer_id', photographerId).gte('date', today).lte('date', in90),
@@ -78,7 +78,15 @@ export async function GET(
     db.from('portfolio_videos').select('id, album_id, title, sort_order, duration_seconds, storage_asset_id').eq('photographer_id', photographerId).order('sort_order', { ascending: true }),
   ])
 
-  console.log('[profile/reviews] photographerId:', photographerId, 'count:', nativeReviews?.length, 'raw:', JSON.stringify(nativeReviews))
+  console.log('[profile/reviews] photographerId:', photographerId, 'count:', nativeReviews?.length)
+
+  // Fetch reviewer names separately to avoid inner-join silently dropping rows
+  const clientIds = [...new Set((nativeReviews ?? []).map((r: any) => r.client_id).filter(Boolean))]
+  const clientNameMap: Record<string, string> = {}
+  if (clientIds.length > 0) {
+    const { data: clientRows } = await db.from('users').select('id, full_name').in('id', clientIds)
+    for (const c of clientRows ?? []) clientNameMap[c.id] = c.full_name
+  }
 
   // ── Availability: merge recurring weekly slots + explicit day overrides ─────
   // Weekly slots expand into concrete 'available' dates across the public window;
@@ -228,7 +236,7 @@ export async function GET(
       public_reply: r.public_reply ?? null,
       client_reply: r.client_reply ?? null,
       created_at: r.created_at,
-      reviewer_name: r.client?.full_name ?? 'Anonymous',
+      reviewer_name: clientNameMap[r.client_id] ?? 'Anonymous',
       communication_rating: r.communication_rating ?? null,
       quality_rating: r.quality_rating ?? null,
       value_rating: r.value_rating ?? null,
