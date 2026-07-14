@@ -9,7 +9,7 @@ export default function PrivacyPage() {
       <div className="prose prose-sm max-w-none space-y-6 text-gray-700">
         <section>
           <h2 className="text-lg font-semibold text-gray-900 mb-2">1. Who we are</h2>
-          <p>TrueNorth Frames is an Edmonton-based photographer marketplace operated by ACE Innovate. We connect clients with local photographers. Contact us at <a href="mailto:yogeshstrategyandanalytics@gmail.com" className="text-blue-600">yogeshstrategyandanalytics@gmail.com</a>.</p>
+          <p>TrueNorth Frames is an Edmonton-based photographer marketplace operated by ACE Innovate. We connect clients with local photographers. Contact us at <a href="mailto:aceinnovate21@gmail.com" className="text-blue-600">aceinnovate21@gmail.com</a>.</p>
         </section>
 
         <section>
@@ -44,7 +44,7 @@ export default function PrivacyPage() {
 
         <section>
           <h2 className="text-lg font-semibold text-gray-900 mb-2">6. Data deletion</h2>
-          <p>You can delete your account at any time from your account settings. This permanently removes all your data. To request data deletion, email us at <a href="mailto:yogeshstrategyandanalytics@gmail.com" className="text-blue-600">yogeshstrategyandanalytics@gmail.com</a>.</p>
+          <p>You can delete your account at any time from your account settings. This permanently removes all your data. To request data deletion, email us at <a href="mailto:aceinnovate21@gmail.com" className="text-blue-600">aceinnovate21@gmail.com</a>.</p>
         </section>
 
         <section>
@@ -54,7 +54,7 @@ export default function PrivacyPage() {
 
         <section>
           <h2 className="text-lg font-semibold text-gray-900 mb-2">8. Contact</h2>
-          <p>For any privacy concerns: <a href="mailto:yogeshstrategyandanalytics@gmail.com" className="text-blue-600">yogeshstrategyandanalytics@gmail.com</a></p>
+          <p>For any privacy concerns: <a href="mailto:aceinnovate21@gmail.com" className="text-blue-600">aceinnovate21@gmail.com</a></p>
         </section>
       </div>
     </div>

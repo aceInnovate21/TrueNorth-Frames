@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
   try {
     const { data: submitter } = await db
       .from('users').select('full_name, email, role').eq('id', user.id).single()
-    const adminEmail = process.env.ADMIN_EMAIL ?? 'yogeshstrategyandanalytics@gmail.com'
+    const adminEmail = process.env.ADMIN_EMAIL ?? 'aceinnovate21@gmail.com'
     await sendEmailDirect({
       to: adminEmail,
       templateId: 'support_ticket_created',

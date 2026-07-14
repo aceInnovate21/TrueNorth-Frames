@@ -70,7 +70,7 @@ export default function TermsPage() {
 
         <section>
           <h2 className="text-lg font-semibold text-gray-900 mb-2">10. Contact</h2>
-          <p>Questions about these terms: <a href="mailto:yogeshstrategyandanalytics@gmail.com" className="text-blue-600">yogeshstrategyandanalytics@gmail.com</a></p>
+          <p>Questions about these terms: <a href="mailto:aceinnovate21@gmail.com" className="text-blue-600">aceinnovate21@gmail.com</a></p>
         </section>
       </div>
     </div>
