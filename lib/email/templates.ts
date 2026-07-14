@@ -29,7 +29,7 @@ export type EmailTemplateId =
 
 export type EmailPayload = Record<string, string | number | undefined | null>
 
-const SUPPORT_EMAIL = () => process.env.SUPPORT_EMAIL ?? 'yogeshstrategyandanalytics@gmail.com'
+const SUPPORT_EMAIL = () => process.env.SUPPORT_EMAIL ?? 'aceinnovate21@gmail.com'
 
 // ─── Brand tokens ─────────────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ function base({ preheader, body, accentColor = BRAND.accent }: {
   accentColor?: string
 }): string {
   const appUrl      = process.env.NEXT_PUBLIC_APP_URL ?? 'https://thetruenorthframes.com'
-  const supportEmail = process.env.SUPPORT_EMAIL ?? 'yogeshstrategyandanalytics@gmail.com'
+  const supportEmail = process.env.SUPPORT_EMAIL ?? 'aceinnovate21@gmail.com'
 
   return `<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">

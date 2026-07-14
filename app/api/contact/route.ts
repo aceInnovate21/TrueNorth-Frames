@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
   if (!message?.trim() || message.trim().length < 20) return badRequest('message too short')
 
   const subjectLabel = SUBJECT_LABELS[subject]
-  const supportEmail = process.env.SUPPORT_EMAIL ?? 'yogeshstrategyandanalytics@gmail.com'
+  const supportEmail = process.env.SUPPORT_EMAIL ?? 'aceinnovate21@gmail.com'
 
   try {
     await resend.emails.send({
