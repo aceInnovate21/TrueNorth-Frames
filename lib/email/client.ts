@@ -1,9 +1,31 @@
 import { Resend } from 'resend'
 import { createClient } from '@supabase/supabase-js'
 import { renderTemplate, type EmailTemplateId, type EmailPayload } from '@/lib/email/templates'
+import { emailAllowedForTemplate } from '@/lib/notification-preferences'
 
 const resend = new Resend(process.env.RESEND_API_KEY!)
 const FROM   = `TrueNorth Frames <${process.env.RESEND_FROM_EMAIL ?? 'no-reply@thetruenorthframes.com'}>`
+
+// Resolve a recipient email → users.id and check the email preference for this
+// template's category. Fail-open: if we cannot resolve the user or the category
+// is transactional (not gate-able), the email is sent. Only an explicit opt-out
+// on a matching category suppresses it.
+async function emailSuppressedByPreference(to: string, templateId: string): Promise<boolean> {
+  try {
+    const db = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } }
+    ) as any
+    const { data: userRow } = await db
+      .from('users').select('id').eq('email', to).maybeSingle()
+    if (!userRow?.id) return false // recipient not a known user → always send
+    const allowed = await emailAllowedForTemplate(db, userRow.id, templateId)
+    return !allowed
+  } catch {
+    return false // fail-open — never drop mail on a lookup error
+  }
+}
 
 // Maps our template IDs to Resend template UUIDs via env vars
 const TEMPLATE_ENV_MAP: Record<string, string> = {
@@ -70,6 +92,8 @@ export async function sendEmail({
   payload: Record<string, any>
 }): Promise<{ ok: boolean; error?: string }> {
   try {
+    if (await emailSuppressedByPreference(to, templateId)) return { ok: true }
+
     const envKey = TEMPLATE_ENV_MAP[templateId]
     const resendTemplateId = envKey ? process.env[envKey] : undefined
 
@@ -107,6 +131,7 @@ export async function sendEmailDirect({
   payload: EmailPayload
 }): Promise<{ ok: boolean; error?: string }> {
   try {
+    if (await emailSuppressedByPreference(to, templateId)) return { ok: true }
     const { subject, html } = renderTemplate(templateId, payload)
     const { error } = await resend.emails.send({ from: FROM, to, subject, html })
     if (error) return { ok: false, error: error.message }

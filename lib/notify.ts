@@ -1,7 +1,13 @@
 /**
  * Server-side helper to insert a row into the notifications table.
  * Always fire-and-forget — never throw; a failed notification must not break the calling request.
+ *
+ * Respects the recipient's in-app notification preferences (push_* columns):
+ * a category the user has explicitly turned off is silently skipped. Default is
+ * to send (see lib/notification-preferences.ts for the opt-out semantics).
  */
+
+import { pushAllowedForType } from './notification-preferences'
 
 type NotificationType =
   | 'booking_request'
@@ -41,6 +47,9 @@ export async function notify({
   expiresInDays = 30,
 }: NotifyParams): Promise<void> {
   try {
+    // Honour the recipient's in-app preferences (opt-out only; default-on).
+    if (!(await pushAllowedForType(db, userId, type))) return
+
     const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000).toISOString()
     await db.from('notifications').insert({
       user_id: userId,

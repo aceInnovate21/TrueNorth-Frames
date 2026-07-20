@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, serverError } from '@/lib/api-helpers'
 
+// Mirrors the notification_preferences table columns exactly, with their
+// DB defaults. Keep in sync with migration 005 + lib/notification-preferences.ts.
 const DEFAULTS = {
   email_booking:       true,
   email_messages:      true,
+  email_connections:   true,
   email_reviews:       true,
   email_trust_updates: false,
   push_booking:        true,
   push_messages:       true,
+  push_connections:    true,
 }
 
 // GET /api/client/notifications/preferences
@@ -18,7 +22,7 @@ export async function GET() {
 
   const { data, error } = await db
     .from('notification_preferences')
-    .select('email_booking, email_messages, email_reviews, email_trust_updates, push_booking, push_messages')
+    .select('email_booking, email_messages, email_connections, email_reviews, email_trust_updates, push_booking, push_messages, push_connections')
     .eq('user_id', user.id)
     .maybeSingle()
 
