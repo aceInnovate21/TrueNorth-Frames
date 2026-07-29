@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
   if (photographerIds.length > 0) {
     const { data: profiles } = await db
       .from('photographer_profiles')
-      .select('user_id, username, profile_status, trust_score, native_avg_rating, native_review_count')
+      .select('user_id, username, profile_status, trust_score, native_avg_rating, native_review_count, is_founder')
       .in('user_id', photographerIds)
     for (const p of profiles ?? []) profileMap[p.user_id] = p
   }
@@ -139,6 +139,51 @@ export async function PATCH(request: NextRequest) {
         await sendEmailDirect({ to: photUser.email, templateId: 'photographer_rejected', payload: { firstName, reason: reason?.trim() || '' } })
       }
     } catch { /* best-effort */ }
+  } else if (action === 'make_founder') {
+    // Read current state first — the thank-you email must fire ONLY on the
+    // first ever grant (founder_since null), never on a re-toggle.
+    const { data: prof } = await db.from('photographer_profiles')
+      .select('username, founder_since').eq('user_id', user_id).single()
+    if (!prof) return serverError('Photographer profile not found')
+
+    const firstGrant = !prof.founder_since
+    const updates: Record<string, any> = { is_founder: true }
+    if (firstGrant) updates.founder_since = new Date().toISOString()
+
+    const { error } = await db.from('photographer_profiles')
+      .update(updates).eq('user_id', user_id)
+    if (error) return serverError('Failed to grant Founding Member')
+
+    if (firstGrant) {
+      // Email + in-app notification — once, on first grant only.
+      try {
+        const { data: photUser } = await db
+          .from('users').select('email, full_name').eq('id', user_id).single()
+        if (photUser?.email) {
+          const firstName = (photUser.full_name ?? 'there').split(' ')[0]
+          await sendEmailDirect({
+            to: photUser.email,
+            templateId: 'founder_welcome',
+            payload: { firstName, username: prof.username ?? '' },
+          })
+        }
+        await notify({
+          db,
+          userId: user_id,
+          type: 'profile_approved',
+          title: "You're a Founding Member! 🎉",
+          body: 'Thank you for backing TrueNorth Frames early. A Founding Member badge now shows on your public profile.',
+          expiresInDays: 30,
+        })
+      } catch { /* best-effort */ }
+    }
+
+  } else if (action === 'remove_founder') {
+    // Hide the badge but keep founder_since so re-granting stays silent.
+    const { error } = await db.from('photographer_profiles')
+      .update({ is_founder: false }).eq('user_id', user_id)
+    if (error) return serverError('Failed to remove Founding Member')
+
   } else {
     return badRequest('Invalid action')
   }

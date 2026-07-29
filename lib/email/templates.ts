@@ -26,6 +26,7 @@ export type EmailTemplateId =
   | 'photographer_rejected'
   | 'booking_reminder_client'
   | 'booking_reminder_photographer'
+  | 'founder_welcome'
 
 export type EmailPayload = Record<string, string | number | undefined | null>
 
@@ -718,6 +719,35 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
         ${p.clientNote ? quoteBlock(String(p.clientNote)) : ''}
         ${p_('Need to reach your client? Message them directly from your dashboard.')}
         ${cta('View Booking Details', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer?tab=requests`)}
+      `,
+    }),
+  }),
+
+  // ── Founding Member welcome (→ photographer, first grant only) ─────────────
+
+  founder_welcome: (p) => ({
+    subject: `You're a TrueNorth Frames Founding Member 🎉`,
+    html: base({
+      preheader: `Thank you for building TrueNorth Frames with us from day one — you're officially a Founding Member.`,
+      accentColor: BRAND.amber,
+      body: `
+        ${h1(`You're a Founding Member, ${p.firstName}`)}
+        ${badge('Founding Member', BRAND.amber)}
+        ${lead('Thank you for being one of the very first photographers to build TrueNorth Frames with us. You didn\'t wait to see if this would work — you backed it early, and that means everything.')}
+        ${divider()}
+        ${p_('You\'re now officially a <strong>Founding Member</strong>. This is a permanent recognition shown publicly on your profile, so every client who visits sees that you helped start something real in Edmonton.')}
+        ${p_('What being a Founding Member means:')}
+        ${ul([
+          '🏅 A <strong>Founding Member badge</strong> displayed publicly on your profile — a mark of trust for clients',
+          '🚀 <strong>First access to new features</strong> as we roll them out — you\'ll help shape what we build next',
+          '🤝 A <strong>direct line to us</strong> — your feedback carries extra weight because you were here first',
+        ])}
+        ${alertBox('We\'re building this to keep more photography work — and more money — inside Edmonton\'s economy. When local clients book local photographers, the value stays in our community. You\'re part of that from day one.', BRAND.amber)}
+        ${p_('This is a business we\'re building <strong>together</strong>. We\'ll keep adding tools to help you get booked, get paid, and grow. If there\'s something that would make your work easier, just reply — we read every message.')}
+        ${cta('View Your Profile', `${process.env.NEXT_PUBLIC_APP_URL}/photographers/${p.username}`, BRAND.amber)}
+        ${divider()}
+        ${p_('Thank you for trusting us early. Let\'s build something Edmonton is proud of.')}
+        <p style="margin:0;font-size:13px;color:#888;line-height:1.6;">— The TrueNorth Frames Team 🌲</p>
       `,
     }),
   }),

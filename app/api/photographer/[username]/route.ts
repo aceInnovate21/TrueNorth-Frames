@@ -26,7 +26,7 @@ export async function GET(
       avatar_url, cover_image_url, website_url, instagram_url,
       rate_display, rate_note, trust_score, native_avg_rating,
       native_review_count, profile_view_count, years_experience, completeness_score, created_at,
-      contact_instagram_url, contact_facebook_url
+      contact_instagram_url, contact_facebook_url, is_founder
     `)
     .eq('username', params.username)
     .eq('profile_status', 'approved')
@@ -216,6 +216,7 @@ export async function GET(
     member_since: profile.created_at,
     contact_instagram_url: profile.contact_instagram_url ?? null,
     contact_facebook_url: profile.contact_facebook_url ?? null,
+    is_founder: profile.is_founder ?? false,
     badge,
     specialties: (specialties ?? []).map((s: { specialty: string }) => s.specialty),
     links: linksMap,
