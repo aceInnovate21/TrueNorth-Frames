@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Search, CheckCircle2, XCircle, Shield,
-  ChevronLeft, ChevronRight, Loader2, ArrowLeft,
+  ChevronLeft, ChevronRight, Loader2, ArrowLeft, Award,
 } from 'lucide-react'
 import { AdminNav } from '@/components/admin-nav'
 
@@ -22,6 +22,7 @@ interface User {
     trust_score: number
     native_avg_rating: number
     native_review_count: number
+    is_founder: boolean
   } | null
 }
 
@@ -185,6 +186,23 @@ function AccountsInner() {
                                 Reject
                               </button>
                             </>
+                          )}
+                          {u.role === 'photographer' && u.profile?.profile_status === 'approved' && (
+                            u.profile.is_founder ? (
+                              <button onClick={() => doAction(u.id, 'remove_founder')} disabled={!!actionBusy}
+                                title="Founding Member — click to remove the badge"
+                                className="flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-lg hover:bg-amber-100 transition-colors disabled:opacity-50">
+                                {actionBusy === u.id + 'remove_founder' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Award className="w-3 h-3" />}
+                                Founder ✓
+                              </button>
+                            ) : (
+                              <button onClick={() => doAction(u.id, 'make_founder')} disabled={!!actionBusy}
+                                title="Mark as a Founding Member (sends a thank-you email on the first grant)"
+                                className="flex items-center gap-1 text-[10px] font-semibold text-ink-400 border border-ink-100 px-2.5 py-1.5 rounded-lg hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 transition-colors disabled:opacity-50">
+                                {actionBusy === u.id + 'make_founder' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Award className="w-3 h-3" />}
+                                Make Founder
+                              </button>
+                            )
                           )}
                           {u.account_status === 'active' && u.role !== 'admin' && (
                             <button onClick={() => doAction(u.id, 'suspend')} disabled={!!actionBusy}

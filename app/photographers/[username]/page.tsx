@@ -1047,6 +1047,14 @@ export default function ProfilePage({ params }: { params: { username: string } }
                 {/* Name + badge */}
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <h1 className="font-serif text-2xl sm:text-3xl font-bold text-ink tracking-tight">{p.display_name}</h1>
+                  {p.is_founder && (
+                    <span
+                      title="A Founding Member — one of the first photographers to help build TrueNorth Frames in Edmonton."
+                      className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full border bg-amber-50 text-amber-700 border-amber-200"
+                    >
+                      <span className="text-xs">🏅</span>Founding Member
+                    </span>
+                  )}
                   {p.badge && <PhotographerBadge badge={p.badge} size="md" showTooltip />}
                 </div>
                 {p.tagline && <p className="text-ink-400 text-sm mt-1">{p.tagline}</p>}
