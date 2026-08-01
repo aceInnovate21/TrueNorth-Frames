@@ -9,3 +9,8 @@ dist
 # Next.js build output and cache — never commit these
 .next/
 .env*.local
+
+# Env backups (e.g. .env.production.backup) — these hold real service-role keys
+.env*.backup
+.env.*.backup
+supabase/.temp/

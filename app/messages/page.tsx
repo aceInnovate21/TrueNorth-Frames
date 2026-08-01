@@ -223,6 +223,7 @@ function ClientMessagesInner() {
             ...c,
             lastMessage: text || (attachmentType ? `📎 ${attachmentName}` : ''),
             lastTime: 'now',
+            lastAt: new Date().toISOString(),
             hourlyMessageCount: c.hourlyMessageCount + 1,
             messages: [...c.messages, {
               id: optimisticId, from: 'me', text, time: new Date().toISOString(), status: 'sent',
@@ -303,7 +304,8 @@ function ClientMessagesInner() {
 
   // ─── Derived ────────────────────────────────────────────────────────────────
 
-  const filtered = conversations
+  const filtered = [...conversations]
+    .sort((a, b) => ((a.lastAt ?? '') > (b.lastAt ?? '') ? -1 : 1))
     .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
     .slice(0, MAX_SHOWN)
   const totalUnread = conversations.reduce((a, c) => a + c.unread, 0)

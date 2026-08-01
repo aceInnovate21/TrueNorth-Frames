@@ -18,15 +18,11 @@ interface ConvRow {
   createdAt:     string
   lastMessageAt: string
   messageCount:  number
-  lastMessageBody:       string
-  lastMessageSenderType: string
   client:       { id: string; name: string }
   photographer: { id: string; name: string; username: string; specialty: string }
 }
 
 interface Counts { total: number; active: number; frozen: number; flagged: number }
-
-interface MsgRow { id: string; body: string; senderType: string; senderName: string; createdAt: string }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -75,18 +71,9 @@ function ThreadDrawer({ conv, onClose, onAction }: {
   onClose:  () => void
   onAction: (id: string, action: string, flagReason?: string) => Promise<void>
 }) {
-  const [messages, setMessages]   = useState<MsgRow[]>([])
-  const [loading, setLoading]     = useState(true)
   const [acting, setActing]       = useState('')
   const [flagInput, setFlagInput] = useState('')
   const [showFlag, setShowFlag]   = useState(false)
-
-  useEffect(() => {
-    fetch(`/api/admin/conversations/messages?conversation_id=${conv.id}`)
-      .then(r => r.ok ? r.json() : [])
-      .then(d => { setMessages(d); setLoading(false) })
-      .catch(() => setLoading(false))
-  }, [conv.id])
 
   async function act(action: string, flagReason?: string) {
     setActing(action)
@@ -134,38 +121,19 @@ function ThreadDrawer({ conv, onClose, onAction }: {
           </div>
         )}
 
-        {/* Thread */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-h-0">
-          <p className="text-[10px] text-ink-300 uppercase tracking-widest text-center">Read-only · {conv.messageCount} messages</p>
-          {loading ? (
-            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-ink-300" /></div>
-          ) : messages.length === 0 ? (
-            <p className="text-center text-xs text-ink-300 py-8">No messages yet</p>
-          ) : (
-            messages.map(msg => {
-              const isClient = msg.senderType === 'client'
-              const bgColor  = isClient ? avatarColor(conv.client.id) : avatarColor(conv.photographer.id)
-              const ini      = isClient ? initials(conv.client.name) : initials(conv.photographer.name)
-              return (
-                <div key={msg.id} className={`flex gap-2 ${isClient ? 'flex-row' : 'flex-row-reverse'}`}>
-                  <div className={`w-7 h-7 rounded-full ${bgColor} flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 mt-1`}>
-                    {ini}
-                  </div>
-                  <div className={`max-w-[72%] ${isClient ? '' : ''}`}>
-                    <p className={`text-[10px] font-semibold text-ink-400 mb-1 ${isClient ? 'ml-1' : 'mr-1 text-right'}`}>
-                      {msg.senderName}
-                    </p>
-                    <div className={`rounded-2xl px-4 py-2.5 ${isClient ? 'bg-ink-50 text-ink rounded-bl-sm' : 'bg-ink text-white rounded-br-sm'}`}>
-                      <p className="text-sm leading-relaxed">{msg.body}</p>
-                      <p className={`text-[10px] mt-1 ${isClient ? 'text-ink-300' : 'text-white/50'}`}>
-                        {relTime(msg.createdAt)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )
-            })
-          )}
+        {/* Message content is intentionally not shown — admins moderate
+            without reading private conversations. */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 min-h-0 flex items-center justify-center">
+          <div className="text-center max-w-xs">
+            <div className="w-10 h-10 rounded-full bg-ink-50 flex items-center justify-center mx-auto mb-3">
+              <Lock className="w-4 h-4 text-ink-300" />
+            </div>
+            <p className="text-sm font-semibold text-ink mb-1">Message content is private</p>
+            <p className="text-xs text-ink-400 leading-relaxed">
+              This conversation has {conv.messageCount} {conv.messageCount === 1 ? 'message' : 'messages'}.
+              Admins can freeze or flag a thread without reading it.
+            </p>
+          </div>
         </div>
 
         {/* Flag input */}
@@ -382,10 +350,12 @@ export default function ConversationsPage() {
                       )}
                     </div>
 
-                    {/* Last message */}
+                    {/* Activity — message content is deliberately not surfaced */}
                     <div className="min-w-0">
-                      <p className="text-xs text-ink-400 line-clamp-1">{conv.lastMessageBody || '—'}</p>
-                      <p className="text-[10px] text-ink-300 mt-0.5 capitalize">{conv.lastMessageSenderType}</p>
+                      <p className="text-xs text-ink-400">
+                        {conv.messageCount} {conv.messageCount === 1 ? 'message' : 'messages'}
+                      </p>
+                      <p className="text-[10px] text-ink-300 mt-0.5">{relTime(conv.lastMessageAt)}</p>
                     </div>
 
                     {/* View */}

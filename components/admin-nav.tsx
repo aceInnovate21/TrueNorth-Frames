@@ -11,7 +11,10 @@ const NAV_ITEMS = [
   { href: '/admin',              label: 'Dashboard'    },
   { href: '/admin/accounts',     label: 'Accounts'     },
   { href: '/admin/support',      label: 'Support'      },
-  { href: '/admin/conversations',label: 'Conversations' },
+  // Hidden until the Privacy Policy and Terms of Use cover admin access to
+  // conversation content. The page and its API routes are still live — this
+  // only removes the nav entry. See /admin/conversations.
+  // { href: '/admin/conversations',label: 'Conversations' },
   { href: '/admin/analytics',    label: 'Analytics'    },
   { href: '/admin/trust-health', label: 'Trust health' },
 ]
