@@ -50,18 +50,10 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Last message per conversation
-  let lastMsgMap: Record<string, { body: string; sender_type: string; created_at: string }> = {}
-  if (convIds.length > 0) {
-    const { data: lastMsgs } = await db
-      .from('messages')
-      .select('conversation_id, body, sender_type, created_at')
-      .in('conversation_id', convIds)
-      .order('created_at', { ascending: false })
-    for (const m of lastMsgs ?? []) {
-      if (!lastMsgMap[m.conversation_id]) lastMsgMap[m.conversation_id] = m
-    }
-  }
+  // NOTE: Message content is deliberately not read here. Admins can moderate
+  // conversations (freeze / flag) without seeing what was said. Do not add
+  // message bodies back without first covering it in the Privacy Policy and
+  // Terms of Use.
 
   // Specialty for each photographer
   const photogIdsRaw = (rows ?? []).map((r: any) => r.photographer?.id).filter(Boolean) as string[]
@@ -85,7 +77,6 @@ export async function GET(request: NextRequest) {
       return clientName.includes(q) || photogName.includes(q) || r.id.includes(q)
     })
     .map((r: any) => {
-      const lastMsg = lastMsgMap[r.id]
       const status: 'active' | 'frozen' | 'flagged' =
         r.is_flagged ? 'flagged' : r.is_frozen ? 'frozen' : 'active'
       return {
@@ -95,8 +86,6 @@ export async function GET(request: NextRequest) {
         createdAt:     r.created_at,
         lastMessageAt: r.last_message_at ?? r.created_at,
         messageCount:  msgCountMap[r.id] ?? 0,
-        lastMessageBody:       lastMsg?.body ?? '',
-        lastMessageSenderType: lastMsg?.sender_type ?? '',
         client: {
           id:   r.client?.id ?? '',
           name: r.client?.full_name ?? 'Unknown',
@@ -122,7 +111,6 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ conversations, total: count ?? 0, counts, page, limit })
 }
 
-// GET /api/admin/conversations/[id]/messages — read thread
 // PATCH /api/admin/conversations — freeze, unfreeze, flag
 export async function PATCH(request: NextRequest) {
   const { adminDb, user } = await getServerSession()
