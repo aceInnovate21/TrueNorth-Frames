@@ -4828,15 +4828,25 @@ function PhotographerDashboardInner() {
                   </div>
 
                   {/* Messages */}
-                  <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+                  <button
+                    onClick={() => switchTab('messages')}
+                    aria-label="Go to Messages"
+                    className="text-left bg-white rounded-2xl p-4 transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-ink/20"
+                    style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}
+                  >
                     <MessageSquare className="w-4 h-4 text-ink-300 mb-2" />
                     <p className="font-bold text-ink text-xl">{messages.length + groups.length}</p>
                     <p className="text-ink-400 text-xs mt-0.5">Messages</p>
                     <p className="text-ink-300 text-[10px] mt-1">{totalUnreadMessages > 0 ? `${totalUnreadMessages} unread` : 'All read'}</p>
-                  </div>
+                  </button>
 
                   {/* Rating */}
-                  <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+                  <button
+                    onClick={() => switchTab('reviews')}
+                    aria-label="Go to Reviews"
+                    className="text-left bg-white rounded-2xl p-4 transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-ink/20"
+                    style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}
+                  >
                     <Star className="w-4 h-4 text-ink-300 mb-2" />
                     <p className="font-bold text-ink text-xl">
                       {profile.nativeAvgRating > 0 ? profile.nativeAvgRating.toFixed(1) : '—'}
@@ -4845,17 +4855,22 @@ function PhotographerDashboardInner() {
                     <p className="text-ink-300 text-[10px] mt-1">
                       {profile.nativeReviewCount > 0 ? `${profile.nativeReviewCount} review${profile.nativeReviewCount !== 1 ? 's' : ''}` : 'No reviews yet'}
                     </p>
-                  </div>
+                  </button>
 
                   {/* Bookings */}
-                  <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+                  <button
+                    onClick={() => switchTab('requests')}
+                    aria-label="Go to Booking Requests"
+                    className="text-left bg-white rounded-2xl p-4 transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-ink/20"
+                    style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}
+                  >
                     <Zap className="w-4 h-4 text-ink-300 mb-2" />
                     <p className="font-bold text-ink text-xl">{profile.completedBookings}</p>
                     <p className="text-ink-400 text-xs mt-0.5">Completed bookings</p>
                     <p className="text-ink-300 text-[10px] mt-1">
                       {profile.completedBookings >= 3 ? 'Trusted Pro eligible' : `${3 - profile.completedBookings} more for Trusted Pro`}
                     </p>
-                  </div>
+                  </button>
                 </div>
 
                 {/* ── Online presence at-a-glance ── */}
