@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { DashboardSidebar, type SidebarGroup } from '@/components/dashboard-sidebar'
 import { DashboardTour, type TourStep } from '@/components/dashboard-tour'
+import { HelpButton } from '@/components/help-popover'
 import { AvailabilityTimeSlots, type WeeklySchedule } from '@/components/availability-time-slots'
 import { ProjectPackages, type ProjectPackage } from '@/components/project-packages'
 import { ReviewManager } from '@/components/review-manager'
@@ -88,6 +89,92 @@ const TOUR_STEPS: TourStep[] = [
   { tab: 'network',      selector: '[data-tour="nav-network"]',      title: 'Connect with peers',        body: 'Join photographer groups, arrange cover for busy dates, and grow your local network.' },
   { tab: 'trust',        selector: '[data-tour="nav-trust"]',        title: 'Boost your trust score',    body: 'Connect your Google Business Profile to verify your reputation. A higher trust score means better placement in client searches.' },
 ]
+
+// Per-domain "? Help" content — shown by the context-aware help button on each
+// tab (except Messages). Keyed by DashboardTab.
+const HELP_CONTENT: Partial<Record<DashboardTab, { title: string; steps: string[] }>> = {
+  overview: {
+    title: 'Overview',
+    steps: [
+      'Check your badge and stats at a glance — messages, rating, and completed bookings.',
+      'Tap any stat card to jump straight to that section.',
+      'Work through the profile-completion checklist to start appearing in client searches.',
+    ],
+  },
+  portfolio: {
+    title: 'Portfolio',
+    steps: [
+      'Click "Upload photos" to add images — your strongest work first.',
+      'Group related shots into albums so clients can browse by style or shoot.',
+      'Set a cover photo for each album; it is what clients see first.',
+      'Aim for a variety that reflects the specialties you offer.',
+    ],
+  },
+  packages: {
+    title: 'Packages',
+    steps: [
+      'Add a package for each session type you offer (e.g. portrait, wedding).',
+      'Give each a clear name, price, and short description of what is included.',
+      'Keep pricing transparent — clients are more likely to enquire when they know what to expect.',
+    ],
+  },
+  availability: {
+    title: 'Availability',
+    steps: [
+      'Set your weekly working hours so clients know when you are free.',
+      'Block off dates you are unavailable, or mark them tentative.',
+      'Keep it current — booking requests are based on the availability you show.',
+    ],
+  },
+  faq: {
+    title: 'FAQ',
+    steps: [
+      'Add common questions clients ask (turnaround time, travel, deposits).',
+      'Write clear, short answers so clients can self-serve.',
+      'Good FAQs reduce back-and-forth and build trust before the first message.',
+    ],
+  },
+  requests: {
+    title: 'Booking Requests',
+    steps: [
+      'Review each incoming request — date, location, and client details.',
+      'Approve or decline; approving opens a conversation with the client.',
+      'Mark a session complete once it is done so it counts toward your stats and badges.',
+    ],
+  },
+  reviews: {
+    title: 'Reviews',
+    steps: [
+      'Reviews from completed bookings appear here automatically.',
+      'Reply to each review to show clients you are engaged and professional.',
+      'A strong rating improves your placement in client searches.',
+    ],
+  },
+  network: {
+    title: 'Network',
+    steps: [
+      'Connect with other Edmonton photographers to grow your local network.',
+      'Create or join groups to share a space and coordinate.',
+      'Arrange cover when you are double-booked or unavailable for a date.',
+    ],
+  },
+  trust: {
+    title: 'Trust Score',
+    steps: [
+      'Connect your Google Business Profile to verify your public reputation.',
+      'Your trust score combines review quality, account age, and profile completeness.',
+      'A higher score means better visibility and more client confidence.',
+    ],
+  },
+  settings: {
+    title: 'Settings',
+    steps: [
+      'Update your display name, bio, location, and contact details.',
+      'Manage your avatar, cover image, and online-presence links.',
+      'Keep your profile accurate — it is what clients see publicly.',
+    ],
+  },
+}
 
 type BookingRequestStatus = 'pending' | 'approved' | 'declined' | 'cancelled' | 'cancellation_pending' | 'completed'
 
@@ -4827,6 +4914,13 @@ function PhotographerDashboardInner() {
 
           {/* ── Main column ─────────────────────────────────────────── */}
           <div className="lg:col-span-2 space-y-6" ref={mainContentRef}>
+
+            {/* Context-aware help — steps for the current domain (not shown on Messages) */}
+            {activeTab !== 'messages' && HELP_CONTENT[activeTab] && (
+              <div className="flex justify-end">
+                <HelpButton title={HELP_CONTENT[activeTab]!.title} steps={HELP_CONTENT[activeTab]!.steps} />
+              </div>
+            )}
 
             {/* Tab bar removed — navigation lives in the left rail (desktop) and the slide-in drawer (mobile) */}
             <div className="hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
