@@ -17,6 +17,7 @@ import {
   Facebook, RefreshCw, Link2, UserPlus, Search, Home, Menu,
 } from 'lucide-react'
 import { DashboardSidebar, type SidebarGroup } from '@/components/dashboard-sidebar'
+import { DashboardTour, type TourStep } from '@/components/dashboard-tour'
 import { AvailabilityTimeSlots, type WeeklySchedule } from '@/components/availability-time-slots'
 import { ProjectPackages, type ProjectPackage } from '@/components/project-packages'
 import { ReviewManager } from '@/components/review-manager'
@@ -73,6 +74,20 @@ function totalPortfolioVideos(albums: PortfolioAlbum[]) { return albums.reduce((
 // ─── Booking request types ───────────────────────────────────────────────────
 
 type DashboardTab = 'overview' | 'portfolio' | 'messages' | 'requests' | 'availability' | 'packages' | 'reviews' | 'network' | 'faq' | 'settings' | 'trust'
+
+// First-run guided tour. Each step spotlights a rail nav item (desktop) and
+// switches to that tab; on mobile the rail is a drawer, so the step gracefully
+// centres its card instead. Skips 'messages' (routes away) and 'settings'.
+const TOUR_STEPS: TourStep[] = [
+  { tab: 'overview',     selector: '[data-tour="nav-overview"]',     title: 'Welcome to your dashboard', body: "This is your home base. The cards here summarise your messages, rating, and bookings — tap any of them to jump straight in." },
+  { tab: 'portfolio',    selector: '[data-tour="nav-portfolio"]',    title: 'Show off your work',        body: 'Upload your best photos and organise them into albums. A strong portfolio is the single biggest driver of client enquiries.' },
+  { tab: 'packages',     selector: '[data-tour="nav-packages"]',     title: 'Set your packages',         body: 'List your session types and pricing so clients know exactly what you offer before they reach out.' },
+  { tab: 'availability', selector: '[data-tour="nav-availability"]', title: 'Share your availability',   body: 'Set your weekly hours and block off dates. Clients can then request bookings that actually fit your schedule.' },
+  { tab: 'requests',     selector: '[data-tour="nav-requests"]',     title: 'Manage booking requests',   body: 'Incoming booking requests land here. Approve, decline, or message the client — and mark sessions complete when done.' },
+  { tab: 'reviews',      selector: '[data-tour="nav-reviews"]',      title: 'Build your reputation',     body: 'Reviews from completed bookings appear here. Reply to them to show clients you are engaged and professional.' },
+  { tab: 'network',      selector: '[data-tour="nav-network"]',      title: 'Connect with peers',        body: 'Join photographer groups, arrange cover for busy dates, and grow your local network.' },
+  { tab: 'trust',        selector: '[data-tour="nav-trust"]',        title: 'Boost your trust score',    body: 'Connect your Google Business Profile to verify your reputation. A higher trust score means better placement in client searches.' },
+]
 
 type BookingRequestStatus = 'pending' | 'approved' | 'declined' | 'cancelled' | 'cancellation_pending' | 'completed'
 
@@ -684,6 +699,7 @@ interface ProfileData {
   gbpReviewCount: number
   accountAgeDays: number
   profileStatus: string
+  onboardingTourCompleted: boolean
 }
 
 interface Message {
@@ -3944,7 +3960,9 @@ function PhotographerDashboardInner() {
     gbpReviewCount: 0,
     accountAgeDays: 0,
     profileStatus: 'pending',
+    onboardingTourCompleted: true, // assume seen until the profile load says otherwise (prevents a flash)
   })
+  const [showTour, setShowTour] = useState(false)
 
   // Load real profile from DB on mount.
   // On fresh signup (isFresh=1) the session cookie may not be propagated yet —
@@ -3986,7 +4004,9 @@ function PhotographerDashboardInner() {
           gbpReviewCount:      data.gbp_review_count ?? 0,
           accountAgeDays:      data.account_age_days ?? 0,
           profileStatus:       data.profile_status ?? 'pending',
+          onboardingTourCompleted: !!data.onboarding_tour_completed,
         }))
+        if (!data.onboarding_tour_completed) setShowTour(true)
       } catch {
         // keep empty defaults
       }
@@ -4578,6 +4598,13 @@ function PhotographerDashboardInner() {
   // Unified tab switcher — updates state, URL, and scrolls to top on mobile
   const [drawerOpen, setDrawerOpen] = useState(false)
 
+  function completeTour() {
+    setShowTour(false)
+    setProfile(prev => ({ ...prev, onboardingTourCompleted: true }))
+    // Fire-and-forget — a failed write just means the tour may show once more.
+    fetch('/api/photographer/onboarding-tour', { method: 'POST' }).catch(() => {})
+  }
+
   function switchTab(tab: DashboardTab) {
     setActiveTab(tab)
     const params = new URLSearchParams(window.location.search)
@@ -4706,6 +4733,15 @@ function PhotographerDashboardInner() {
         }
       />
 
+      {/* ── First-run guided tour ───────────────────────────────────────── */}
+      {showTour && (
+        <DashboardTour
+          steps={TOUR_STEPS}
+          onNavigate={(t) => switchTab(t as DashboardTab)}
+          onClose={completeTour}
+        />
+      )}
+
       {/* ── Mobile top nav (hidden on lg, replaced by the rail) ─────────── */}
       <nav className="lg:hidden sticky top-0 z-50 bg-white border-b border-ink-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -4828,15 +4864,25 @@ function PhotographerDashboardInner() {
                   </div>
 
                   {/* Messages */}
-                  <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+                  <button
+                    onClick={() => switchTab('messages')}
+                    aria-label="Go to Messages"
+                    className="text-left bg-white rounded-2xl p-4 transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-ink/20"
+                    style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}
+                  >
                     <MessageSquare className="w-4 h-4 text-ink-300 mb-2" />
                     <p className="font-bold text-ink text-xl">{messages.length + groups.length}</p>
                     <p className="text-ink-400 text-xs mt-0.5">Messages</p>
                     <p className="text-ink-300 text-[10px] mt-1">{totalUnreadMessages > 0 ? `${totalUnreadMessages} unread` : 'All read'}</p>
-                  </div>
+                  </button>
 
                   {/* Rating */}
-                  <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+                  <button
+                    onClick={() => switchTab('reviews')}
+                    aria-label="Go to Reviews"
+                    className="text-left bg-white rounded-2xl p-4 transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-ink/20"
+                    style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}
+                  >
                     <Star className="w-4 h-4 text-ink-300 mb-2" />
                     <p className="font-bold text-ink text-xl">
                       {profile.nativeAvgRating > 0 ? profile.nativeAvgRating.toFixed(1) : '—'}
@@ -4845,17 +4891,22 @@ function PhotographerDashboardInner() {
                     <p className="text-ink-300 text-[10px] mt-1">
                       {profile.nativeReviewCount > 0 ? `${profile.nativeReviewCount} review${profile.nativeReviewCount !== 1 ? 's' : ''}` : 'No reviews yet'}
                     </p>
-                  </div>
+                  </button>
 
                   {/* Bookings */}
-                  <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+                  <button
+                    onClick={() => switchTab('requests')}
+                    aria-label="Go to Booking Requests"
+                    className="text-left bg-white rounded-2xl p-4 transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-ink/20"
+                    style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}
+                  >
                     <Zap className="w-4 h-4 text-ink-300 mb-2" />
                     <p className="font-bold text-ink text-xl">{profile.completedBookings}</p>
                     <p className="text-ink-400 text-xs mt-0.5">Completed bookings</p>
                     <p className="text-ink-300 text-[10px] mt-1">
                       {profile.completedBookings >= 3 ? 'Trusted Pro eligible' : `${3 - profile.completedBookings} more for Trusted Pro`}
                     </p>
-                  </div>
+                  </button>
                 </div>
 
                 {/* ── Online presence at-a-glance ── */}

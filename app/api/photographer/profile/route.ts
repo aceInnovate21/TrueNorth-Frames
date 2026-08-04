@@ -66,6 +66,23 @@ export async function GET() {
     completedBookings = bookingCount ?? 0
   }
 
+  // Read the onboarding-tour flag separately and defensively: if migration 036
+  // hasn't been applied yet, this column won't exist — swallow the error and
+  // treat the tour as "not completed" rather than 500-ing the whole profile.
+  let onboardingTourCompleted = false
+  if (photographerId) {
+    try {
+      const { data: tourRow } = await db
+        .from('photographer_profiles')
+        .select('onboarding_tour_completed_at')
+        .eq('id', photographerId)
+        .single()
+      onboardingTourCompleted = !!tourRow?.onboarding_tour_completed_at
+    } catch {
+      onboardingTourCompleted = false
+    }
+  }
+
   const { amount, unit } = parseRateDisplay(profile?.rate_display ?? null)
 
   const accountAgeDays = profile?.created_at
@@ -94,6 +111,7 @@ export async function GET() {
     native_review_count:   profile?.native_review_count ?? 0,
     years_experience:      profile?.years_experience ?? null,
     profile_status:        profile?.profile_status ?? 'pending',
+    onboarding_tour_completed: onboardingTourCompleted,
     portfolio_photo_count: portfolioPhotoCount,
     completed_bookings:    completedBookings,
     is_gbp_oauth_connected: isGbpOAuthConnected,
