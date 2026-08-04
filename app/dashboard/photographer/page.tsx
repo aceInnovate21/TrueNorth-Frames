@@ -14,8 +14,9 @@ import {
   ChevronsUp, ChevronsDown, LogOut,
   Plus, Pencil, Trash2, Paperclip, FileText, Play,
   FolderPlus, FolderOpen, Video, Image as ImageIcon,
-  Facebook, RefreshCw, Link2, UserPlus, Search,
+  Facebook, RefreshCw, Link2, UserPlus, Search, Home,
 } from 'lucide-react'
+import { DashboardSidebar, type SidebarGroup } from '@/components/dashboard-sidebar'
 import { AvailabilityTimeSlots, type WeeklySchedule } from '@/components/availability-time-slots'
 import { ProjectPackages, type ProjectPackage } from '@/components/project-packages'
 import { ReviewManager } from '@/components/review-manager'
@@ -4634,10 +4635,72 @@ function PhotographerDashboardInner() {
     { key: 'settings', label: 'Settings' },
   ] as const
 
+  // Desktop left-rail navigation — same tabs, grouped Instagram-style with icons.
+  // Badges surface unread messages / pending booking requests at a glance.
+  const sidebarGroups: SidebarGroup[] = [
+    { items: [{ key: 'overview', label: 'Overview', icon: Home }] },
+    {
+      heading: 'Studio',
+      items: [
+        { key: 'portfolio', label: 'Portfolio', icon: ImageIcon },
+        { key: 'packages', label: 'Packages', icon: Package },
+        { key: 'availability', label: 'Availability', icon: Calendar },
+        { key: 'faq', label: 'FAQ', icon: HelpCircle },
+      ],
+    },
+    {
+      heading: 'Clients',
+      items: [
+        { key: 'requests', label: 'Booking Requests', icon: Inbox, badge: pendingBookings },
+        { key: 'messages', label: 'Messages', icon: MessageSquare, badge: totalUnreadMessages },
+        { key: 'reviews', label: 'Reviews', icon: Star },
+        { key: 'network', label: 'Network', icon: Users },
+      ],
+    },
+    {
+      heading: 'Account',
+      items: [
+        { key: 'trust', label: 'Trust Score', icon: Shield },
+        { key: 'settings', label: 'Settings', icon: Settings },
+      ],
+    },
+  ]
+
   return (
     <div className="min-h-screen bg-ink-50">
-      {/* ── Nav ────────────────────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 bg-white border-b border-ink-100">
+      {/* ── Desktop left rail (lg+) ─────────────────────────────────────── */}
+      <DashboardSidebar
+        groups={sidebarGroups}
+        activeKey={activeTab}
+        onSelect={(k) => switchTab(k as DashboardTab)}
+        footer={
+          <div className="space-y-1">
+            <Link
+              href="/photographers/your-profile"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-ink-400 hover:text-ink hover:bg-ink-50 transition-all"
+            >
+              <Eye className="w-[18px] h-[18px] flex-shrink-0" /> View profile
+            </Link>
+            <div className="flex items-center gap-2 px-1">
+              <NotificationCentre
+                apiEndpoint="/api/photographer/notifications"
+                markReadEndpoint="/api/photographer/notifications"
+                role="photographer"
+                pollIntervalMs={30000}
+              />
+              <AvatarMenu
+                avatarUrl={profile.avatarUrl}
+                displayName={profile.displayName}
+                onSettings={() => switchTab('settings')}
+              />
+              <span className="text-xs font-medium text-ink truncate">{profile.displayName}</span>
+            </div>
+          </div>
+        }
+      />
+
+      {/* ── Mobile top nav (hidden on lg, replaced by the rail) ─────────── */}
+      <nav className="lg:hidden sticky top-0 z-50 bg-white border-b border-ink-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
@@ -4674,6 +4737,7 @@ function PhotographerDashboardInner() {
       </nav>
 
 
+      <div className="lg:pl-64">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         {/* Pending review banner — shown whenever profile_status is pending */}
@@ -4712,8 +4776,8 @@ function PhotographerDashboardInner() {
           {/* ── Main column ─────────────────────────────────────────── */}
           <div className="lg:col-span-2 space-y-6" ref={mainContentRef}>
 
-            {/* Tab bar — scrollable on mobile */}
-            <div className="flex gap-1 bg-white rounded-xl p-1 border border-ink-100 overflow-x-auto scrollbar-hide" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+            {/* Tab bar — scrollable on mobile; hidden on lg+ where the left rail takes over */}
+            <div className="lg:hidden flex gap-1 bg-white rounded-xl p-1 border border-ink-100 overflow-x-auto scrollbar-hide" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
               {tabs.map(tab => (
                 <button
                   key={tab.key}
@@ -5917,6 +5981,7 @@ function PhotographerDashboardInner() {
             )}
           </div>
         </div>
+      </div>
       </div>
     </div>
   )
