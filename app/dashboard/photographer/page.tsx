@@ -4673,37 +4673,13 @@ function PhotographerDashboardInner() {
         groups={sidebarGroups}
         activeKey={activeTab}
         onSelect={(k) => switchTab(k as DashboardTab)}
-        footer={
-          <div className="space-y-1">
-            <Link
-              href="/photographers/your-profile"
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-ink-400 hover:text-ink hover:bg-ink-50 transition-all"
-            >
-              <Eye className="w-[18px] h-[18px] flex-shrink-0" /> View profile
-            </Link>
-            <div className="flex items-center gap-2 px-1">
-              <NotificationCentre
-                apiEndpoint="/api/photographer/notifications"
-                markReadEndpoint="/api/photographer/notifications"
-                role="photographer"
-                pollIntervalMs={30000}
-              />
-              <AvatarMenu
-                avatarUrl={profile.avatarUrl}
-                displayName={profile.displayName}
-                onSettings={() => switchTab('settings')}
-              />
-              <span className="text-xs font-medium text-ink truncate">{profile.displayName}</span>
-            </div>
-          </div>
-        }
       />
 
-      {/* ── Mobile top nav (hidden on lg, replaced by the rail) ─────────── */}
-      <nav className="lg:hidden sticky top-0 z-50 bg-white border-b border-ink-100">
+      {/* ── Top bar — logo on mobile; account controls stay top-right on all sizes ── */}
+      <nav className="sticky top-0 z-50 bg-white border-b border-ink-100 lg:pl-64">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
+            <Link href="/" className="flex items-center gap-2.5 flex-shrink-0 lg:hidden">
               <Image src="/logo.png" alt="TrueNorth Frames" width={32} height={32} className="rounded-md" />
               <span className="font-semibold text-ink text-sm hidden sm:block">TrueNorth Frames</span>
             </Link>
