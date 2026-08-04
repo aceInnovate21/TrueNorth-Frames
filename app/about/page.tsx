@@ -12,15 +12,13 @@ export const metadata: Metadata = {
 
 const TEAM = [
   { name: 'Yogesh', role: 'Founder & CEO', initials: 'Y', bg: 'bg-slate-700' },
-  { name: 'Sarah M.', role: 'Head of Community', initials: 'SM', bg: 'bg-zinc-700' },
-  { name: 'Dev T.', role: 'Lead Engineer', initials: 'DT', bg: 'bg-neutral-700' },
 ]
 
 const VALUES = [
   {
     icon: Shield,
     title: 'Transparency over hype',
-    desc: 'Every trust score is pulled from public, third-party sources — Google, Yelp, Instagram. We never let photographers write their own reviews or inflate their scores.',
+    desc: 'Every trust score is pulled from public, third-party sources — starting with Google, with more on the way. We never let photographers write their own reviews or inflate their scores.',
   },
   {
     icon: Heart,
@@ -40,11 +38,8 @@ const VALUES = [
 ]
 
 const MILESTONES = [
-  { year: '2024', label: 'Idea formed', desc: 'Couldn\'t find a reliable way to vet Edmonton photographers. Built a spreadsheet. Thought: there has to be a better way.' },
-  { year: 'Early 2025', label: 'First photographers onboarded', desc: '12 photographers joined the waitlist before the product was even built. That told us the problem was real.' },
-  { year: 'Mid 2025', label: 'Trust score engine launched', desc: 'Automated aggregation of Google, Yelp, Instagram and Facebook reviews into one unified score.' },
-  { year: 'Late 2025', label: 'Public launch', desc: '50+ Edmonton photographers live. First client bookings facilitated through the platform.' },
-  { year: '2026', label: 'Growing', desc: 'Expanding specialties, adding portfolio tools, and building toward real-time availability.' },
+  { year: 'May 2026', label: 'Idea formed', desc: 'Couldn\'t find a reliable way to vet Edmonton photographers. Built a spreadsheet. Thought: there has to be a better way.' },
+  { year: 'Now', label: 'Photographer onboarding', desc: 'Currently onboarding Edmonton photographers and building out trust scores, portfolios, and messaging.' },
 ]
 
 export default function AboutPage() {
@@ -90,10 +85,10 @@ export default function AboutPage() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
             {[
-              { value: '50+', label: 'Edmonton photographers' },
-              { value: '4', label: 'Verified trust sources' },
+              { value: 'Verified', label: 'Edmonton photographers' },
+              { value: 'Google', label: 'Verified trust source' },
               { value: '$0', label: 'Booking fees — ever' },
-              { value: '200+', label: 'Client enquiries facilitated' },
+              { value: '0%', label: 'Commission on your rate' },
             ].map((s) => (
               <div key={s.label}>
                 <p className="font-serif text-4xl font-bold text-ink mb-1">{s.value}</p>
@@ -195,10 +190,12 @@ export default function AboutPage() {
       {/* ── Team ──────────────────────────────────────────────────────── */}
       <section className="bg-ink-50 py-24">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-ink-300 text-xs font-semibold uppercase tracking-[0.15em] mb-3">The team</p>
-          <h2 className="font-serif text-3xl sm:text-4xl font-bold text-ink mb-4">Small team. Big focus.</h2>
-          <p className="text-ink-400 text-base mb-12 max-w-md mx-auto">
-            We're based in Edmonton and we use the product ourselves. That keeps us honest.
+          <p className="text-ink-300 text-xs font-semibold uppercase tracking-[0.15em] mb-3">The founder</p>
+          <h2 className="font-serif text-3xl sm:text-4xl font-bold text-ink mb-4">A one-person mission.</h2>
+          <p className="text-ink-400 text-base mb-12 max-w-lg mx-auto">
+            I'm Yogesh, from Edmonton. I'm building TrueNorth Frames for our community — to
+            help local photographers get discovered and to give the local economy a boost,
+            one booking at a time.
           </p>
           <div className="flex flex-wrap justify-center gap-6">
             {TEAM.map((t) => (
@@ -224,7 +221,7 @@ export default function AboutPage() {
             Ready to find your photographer?
           </h2>
           <p className="text-ink-300 text-base mb-8 max-w-md mx-auto">
-            Browse 50+ Edmonton photographers — free to search, free to message, no account required to start.
+            Browse Edmonton photographers — free to search, free to message, no account required to start.
           </p>
           <div className="flex flex-wrap gap-3 justify-center">
             <Link

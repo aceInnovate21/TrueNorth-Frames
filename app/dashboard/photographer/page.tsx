@@ -14,8 +14,9 @@ import {
   ChevronsUp, ChevronsDown, LogOut,
   Plus, Pencil, Trash2, Paperclip, FileText, Play,
   FolderPlus, FolderOpen, Video, Image as ImageIcon,
-  Facebook, RefreshCw, Link2, UserPlus, Search,
+  Facebook, RefreshCw, Link2, UserPlus, Search, Home, Menu,
 } from 'lucide-react'
+import { DashboardSidebar, type SidebarGroup } from '@/components/dashboard-sidebar'
 import { AvailabilityTimeSlots, type WeeklySchedule } from '@/components/availability-time-slots'
 import { ProjectPackages, type ProjectPackage } from '@/components/project-packages'
 import { ReviewManager } from '@/components/review-manager'
@@ -3838,10 +3839,11 @@ function NotifPanel({
 
 // ─── Avatar dropdown ─────────────────────────────────────────────────────────
 
-function AvatarMenu({ avatarUrl, displayName, onSettings }: {
+function AvatarMenu({ avatarUrl, displayName, onSettings, dropUp }: {
   avatarUrl: string
   displayName: string
   onSettings: () => void
+  dropUp?: boolean
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -3880,7 +3882,7 @@ function AvatarMenu({ avatarUrl, displayName, onSettings }: {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-10 w-48 bg-white rounded-2xl border border-ink-100 py-1.5 z-50" style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}>
+        <div className={`absolute w-48 bg-white rounded-2xl border border-ink-100 py-1.5 z-50 ${dropUp ? 'bottom-full mb-2 left-0' : 'top-10 right-0'}`} style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}>
           {displayName && (
             <div className="px-4 py-2 border-b border-ink-50 mb-1">
               <p className="text-xs font-semibold text-ink truncate">{displayName}</p>
@@ -4574,6 +4576,8 @@ function PhotographerDashboardInner() {
   const mainContentRef = useRef<HTMLDivElement>(null)
 
   // Unified tab switcher — updates state, URL, and scrolls to top on mobile
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
   function switchTab(tab: DashboardTab) {
     setActiveTab(tab)
     const params = new URLSearchParams(window.location.search)
@@ -4634,16 +4638,91 @@ function PhotographerDashboardInner() {
     { key: 'settings', label: 'Settings' },
   ] as const
 
+  // Desktop left-rail navigation — same tabs, grouped Instagram-style with icons.
+  // Badges surface unread messages / pending booking requests at a glance.
+  const sidebarGroups: SidebarGroup[] = [
+    { items: [{ key: 'overview', label: 'Overview', icon: Home }] },
+    {
+      heading: 'Studio',
+      items: [
+        { key: 'portfolio', label: 'Portfolio', icon: ImageIcon },
+        { key: 'packages', label: 'Packages', icon: Package },
+        { key: 'availability', label: 'Availability', icon: Calendar },
+        { key: 'faq', label: 'FAQ', icon: HelpCircle },
+      ],
+    },
+    {
+      heading: 'Clients',
+      items: [
+        { key: 'requests', label: 'Booking Requests', icon: Inbox, badge: pendingBookings },
+        { key: 'messages', label: 'Messages', icon: MessageSquare, badge: totalUnreadMessages },
+        { key: 'reviews', label: 'Reviews', icon: Star },
+        { key: 'network', label: 'Network', icon: Users },
+      ],
+    },
+    {
+      heading: 'Account',
+      items: [
+        { key: 'trust', label: 'Trust Score', icon: Shield },
+        { key: 'settings', label: 'Settings', icon: Settings },
+      ],
+    },
+  ]
+
   return (
     <div className="min-h-screen bg-ink-50">
-      {/* ── Nav ────────────────────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 bg-white border-b border-ink-100">
+      {/* ── Desktop left rail (lg+) ─────────────────────────────────────── */}
+      <DashboardSidebar
+        groups={sidebarGroups}
+        activeKey={activeTab}
+        onSelect={(k) => switchTab(k as DashboardTab)}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        footer={
+          <div className="space-y-1">
+            <Link
+              href="/photographers/your-profile"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-ink-400 hover:text-ink hover:bg-ink-50 transition-all"
+            >
+              <Eye className="w-[18px] h-[18px] flex-shrink-0" /> View profile
+            </Link>
+            <div className="flex items-center gap-2 px-1">
+              <NotificationCentre
+                apiEndpoint="/api/photographer/notifications"
+                markReadEndpoint="/api/photographer/notifications"
+                role="photographer"
+                pollIntervalMs={30000}
+                dropUp
+              />
+              <AvatarMenu
+                avatarUrl={profile.avatarUrl}
+                displayName={profile.displayName}
+                onSettings={() => switchTab('settings')}
+                dropUp
+              />
+              <span className="text-xs font-medium text-ink truncate">{profile.displayName}</span>
+            </div>
+          </div>
+        }
+      />
+
+      {/* ── Mobile top nav (hidden on lg, replaced by the rail) ─────────── */}
+      <nav className="lg:hidden sticky top-0 z-50 bg-white border-b border-ink-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-2">
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="text-ink-500 hover:text-ink p-1 -ml-1"
+              aria-label="Open menu"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
             <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
               <Image src="/logo.png" alt="TrueNorth Frames" width={32} height={32} className="rounded-md" />
               <span className="font-semibold text-ink text-sm hidden sm:block">TrueNorth Frames</span>
             </Link>
+            </div>
 
             <div className="flex items-center gap-1.5">
               {/* View public profile */}
@@ -4674,6 +4753,7 @@ function PhotographerDashboardInner() {
       </nav>
 
 
+      <div className="lg:pl-64">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         {/* Pending review banner — shown whenever profile_status is pending */}
@@ -4712,8 +4792,8 @@ function PhotographerDashboardInner() {
           {/* ── Main column ─────────────────────────────────────────── */}
           <div className="lg:col-span-2 space-y-6" ref={mainContentRef}>
 
-            {/* Tab bar — scrollable on mobile */}
-            <div className="flex gap-1 bg-white rounded-xl p-1 border border-ink-100 overflow-x-auto scrollbar-hide" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+            {/* Tab bar removed — navigation lives in the left rail (desktop) and the slide-in drawer (mobile) */}
+            <div className="hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
               {tabs.map(tab => (
                 <button
                   key={tab.key}
@@ -5917,6 +5997,7 @@ function PhotographerDashboardInner() {
             )}
           </div>
         </div>
+      </div>
       </div>
     </div>
   )
