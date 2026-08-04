@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { badRequest, serverError } from '@/lib/api-helpers'
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY!)
+// Lazily construct on first request — a module-level `new Resend(KEY!)` throws
+// during `next build` when RESEND_API_KEY is absent, breaking the whole build.
+let _resend: Resend | null = null
+function getResend(): Resend {
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY)
+  return _resend
+}
 
 const SUBJECT_LABELS: Record<string, string> = {
   technical: 'Technical issue',
@@ -24,7 +30,7 @@ export async function POST(request: NextRequest) {
   const supportEmail = process.env.SUPPORT_EMAIL ?? 'aceinnovate21@gmail.com'
 
   try {
-    await resend.emails.send({
+    await getResend().emails.send({
       from: process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev',
       to: supportEmail,
       replyTo: email.trim(),
