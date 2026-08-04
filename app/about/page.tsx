@@ -20,7 +20,7 @@ const VALUES = [
   {
     icon: Shield,
     title: 'Transparency over hype',
-    desc: 'Every trust score is pulled from public, third-party sources — Google, Yelp, Instagram. We never let photographers write their own reviews or inflate their scores.',
+    desc: 'Every trust score is pulled from public, third-party sources — starting with Google, with more on the way. We never let photographers write their own reviews or inflate their scores.',
   },
   {
     icon: Heart,
@@ -42,7 +42,7 @@ const VALUES = [
 const MILESTONES = [
   { year: '2024', label: 'Idea formed', desc: 'Couldn\'t find a reliable way to vet Edmonton photographers. Built a spreadsheet. Thought: there has to be a better way.' },
   { year: 'Early 2025', label: 'First photographers onboarded', desc: '12 photographers joined the waitlist before the product was even built. That told us the problem was real.' },
-  { year: 'Mid 2025', label: 'Trust score engine launched', desc: 'Automated aggregation of Google, Yelp, Instagram and Facebook reviews into one unified score.' },
+  { year: 'Mid 2025', label: 'Trust score engine launched', desc: 'Automated aggregation of public review signals — starting with Google — into one unified score.' },
   { year: 'Late 2025', label: 'Public launch', desc: 'Edmonton photographers live on the platform. First client bookings facilitated through TrueNorth Frames.' },
   { year: '2026', label: 'Growing', desc: 'Expanding specialties, adding portfolio tools, and building toward real-time availability.' },
 ]
@@ -91,9 +91,9 @@ export default function AboutPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
             {[
               { value: 'Verified', label: 'Edmonton photographers' },
-              { value: '4', label: 'Verified trust sources' },
+              { value: 'Google', label: 'Verified trust source' },
               { value: '$0', label: 'Booking fees — ever' },
-              { value: '200+', label: 'Client enquiries facilitated' },
+              { value: '0%', label: 'Commission on your rate' },
             ].map((s) => (
               <div key={s.label}>
                 <p className="font-serif text-4xl font-bold text-ink mb-1">{s.value}</p>
