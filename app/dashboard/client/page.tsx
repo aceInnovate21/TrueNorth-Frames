@@ -9,6 +9,7 @@ import { DashboardSidebar, type SidebarGroup } from '@/components/dashboard-side
 import {
   Bell,
   MessageSquare,
+  Menu,
   Search,
   Star,
   Camera,
@@ -845,12 +846,19 @@ export default function ClientDashboard() {
   // Desktop left-rail: the client dashboard is a single scrolling page, so rail
   // items jump to the matching section anchor rather than switching tabs.
   const [activeSection, setActiveSection] = useState<string>('sec-messages')
+  const [drawerOpen, setDrawerOpen] = useState(false)
   function scrollToSection(id: string) {
     setActiveSection(id)
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   const clientSidebarGroups: SidebarGroup[] = [
     {
+      items: [
+        { key: 'browse', label: 'Browse photographers', icon: Search, href: '/photographers' },
+      ],
+    },
+    {
+      heading: 'Dashboard',
       items: [
         { key: 'sec-messages', label: 'Messages', icon: MessageSquare, badge: totalConversationUnread },
         { key: 'sec-bookings', label: 'My Bookings', icon: Calendar },
@@ -949,14 +957,10 @@ export default function ClientDashboard() {
         groups={clientSidebarGroups}
         activeKey={activeSection}
         onSelect={scrollToSection}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
         footer={
           <div className="space-y-1">
-            <Link
-              href="/photographers"
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-ink-400 hover:text-ink hover:bg-ink-50 transition-all"
-            >
-              <Search className="w-[18px] h-[18px] flex-shrink-0" /> Browse photographers
-            </Link>
             <div className="flex items-center gap-2 px-1">
               <NotificationCentre
                 apiEndpoint="/api/client/notifications"
@@ -982,10 +986,19 @@ export default function ClientDashboard() {
       <div className="lg:hidden bg-white border-b border-ink-100 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-            <Image src="/logo.png" alt="TrueNorth Frames" width={30} height={30} className="rounded-md" />
-            <span className="font-semibold text-ink text-sm hidden sm:block">TrueNorth Frames</span>
-          </Link>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="text-ink-500 hover:text-ink p-1 -ml-1"
+              aria-label="Open menu"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <Link href="/" className="flex items-center gap-2">
+              <Image src="/logo.png" alt="TrueNorth Frames" width={30} height={30} className="rounded-md" />
+              <span className="font-semibold text-ink text-sm hidden sm:block">TrueNorth Frames</span>
+            </Link>
+          </div>
 
           {/* Centre: quick search */}
           <Link

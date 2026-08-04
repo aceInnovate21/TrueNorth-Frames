@@ -14,7 +14,7 @@ import {
   ChevronsUp, ChevronsDown, LogOut,
   Plus, Pencil, Trash2, Paperclip, FileText, Play,
   FolderPlus, FolderOpen, Video, Image as ImageIcon,
-  Facebook, RefreshCw, Link2, UserPlus, Search, Home,
+  Facebook, RefreshCw, Link2, UserPlus, Search, Home, Menu,
 } from 'lucide-react'
 import { DashboardSidebar, type SidebarGroup } from '@/components/dashboard-sidebar'
 import { AvailabilityTimeSlots, type WeeklySchedule } from '@/components/availability-time-slots'
@@ -4576,6 +4576,8 @@ function PhotographerDashboardInner() {
   const mainContentRef = useRef<HTMLDivElement>(null)
 
   // Unified tab switcher — updates state, URL, and scrolls to top on mobile
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
   function switchTab(tab: DashboardTab) {
     setActiveTab(tab)
     const params = new URLSearchParams(window.location.search)
@@ -4674,6 +4676,8 @@ function PhotographerDashboardInner() {
         groups={sidebarGroups}
         activeKey={activeTab}
         onSelect={(k) => switchTab(k as DashboardTab)}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
         footer={
           <div className="space-y-1">
             <Link
@@ -4706,10 +4710,19 @@ function PhotographerDashboardInner() {
       <nav className="lg:hidden sticky top-0 z-50 bg-white border-b border-ink-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-2">
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="text-ink-500 hover:text-ink p-1 -ml-1"
+              aria-label="Open menu"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
             <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
               <Image src="/logo.png" alt="TrueNorth Frames" width={32} height={32} className="rounded-md" />
               <span className="font-semibold text-ink text-sm hidden sm:block">TrueNorth Frames</span>
             </Link>
+            </div>
 
             <div className="flex items-center gap-1.5">
               {/* View public profile */}
@@ -4779,8 +4792,8 @@ function PhotographerDashboardInner() {
           {/* ── Main column ─────────────────────────────────────────── */}
           <div className="lg:col-span-2 space-y-6" ref={mainContentRef}>
 
-            {/* Tab bar — scrollable on mobile; hidden on lg+ where the left rail takes over */}
-            <div className="lg:hidden flex gap-1 bg-white rounded-xl p-1 border border-ink-100 overflow-x-auto scrollbar-hide" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+            {/* Tab bar removed — navigation lives in the left rail (desktop) and the slide-in drawer (mobile) */}
+            <div className="hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
               {tabs.map(tab => (
                 <button
                   key={tab.key}
