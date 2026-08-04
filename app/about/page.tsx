@@ -40,11 +40,8 @@ const VALUES = [
 ]
 
 const MILESTONES = [
-  { year: '2024', label: 'Idea formed', desc: 'Couldn\'t find a reliable way to vet Edmonton photographers. Built a spreadsheet. Thought: there has to be a better way.' },
-  { year: 'Early 2025', label: 'First photographers onboarded', desc: '12 photographers joined the waitlist before the product was even built. That told us the problem was real.' },
-  { year: 'Mid 2025', label: 'Trust score engine launched', desc: 'Automated aggregation of public review signals — starting with Google — into one unified score.' },
-  { year: 'Late 2025', label: 'Public launch', desc: 'Edmonton photographers live on the platform. First client bookings facilitated through TrueNorth Frames.' },
-  { year: '2026', label: 'Growing', desc: 'Expanding specialties, adding portfolio tools, and building toward real-time availability.' },
+  { year: 'May 2026', label: 'Idea formed', desc: 'Couldn\'t find a reliable way to vet Edmonton photographers. Built a spreadsheet. Thought: there has to be a better way.' },
+  { year: 'Now', label: 'Photographer onboarding', desc: 'Currently onboarding Edmonton photographers and building out trust scores, portfolios, and messaging.' },
 ]
 
 export default function AboutPage() {
