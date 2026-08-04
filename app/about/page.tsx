@@ -43,7 +43,7 @@ const MILESTONES = [
   { year: '2024', label: 'Idea formed', desc: 'Couldn\'t find a reliable way to vet Edmonton photographers. Built a spreadsheet. Thought: there has to be a better way.' },
   { year: 'Early 2025', label: 'First photographers onboarded', desc: '12 photographers joined the waitlist before the product was even built. That told us the problem was real.' },
   { year: 'Mid 2025', label: 'Trust score engine launched', desc: 'Automated aggregation of Google, Yelp, Instagram and Facebook reviews into one unified score.' },
-  { year: 'Late 2025', label: 'Public launch', desc: '50+ Edmonton photographers live. First client bookings facilitated through the platform.' },
+  { year: 'Late 2025', label: 'Public launch', desc: 'Edmonton photographers live on the platform. First client bookings facilitated through TrueNorth Frames.' },
   { year: '2026', label: 'Growing', desc: 'Expanding specialties, adding portfolio tools, and building toward real-time availability.' },
 ]
 
@@ -90,7 +90,7 @@ export default function AboutPage() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
             {[
-              { value: '50+', label: 'Edmonton photographers' },
+              { value: 'Verified', label: 'Edmonton photographers' },
               { value: '4', label: 'Verified trust sources' },
               { value: '$0', label: 'Booking fees — ever' },
               { value: '200+', label: 'Client enquiries facilitated' },
@@ -224,7 +224,7 @@ export default function AboutPage() {
             Ready to find your photographer?
           </h2>
           <p className="text-ink-300 text-base mb-8 max-w-md mx-auto">
-            Browse 50+ Edmonton photographers — free to search, free to message, no account required to start.
+            Browse Edmonton photographers — free to search, free to message, no account required to start.
           </p>
           <div className="flex flex-wrap gap-3 justify-center">
             <Link
