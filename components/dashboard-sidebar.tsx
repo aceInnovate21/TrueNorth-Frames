@@ -112,6 +112,7 @@ export function DashboardSidebar({ groups, activeKey, onSelect, footer, open = f
                 ) : (
                   <button
                     key={item.key}
+                    data-tour={`nav-${item.key}`}
                     onClick={() => handleSelect(item.key)}
                     aria-current={active ? 'page' : undefined}
                     className={className}
