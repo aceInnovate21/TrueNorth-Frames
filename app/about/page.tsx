@@ -12,8 +12,6 @@ export const metadata: Metadata = {
 
 const TEAM = [
   { name: 'Yogesh', role: 'Founder & CEO', initials: 'Y', bg: 'bg-slate-700' },
-  { name: 'Sarah M.', role: 'Head of Community', initials: 'SM', bg: 'bg-zinc-700' },
-  { name: 'Dev T.', role: 'Lead Engineer', initials: 'DT', bg: 'bg-neutral-700' },
 ]
 
 const VALUES = [
@@ -192,10 +190,12 @@ export default function AboutPage() {
       {/* ── Team ──────────────────────────────────────────────────────── */}
       <section className="bg-ink-50 py-24">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-ink-300 text-xs font-semibold uppercase tracking-[0.15em] mb-3">The team</p>
-          <h2 className="font-serif text-3xl sm:text-4xl font-bold text-ink mb-4">Small team. Big focus.</h2>
-          <p className="text-ink-400 text-base mb-12 max-w-md mx-auto">
-            We're based in Edmonton and we use the product ourselves. That keeps us honest.
+          <p className="text-ink-300 text-xs font-semibold uppercase tracking-[0.15em] mb-3">The founder</p>
+          <h2 className="font-serif text-3xl sm:text-4xl font-bold text-ink mb-4">A one-person mission.</h2>
+          <p className="text-ink-400 text-base mb-12 max-w-lg mx-auto">
+            I'm Yogesh, from Edmonton. I'm building TrueNorth Frames for our community — to
+            help local photographers get discovered and to give the local economy a boost,
+            one booking at a time.
           </p>
           <div className="flex flex-wrap justify-center gap-6">
             {TEAM.map((t) => (
