@@ -3839,10 +3839,11 @@ function NotifPanel({
 
 // ─── Avatar dropdown ─────────────────────────────────────────────────────────
 
-function AvatarMenu({ avatarUrl, displayName, onSettings }: {
+function AvatarMenu({ avatarUrl, displayName, onSettings, dropUp }: {
   avatarUrl: string
   displayName: string
   onSettings: () => void
+  dropUp?: boolean
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -3881,7 +3882,7 @@ function AvatarMenu({ avatarUrl, displayName, onSettings }: {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-10 w-48 bg-white rounded-2xl border border-ink-100 py-1.5 z-50" style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}>
+        <div className={`absolute w-48 bg-white rounded-2xl border border-ink-100 py-1.5 z-50 ${dropUp ? 'bottom-full mb-2 left-0' : 'top-10 right-0'}`} style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}>
           {displayName && (
             <div className="px-4 py-2 border-b border-ink-50 mb-1">
               <p className="text-xs font-semibold text-ink truncate">{displayName}</p>
@@ -4673,13 +4674,39 @@ function PhotographerDashboardInner() {
         groups={sidebarGroups}
         activeKey={activeTab}
         onSelect={(k) => switchTab(k as DashboardTab)}
+        footer={
+          <div className="space-y-1">
+            <Link
+              href="/photographers/your-profile"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-ink-400 hover:text-ink hover:bg-ink-50 transition-all"
+            >
+              <Eye className="w-[18px] h-[18px] flex-shrink-0" /> View profile
+            </Link>
+            <div className="flex items-center gap-2 px-1">
+              <NotificationCentre
+                apiEndpoint="/api/photographer/notifications"
+                markReadEndpoint="/api/photographer/notifications"
+                role="photographer"
+                pollIntervalMs={30000}
+                dropUp
+              />
+              <AvatarMenu
+                avatarUrl={profile.avatarUrl}
+                displayName={profile.displayName}
+                onSettings={() => switchTab('settings')}
+                dropUp
+              />
+              <span className="text-xs font-medium text-ink truncate">{profile.displayName}</span>
+            </div>
+          </div>
+        }
       />
 
-      {/* ── Top bar — logo on mobile; account controls stay top-right on all sizes ── */}
-      <nav className="sticky top-0 z-50 bg-white border-b border-ink-100 lg:pl-64">
+      {/* ── Mobile top nav (hidden on lg, replaced by the rail) ─────────── */}
+      <nav className="lg:hidden sticky top-0 z-50 bg-white border-b border-ink-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center gap-2.5 flex-shrink-0 lg:hidden">
+            <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
               <Image src="/logo.png" alt="TrueNorth Frames" width={32} height={32} className="rounded-md" />
               <span className="font-semibold text-ink text-sm hidden sm:block">TrueNorth Frames</span>
             </Link>

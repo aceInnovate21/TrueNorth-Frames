@@ -108,11 +108,13 @@ interface Props {
   markReadEndpoint: string
   role: 'client' | 'photographer'
   pollIntervalMs?: number
+  /** Open the panel above the bell instead of below — for bottom-anchored placements (e.g. the sidebar rail footer). */
+  dropUp?: boolean
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function NotificationCentre({ apiEndpoint, markReadEndpoint, role, pollIntervalMs = 60000 }: Props) {
+export function NotificationCentre({ apiEndpoint, markReadEndpoint, role, pollIntervalMs = 60000, dropUp }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -245,7 +247,7 @@ export function NotificationCentre({ apiEndpoint, markReadEndpoint, role, pollIn
       {/* Dropdown */}
       {open && (
         <div
-          className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-2xl overflow-hidden z-50"
+          className={`absolute w-80 sm:w-96 bg-white rounded-2xl overflow-hidden z-50 ${dropUp ? 'bottom-full mb-2 left-0' : 'top-full mt-2 right-0'}`}
           style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.06), 0 12px 40px rgba(0,0,0,0.14)' }}
         >
           {/* Header */}

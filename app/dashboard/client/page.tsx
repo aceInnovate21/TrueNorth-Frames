@@ -686,7 +686,7 @@ function SupportWidget() {
 
 // ─── Client avatar dropdown ───────────────────────────────────────────────────
 
-function ClientAvatarMenu({ initials, fullName, loading }: { initials: string; fullName: string; loading: boolean }) {
+function ClientAvatarMenu({ initials, fullName, loading, dropUp }: { initials: string; fullName: string; loading: boolean; dropUp?: boolean }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -722,7 +722,7 @@ function ClientAvatarMenu({ initials, fullName, loading }: { initials: string; f
       </button>
 
       {open && (
-        <div className="absolute right-0 top-11 w-48 bg-white rounded-2xl border border-ink-100 py-1.5 z-50" style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}>
+        <div className={`absolute w-48 bg-white rounded-2xl border border-ink-100 py-1.5 z-50 ${dropUp ? 'bottom-full mb-2 left-0' : 'top-11 right-0'}`} style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}>
           {fullName && (
             <div className="px-4 py-2 border-b border-ink-50 mb-1">
               <p className="text-xs font-semibold text-ink truncate">{fullName}</p>
@@ -949,14 +949,40 @@ export default function ClientDashboard() {
         groups={clientSidebarGroups}
         activeKey={activeSection}
         onSelect={scrollToSection}
+        footer={
+          <div className="space-y-1">
+            <Link
+              href="/photographers"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-ink-400 hover:text-ink hover:bg-ink-50 transition-all"
+            >
+              <Search className="w-[18px] h-[18px] flex-shrink-0" /> Browse photographers
+            </Link>
+            <div className="flex items-center gap-2 px-1">
+              <NotificationCentre
+                apiEndpoint="/api/client/notifications"
+                markReadEndpoint="/api/client/notifications/read"
+                role="client"
+                pollIntervalMs={30000}
+                dropUp
+              />
+              <ClientAvatarMenu
+                initials={initials}
+                fullName={profile?.full_name ?? ''}
+                loading={loadingProfile}
+                dropUp
+              />
+              <span className="text-xs font-medium text-ink truncate">{profile?.full_name ?? ''}</span>
+            </div>
+          </div>
+        }
       />
 
       <div className="lg:pl-64">
-      {/* ── Top bar — logo on mobile; account controls stay top-right on all sizes ── */}
-      <div className="bg-white border-b border-ink-100 sticky top-0 z-40">
+      {/* ── Dashboard nav (mobile only; rail replaces it on lg+) ─────── */}
+      <div className="lg:hidden bg-white border-b border-ink-100 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 flex-shrink-0 lg:hidden">
+          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
             <Image src="/logo.png" alt="TrueNorth Frames" width={30} height={30} className="rounded-md" />
             <span className="font-semibold text-ink text-sm hidden sm:block">TrueNorth Frames</span>
           </Link>
