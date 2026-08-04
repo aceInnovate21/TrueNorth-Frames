@@ -5,9 +5,11 @@ import Image from 'next/image'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { NotificationCentre } from '@/components/notification-centre'
+import { DashboardSidebar, type SidebarGroup } from '@/components/dashboard-sidebar'
 import {
   Bell,
   MessageSquare,
+  Menu,
   Search,
   Star,
   Camera,
@@ -685,7 +687,7 @@ function SupportWidget() {
 
 // ─── Client avatar dropdown ───────────────────────────────────────────────────
 
-function ClientAvatarMenu({ initials, fullName, loading }: { initials: string; fullName: string; loading: boolean }) {
+function ClientAvatarMenu({ initials, fullName, loading, dropUp }: { initials: string; fullName: string; loading: boolean; dropUp?: boolean }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -721,7 +723,7 @@ function ClientAvatarMenu({ initials, fullName, loading }: { initials: string; f
       </button>
 
       {open && (
-        <div className="absolute right-0 top-11 w-48 bg-white rounded-2xl border border-ink-100 py-1.5 z-50" style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}>
+        <div className={`absolute w-48 bg-white rounded-2xl border border-ink-100 py-1.5 z-50 ${dropUp ? 'bottom-full mb-2 left-0' : 'top-11 right-0'}`} style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}>
           {fullName && (
             <div className="px-4 py-2 border-b border-ink-50 mb-1">
               <p className="text-xs font-semibold text-ink truncate">{fullName}</p>
@@ -841,6 +843,31 @@ export default function ClientDashboard() {
   const unreadCount = notifications.filter(n => !n.read_at).length
   const totalConversationUnread = conversations.reduce((a, c) => a + c.unread_count, 0)
 
+  // Desktop left-rail: the client dashboard is a single scrolling page, so rail
+  // items jump to the matching section anchor rather than switching tabs.
+  const [activeSection, setActiveSection] = useState<string>('sec-messages')
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  function scrollToSection(id: string) {
+    setActiveSection(id)
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+  const clientSidebarGroups: SidebarGroup[] = [
+    {
+      items: [
+        { key: 'browse', label: 'Browse photographers', icon: Search, href: '/photographers' },
+      ],
+    },
+    {
+      heading: 'Dashboard',
+      items: [
+        { key: 'sec-messages', label: 'Messages', icon: MessageSquare, badge: totalConversationUnread },
+        { key: 'sec-bookings', label: 'My Bookings', icon: Calendar },
+        { key: 'sec-reviews', label: 'Reviews', icon: Star },
+        { key: 'sec-saved', label: 'Saved', icon: Heart },
+      ],
+    },
+  ]
+
   // Pending reviews: completed bookings not yet reviewed
   const pendingReviews: PendingReviewItem[] = bookings
     .filter(b => b.status === 'completed' && !reviewedBookingIds.has(b.id))
@@ -925,14 +952,53 @@ export default function ClientDashboard() {
 
   return (
     <>
-      {/* ── Dashboard nav ──────────────────────────────────────────── */}
-      <div className="bg-white border-b border-ink-100 sticky top-0 z-40">
+      {/* ── Desktop left rail (lg+) ─────────────────────────────────── */}
+      <DashboardSidebar
+        groups={clientSidebarGroups}
+        activeKey={activeSection}
+        onSelect={scrollToSection}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        footer={
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 px-1">
+              <NotificationCentre
+                apiEndpoint="/api/client/notifications"
+                markReadEndpoint="/api/client/notifications/read"
+                role="client"
+                pollIntervalMs={30000}
+                dropUp
+              />
+              <ClientAvatarMenu
+                initials={initials}
+                fullName={profile?.full_name ?? ''}
+                loading={loadingProfile}
+                dropUp
+              />
+              <span className="text-xs font-medium text-ink truncate">{profile?.full_name ?? ''}</span>
+            </div>
+          </div>
+        }
+      />
+
+      <div className="lg:pl-64">
+      {/* ── Dashboard nav (mobile only; rail replaces it on lg+) ─────── */}
+      <div className="lg:hidden bg-white border-b border-ink-100 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-            <Image src="/logo.png" alt="TrueNorth Frames" width={30} height={30} className="rounded-md" />
-            <span className="font-semibold text-ink text-sm hidden sm:block">TrueNorth Frames</span>
-          </Link>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="text-ink-500 hover:text-ink p-1 -ml-1"
+              aria-label="Open menu"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <Link href="/" className="flex items-center gap-2">
+              <Image src="/logo.png" alt="TrueNorth Frames" width={30} height={30} className="rounded-md" />
+              <span className="font-semibold text-ink text-sm hidden sm:block">TrueNorth Frames</span>
+            </Link>
+          </div>
 
           {/* Centre: quick search */}
           <Link
@@ -990,7 +1056,7 @@ export default function ClientDashboard() {
             <div className="lg:col-span-2 space-y-6">
 
               {/* Conversations */}
-              <div className="bg-white rounded-2xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}>
+              <div id="sec-messages" className="bg-white rounded-2xl overflow-hidden scroll-mt-24" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}>
                 <div className="flex items-center justify-between px-5 py-4 border-b border-ink-50">
                   <div className="flex items-center gap-2">
                     <MessageSquare className="w-4 h-4 text-ink-400" />
@@ -1077,7 +1143,7 @@ export default function ClientDashboard() {
               </div>
 
               {/* My Bookings */}
-              <div className="bg-white rounded-2xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}>
+              <div id="sec-bookings" className="bg-white rounded-2xl overflow-hidden scroll-mt-24" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}>
                 <div className="flex items-center justify-between px-5 py-4 border-b border-ink-50">
                   <div className="flex items-center gap-2">
                     <CalendarClock className="w-4 h-4 text-ink-400" />
@@ -1272,7 +1338,7 @@ export default function ClientDashboard() {
 
               {/* Reviews section */}
               {!loadingBookings && (pendingReviews.length > 0 || submittedReviews.length > 0) && (
-                <div className="bg-white rounded-2xl overflow-hidden" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}>
+                <div id="sec-reviews" className="bg-white rounded-2xl overflow-hidden scroll-mt-24" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}>
                   <div className="flex items-center gap-2 px-5 py-4 border-b border-ink-50">
                     <Star className="w-4 h-4 text-ink-400" />
                     <h2 className="font-semibold text-ink text-sm">Reviews</h2>
@@ -1464,7 +1530,7 @@ export default function ClientDashboard() {
               </div>
 
               {/* Saved photographers */}
-              <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}>
+              <div id="sec-saved" className="bg-white rounded-2xl p-5 scroll-mt-24" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)' }}>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-ink text-sm">Saved</h3>
                   <Link href="/photographers" className="text-[10px] text-ink-400 hover:text-ink transition-colors">Browse more</Link>
@@ -1577,6 +1643,7 @@ export default function ClientDashboard() {
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       {/* Review modal */}

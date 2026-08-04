@@ -3,8 +3,17 @@ import { createClient } from '@supabase/supabase-js'
 import { renderTemplate, type EmailTemplateId, type EmailPayload } from '@/lib/email/templates'
 import { emailAllowedForTemplate } from '@/lib/notification-preferences'
 
-const resend = new Resend(process.env.RESEND_API_KEY!)
-const FROM   = `TrueNorth Frames <${process.env.RESEND_FROM_EMAIL ?? 'no-reply@thetruenorthframes.com'}>`
+// Lazily construct the Resend client on first use. Instantiating at module load
+// with a non-null-asserted key throws "Missing API key" the moment RESEND_API_KEY
+// is absent — which crashes `next build` during page-data collection, since Next
+// imports every route module. Deferring construction keeps the build resilient and
+// scopes any missing-key failure to the one send attempt that needs it.
+let _resend: Resend | null = null
+function getResend(): Resend {
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY)
+  return _resend
+}
+const FROM = `TrueNorth Frames <${process.env.RESEND_FROM_EMAIL ?? 'no-reply@thetruenorthframes.com'}>`
 
 // Resolve a recipient email → users.id and check the email preference for this
 // template's category. Fail-open: if we cannot resolve the user or the category
@@ -104,7 +113,7 @@ export async function sendEmail({
 
     const variables = normaliseVariables(payload)
 
-    const { error } = await resend.emails.send({
+    const { error } = await getResend().emails.send({
       from: FROM,
       to,
       template: {
@@ -133,7 +142,7 @@ export async function sendEmailDirect({
   try {
     if (await emailSuppressedByPreference(to, templateId)) return { ok: true }
     const { subject, html } = renderTemplate(templateId, payload)
-    const { error } = await resend.emails.send({ from: FROM, to, subject, html })
+    const { error } = await getResend().emails.send({ from: FROM, to, subject, html })
     if (error) return { ok: false, error: error.message }
     return { ok: true }
   } catch (e: any) {

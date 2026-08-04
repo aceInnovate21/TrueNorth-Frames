@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowRight, Star, Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 async function signInWithGoogle() {
@@ -196,24 +196,8 @@ function LoginForm() {
             "Find your perfect photographer — completely free."
           </blockquote>
           <p className="text-ink-400 text-sm leading-relaxed">
-            50+ Edmonton photographers. Real reviews from Google. No booking fees.
+            Discover Edmonton photographers, backed by real Google reviews. No booking fees, no spam — ever.
           </p>
-
-          <div className="flex items-center gap-3 pt-2">
-            <div className="flex -space-x-2">
-              {['bg-slate-600', 'bg-zinc-600', 'bg-neutral-500', 'bg-stone-600'].map((c, i) => (
-                <div key={i} className={`w-8 h-8 rounded-full ${c} border-2 border-ink-800 flex items-center justify-center text-white text-[9px] font-bold`}>
-                  {['SC', 'MW', 'PP', 'JL'][i]}
-                </div>
-              ))}
-            </div>
-            <div>
-              <div className="flex items-center gap-0.5 mb-0.5">
-                {[1,2,3,4,5].map((i) => <Star key={i} className="w-3 h-3 text-white fill-white" />)}
-              </div>
-              <p className="text-ink-400 text-xs">Trusted by Edmonton clients</p>
-            </div>
-          </div>
 
           <div className="border-t border-ink-800 pt-4 space-y-2">
             {['No spam — ever', 'All conversations in one place', 'Get notified when a photographer replies'].map((item) => (
