@@ -529,7 +529,7 @@ function PhotographersPageInner() {
           <div className="flex items-end justify-between gap-4 flex-wrap">
             <div>
               <h1 className="font-serif text-3xl sm:text-4xl font-bold text-ink mb-1">Edmonton Photographers</h1>
-              <p className="text-ink-400 text-sm">Verified trust scores · No booking fees</p>
+              <p className="text-ink-400 text-sm">Verified trust scores · Free to browse</p>
             </div>
 
             {/* 3-tab toggle */}

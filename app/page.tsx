@@ -277,7 +277,7 @@ export default function HomePage() {
               </div>
 
               <div className="flex flex-wrap gap-x-5 gap-y-2">
-                {['No booking fees', 'GBP verified', 'Edmonton-only', 'Free to browse'].map((v) => (
+                {['Free to browse', 'GBP verified', 'Edmonton-only', 'Message directly'].map((v) => (
                   <div key={v} className="flex items-center gap-1.5 text-xs text-ink-500">
                     <CheckCircle2 className="w-3.5 h-3.5 text-ink flex-shrink-0" />
                     {v}
@@ -381,7 +381,7 @@ export default function HomePage() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5">
           <div className="flex flex-wrap items-center justify-center gap-8 sm:gap-14">
             {[
-              { value: '$0',       label: 'Booking fees -- ever' },
+              { value: 'Direct',   label: 'Message photographers' },
               { value: 'GBP',      label: 'Verified trust source' },
               { value: 'Free',     label: 'To browse, no account' },
               { value: 'Edmonton', label: 'Focused. Local. Yours.' },
@@ -438,7 +438,7 @@ export default function HomePage() {
               Search. Trust. Book.
             </h2>
             <p className="text-ink-400 text-base max-w-md mx-auto">
-              Three steps. No account required to browse. Free forever.
+              Three steps. No account required to browse.
             </p>
           </div>
 
@@ -462,7 +462,7 @@ export default function HomePage() {
                 step: '03',
                 icon: MessageSquare,
                 title: 'Message directly',
-                desc: 'Contact any photographer in-app. No commission, no booking fees, no middleman. Pay them directly -- we stay out of it.',
+                desc: 'Contact any photographer in-app and message them directly — no middleman. Arrange your session together.',
                 highlight: '$0 platform fees',
               },
             ].map((item) => {
@@ -685,10 +685,10 @@ export default function HomePage() {
               <p className="text-ink-300 text-[10px] font-bold uppercase tracking-[0.15em] mb-2">For clients</p>
               <h3 className="font-serif text-2xl font-bold text-ink mb-3 leading-snug">Find your photographer today.</h3>
               <p className="text-ink-400 text-sm leading-relaxed mb-7 flex-1">
-                Browse verified Edmonton photographers by specialty. Read real Trust Scores. Message directly -- no fees, no account needed to browse.
+                Browse verified Edmonton photographers by specialty. Read real Trust Scores. Message directly -- no account needed to browse.
               </p>
               <div className="space-y-2.5 mb-7">
-                {['Free to browse -- no account needed', 'GBP-verified Trust Scores', 'Zero booking fees', 'Edmonton-only photographers'].map((item) => (
+                {['Free to browse -- no account needed', 'GBP-verified Trust Scores', 'Message photographers directly', 'Edmonton-only photographers'].map((item) => (
                   <div key={item} className="flex items-center gap-2.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-ink flex-shrink-0" />
                     <span className="text-ink-500 text-xs">{item}</span>
@@ -720,7 +720,7 @@ export default function HomePage() {
                 Your portfolio, Trust Score, packages, and booking tools -- all in one place. Edmonton clients are already searching. Up and running in 20 minutes.
               </p>
               <div className="space-y-2.5 mb-7">
-                {['Free professional profile', 'Portfolio albums & Trust Score', 'Booking & messaging tools', 'Zero commission, always'].map((item) => (
+                {['Free professional profile', 'Portfolio albums & Trust Score', 'Booking & messaging tools', 'Set your own rates'].map((item) => (
                   <div key={item} className="flex items-center gap-2.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-ink-300 flex-shrink-0" />
                     <span className="text-ink-300 text-xs">{item}</span>

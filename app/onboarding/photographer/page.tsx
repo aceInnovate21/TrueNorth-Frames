@@ -584,7 +584,7 @@ export default function PhotographerOnboardingPage() {
               'Google Business Profile trust score (75–100)',
               'Portfolio gallery — up to 20 photos',
               'Badges: Rising Talent or Trusted Pro',
-              'Direct enquiries — no commission ever',
+              'Direct client enquiries to your inbox',
             ].map(item => (
               <div key={item} className="flex items-center gap-2.5">
                 <CheckCircle2 className="w-4 h-4 text-white/60 flex-shrink-0" />

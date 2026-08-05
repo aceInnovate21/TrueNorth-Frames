@@ -9,7 +9,7 @@ import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'For photographers',
-  description: 'Get discovered by Edmonton clients. Free profile, Google-verified trust score, direct messaging. Zero commission.',
+  description: 'Get discovered by Edmonton clients. Free profile, Google-verified trust score, and direct client messaging.',
   alternates: { canonical: '/for-photographers' },
 }
 
@@ -27,7 +27,7 @@ const FEATURES = [
   {
     icon: MessageSquare,
     title: 'Direct client messaging',
-    desc: 'Clients contact you through the platform. You reply directly. No middleman, no commission on anything that results. Full conversation history in your dashboard.',
+    desc: 'Clients contact you through the platform. You reply directly and arrange the session with them. Full conversation history in your dashboard.',
   },
   {
     icon: Package,
@@ -59,8 +59,8 @@ const INCLUDED = [
 
 const FAQS = [
   {
-    q: 'Is it really free?',
-    a: 'Yes. Creating and maintaining a photographer profile on TrueNorth Frames costs nothing. We don\'t charge commissions, monthly fees, or take a cut of your bookings.',
+    q: 'Is it really free to join?',
+    a: 'Yes. Creating and maintaining your photographer profile, showcasing your portfolio, and receiving client enquiries is free today. If we introduce paid features in the future, we\'ll always give you clear notice in advance.',
   },
   {
     q: 'What if I don\'t have a Google Business Profile yet?',
@@ -72,7 +72,7 @@ const FAQS = [
   },
   {
     q: 'What happens when a client messages me?',
-    a: 'You get an email notification and an in-app notification. You reply directly through TrueNorth Frames. All conversation history is stored in your dashboard. No commission on any booking that results.',
+    a: 'You get an email notification and an in-app notification. You reply directly through TrueNorth Frames. All conversation history is stored in your dashboard, so you can pick up right where you left off.',
   },
   {
     q: 'Can I hide or deactivate my profile?',
@@ -132,8 +132,8 @@ export default function ForPhotographersPage() {
                 </div>
               ))}
               <div className="pt-4 mt-2 border-t border-ink-700">
-                <p className="text-white font-semibold text-sm">Zero commission. Zero booking fees.</p>
-                <p className="text-ink-400 text-xs mt-1">Your rate is your rate. Free. Always.</p>
+                <p className="text-white font-semibold text-sm">Free to join. You set your own rates.</p>
+                <p className="text-ink-400 text-xs mt-1">Your pricing is yours to decide — list your packages your way.</p>
               </div>
             </div>
           </div>
@@ -206,7 +206,7 @@ export default function ForPhotographersPage() {
                   'Verified Pro / Trusted Pro badge shows clients you\'re the real deal',
                   'Manage packages, bookings, and client messages in one place',
                   'Network with Edmonton peers — cover requests & group chats',
-                  'Zero commission — ever. You keep 100% of what you charge',
+                  'Set your own rates and list your packages your way',
                 ].map((item, i) => (
                   <div key={i} className="flex items-start gap-3">
                     <span className="text-ink-300 text-xs font-bold flex-shrink-0 mt-0.5">—</span>
@@ -369,7 +369,7 @@ export default function ForPhotographersPage() {
           <p className="text-ink-400 text-base leading-relaxed mb-2 max-w-lg mx-auto">
             Your next client is already searching.
           </p>
-          <p className="text-ink-500 text-sm mb-10">Free to join · No credit card · Zero commission, always</p>
+          <p className="text-ink-500 text-sm mb-10">Free to join · No credit card · Set your own rates</p>
           <div className="flex flex-wrap gap-3 justify-center">
             <Link
               href="/signup?role=photographer"

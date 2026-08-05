@@ -29,7 +29,7 @@ const VALUES = [
   {
     icon: Users,
     title: 'No middlemen',
-    desc: 'Clients message photographers directly. No commissions, no booking fees, no platform skimming your session rate. The money stays between the people who earned it.',
+    desc: 'Clients message photographers directly and arrange the session together. No algorithm deciding who you see, no middleman standing between you and the person you hire.',
   },
   {
     icon: Camera,
@@ -59,8 +59,8 @@ export default function AboutPage() {
             We think finding a great<br className="hidden sm:block" /> photographer should be easy.
           </h1>
           <p className="text-ink-400 text-lg leading-relaxed max-w-2xl mx-auto mb-10">
-            TrueNorth Frames is Edmonton's local photographer marketplace — built around verified trust scores,
-            direct communication, and zero booking fees. We exist because the old way of finding a photographer
+            TrueNorth Frames is Edmonton's local photographer marketplace — built around verified trust scores
+            and direct communication between clients and photographers. We exist because the old way of finding a photographer
             (Instagram scroll, Google guesswork, crossed fingers) was broken.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
@@ -88,8 +88,8 @@ export default function AboutPage() {
             {[
               { value: 'Verified', label: 'Edmonton photographers' },
               { value: 'Google', label: 'Verified trust source' },
-              { value: '$0', label: 'Booking fees — ever' },
-              { value: '0%', label: 'Commission on your rate' },
+              { value: 'Direct', label: 'Client–photographer messaging' },
+              { value: 'Free', label: 'To browse & message' },
             ].map((s) => (
               <div key={s.label}>
                 <p className="font-serif text-4xl font-bold text-ink mb-1">{s.value}</p>
@@ -121,8 +121,7 @@ export default function AboutPage() {
             <p>
               That spreadsheet became TrueNorth Frames. We automated the aggregation, built profiles for
               Edmonton photographers, and created a direct channel between clients and photographers —
-              no commissions, no booking fees, no platform taking a cut of a session rate a photographer
-              spent years earning.
+              connecting people directly, without a middleman standing in between.
             </p>
             <p>
               We're still early. But every photographer who's joined has told us the same thing: they
