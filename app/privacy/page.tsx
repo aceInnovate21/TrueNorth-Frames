@@ -1,4 +1,8 @@
-export const metadata = { title: 'Privacy Policy — TrueNorth Frames' }
+export const metadata = {
+  title: 'Privacy Policy',
+  description: 'How TrueNorth Frames collects, uses, and protects your personal information.',
+  alternates: { canonical: '/privacy' },
+}
 
 export default function PrivacyPage() {
   return (

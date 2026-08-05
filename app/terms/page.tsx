@@ -1,4 +1,8 @@
-export const metadata = { title: 'Terms of Service — TrueNorth Frames' }
+export const metadata = {
+  title: 'Terms of Service',
+  description: 'The terms and conditions for using the TrueNorth Frames photographer marketplace.',
+  alternates: { canonical: '/terms' },
+}
 
 export default function TermsPage() {
   return (

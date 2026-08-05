@@ -8,8 +8,9 @@ import {
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'For photographers — TrueNorth Frames',
+  title: 'For photographers',
   description: 'Get discovered by Edmonton clients. Free profile, Google-verified trust score, direct messaging. Zero commission.',
+  alternates: { canonical: '/for-photographers' },
 }
 
 const FEATURES = [
