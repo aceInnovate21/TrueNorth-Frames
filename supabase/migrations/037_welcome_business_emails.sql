@@ -1,9 +1,9 @@
--- Migration 037: Local-business welcome email series tracking
+-- Migration 037: Local-business welcome email tracking
 -- Depends on: 002_core_tables.sql
 --
--- Two timestamps so the daily welcome cron sends each email in the 2-part
--- "keep your business on TrueNorth Frames" series exactly once per photographer.
+-- One timestamp so the daily welcome cron sends the single "keep your business
+-- on TrueNorth Frames" email exactly once per photographer, ~a day after they
+-- are approved.
 
 ALTER TABLE photographer_profiles
-  ADD COLUMN IF NOT EXISTS welcome_biz_email_1_at timestamptz,
-  ADD COLUMN IF NOT EXISTS welcome_biz_email_2_at timestamptz;
+  ADD COLUMN IF NOT EXISTS welcome_biz_email_at timestamptz;

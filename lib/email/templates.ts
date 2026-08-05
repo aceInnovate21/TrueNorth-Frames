@@ -23,7 +23,6 @@ export type EmailTemplateId =
   | 'photographer_suspended'
   | 'account_reactivated'
   | 'photographer_local_business'
-  | 'photographer_local_business_followup'
   | 'review_removed'
   | 'review_dismissed'
   | 'photographer_rejected'
@@ -603,31 +602,6 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
         ${cta('Go to My Dashboard', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer`, BRAND.green)}
         ${divider()}
         ${p_('Questions? Just reply to this email — we\'re a small Edmonton team and we read every message.')}
-      `,
-    }),
-  }),
-
-  // ── Local-business welcome series #2 (→ photographer, day 2) ──────────────
-
-  photographer_local_business_followup: (p) => ({
-    subject: `The habit that brings repeat clients 🔁`,
-    html: base({
-      preheader: `One quick thing that keeps new Edmonton clients coming your way.`,
-      accentColor: BRAND.green,
-      body: `
-        ${h1('One habit, more clients')}
-        ${lead(`Hi ${p.firstName}, a quick follow-up from yesterday.`)}
-        ${divider()}
-        ${p_('The photographers who grow fastest on TrueNorth Frames all do one thing: they keep the whole booking — chat, session, and the review afterward — on the platform.')}
-        ${p_('Why it matters: more on-platform bookings → more reviews → a stronger Trust Score → we surface you to more new Edmonton clients. And every session you run here helps keep our local photography economy strong.')}
-        ${ul([
-          'Message clients through TrueNorth Frames',
-          'Send and confirm bookings on the platform',
-          'After each session, ask your client for a quick review',
-        ])}
-        ${cta('Open My Dashboard', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer`, BRAND.green)}
-        ${divider()}
-        ${p_('We\'ll keep bringing new clients to Edmonton\'s best photographers — let\'s grow together. 🤝')}
       `,
     }),
   }),

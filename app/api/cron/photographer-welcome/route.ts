@@ -3,12 +3,11 @@ import { createClient } from '@supabase/supabase-js'
 import { sendEmailDirect } from '@/lib/email/client'
 
 // GET/POST /api/cron/photographer-welcome
-// Runs daily. Drives the 2-part "keep your business on TrueNorth Frames" welcome
-// series for newly-approved photographers:
-//   • Email 1 — approved within the last 3 days and not yet sent
-//   • Email 2 — ~1 day after email 1, once
-// The 3-day window on email 1 scopes it to newly-approved photographers, so
-// existing approved accounts are never mass-emailed when this first ships.
+// Runs daily. Sends the single "keep your business on TrueNorth Frames" email
+// once per photographer, ~a day after they are approved — spaced so it doesn't
+// stack with the approval email. The [1 day, 4 days] approved_at window scopes
+// it to newly-approved photographers, so existing accounts are never
+// mass-emailed when this first ships.
 async function processWelcome(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   const cronHeader = request.headers.get('x-cron-secret')
@@ -24,23 +23,21 @@ async function processWelcome(request: NextRequest) {
   ) as any
 
   const now = Date.now()
-  const approvedSince = new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString()
-  const emailedBefore = new Date(now - 20 * 60 * 60 * 1000).toISOString()
+  const approvedBefore = new Date(now - 20 * 60 * 60 * 1000).toISOString()      // approved ≥ ~1 day ago
+  const approvedAfter = new Date(now - 4 * 24 * 60 * 60 * 1000).toISOString()   // …but within the last 4 days
 
   const firstNameOf = (full?: string | null) => (full ?? 'there').split(' ')[0]
 
-  let sent1 = 0
-  let sent2 = 0
-
-  // ── Email 1 — newly approved, not yet sent ─────────────────────────────────
-  const { data: batch1 } = await db
+  const { data: batch } = await db
     .from('photographer_profiles')
-    .select('id, welcome_biz_email_1_at, user:users!user_id(email, full_name)')
+    .select('id, approved_at, welcome_biz_email_at, user:users!user_id(email, full_name)')
     .eq('profile_status', 'approved')
-    .gte('approved_at', approvedSince)
-    .is('welcome_biz_email_1_at', null)
+    .lte('approved_at', approvedBefore)
+    .gte('approved_at', approvedAfter)
+    .is('welcome_biz_email_at', null)
 
-  for (const p of batch1 ?? []) {
+  let sent = 0
+  for (const p of batch ?? []) {
     const email: string | undefined = p.user?.email
     if (email) {
       const res = await sendEmailDirect({
@@ -49,39 +46,15 @@ async function processWelcome(request: NextRequest) {
         payload: { firstName: firstNameOf(p.user?.full_name) },
       })
       if (!res.ok) continue
-      sent1++
+      sent++
     }
-    // Stamp regardless of a missing email so we don't re-scan the row forever.
+    // Stamp regardless of a missing email so the row isn't re-scanned forever.
     await db.from('photographer_profiles')
-      .update({ welcome_biz_email_1_at: new Date().toISOString() })
+      .update({ welcome_biz_email_at: new Date().toISOString() })
       .eq('id', p.id)
   }
 
-  // ── Email 2 — ~1 day after email 1, once ───────────────────────────────────
-  const { data: batch2 } = await db
-    .from('photographer_profiles')
-    .select('id, user:users!user_id(email, full_name)')
-    .not('welcome_biz_email_1_at', 'is', null)
-    .lte('welcome_biz_email_1_at', emailedBefore)
-    .is('welcome_biz_email_2_at', null)
-
-  for (const p of batch2 ?? []) {
-    const email: string | undefined = p.user?.email
-    if (email) {
-      const res = await sendEmailDirect({
-        to: email,
-        templateId: 'photographer_local_business_followup',
-        payload: { firstName: firstNameOf(p.user?.full_name) },
-      })
-      if (!res.ok) continue
-      sent2++
-    }
-    await db.from('photographer_profiles')
-      .update({ welcome_biz_email_2_at: new Date().toISOString() })
-      .eq('id', p.id)
-  }
-
-  return NextResponse.json({ email1_sent: sent1, email2_sent: sent2 })
+  return NextResponse.json({ candidates: (batch ?? []).length, sent })
 }
 
 export async function GET(request: NextRequest)  { return processWelcome(request) }
