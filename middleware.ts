@@ -91,14 +91,16 @@ export async function middleware(request: NextRequest) {
     if (isProtected) {
       const url = request.nextUrl.clone()
       url.pathname = '/login'
-      url.searchParams.set('redirect', pathname)
+      // Preserve the full path + query so deep links (e.g. a review-request
+      // link with ?review=&rating=) survive the login round-trip.
+      url.searchParams.set('redirect', pathname + request.nextUrl.search)
       return NextResponse.redirect(url)
     }
     return response
   }
 
   // ── Logged in ────────────────────────────────────────────────────────────────
-  const { role, photographerStatus } = await getUserInfo(user.id)
+  const { role } = await getUserInfo(user.id)
 
   // No public.users row yet — user is logged in but hasn't completed setup.
   // Login page handles creating the row and routing to onboarding.
@@ -119,10 +121,10 @@ export async function middleware(request: NextRequest) {
     return forceSignOut(request, 'suspended')
   }
 
-  // Rejected photographer — clear session
-  if (role === 'photographer' && photographerStatus === 'rejected') {
-    return forceSignOut(request, 'rejected')
-  }
+  // Rejected photographers are NOT signed out — they keep access to their own
+  // dashboard/onboarding so they can fix their profile and resubmit for review.
+  // Their public profile stays hidden because public routes gate on
+  // profile_status = 'approved'.
 
   // Already logged in — bounce off auth pages to dashboard
   if (isAuthPage) {

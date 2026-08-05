@@ -132,22 +132,10 @@ function LoginForm() {
       }
     }
 
-    // Rejected photographers cannot log in
+    // Rejected photographers CAN log in — they land on their dashboard in a
+    // "changes requested" state so they can fix their profile and resubmit.
+    // Public visibility stays gated on profile_status = 'approved' elsewhere.
     if (dbRole === 'photographer') {
-      const { data: profileData } = await (supabase as any)
-        .from('photographer_profiles')
-        .select('profile_status')
-        .eq('user_id', data.user.id)
-        .maybeSingle()
-
-      if (profileData?.profile_status === 'rejected') {
-        await supabase.auth.signOut()
-        setLoading(false)
-        setFormError('Your profile was not approved. Check your email for details or contact support.')
-        setShake(true); setTimeout(() => setShake(false), 500)
-        return
-      }
-
       // New photographer — send to onboarding; returning — send to dashboard
       if (isNewUser) {
         router.push('/onboarding/photographer')

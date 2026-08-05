@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { AdminNav } from '@/components/admin-nav'
 import { PhotographerReviewModal } from '@/components/admin/photographer-review-modal'
+import { RejectReasonModal } from '@/components/admin/reject-reason-modal'
 
 interface User {
   id: string
@@ -70,13 +71,14 @@ function AccountsInner() {
   useEffect(() => { load() }, [load])
 
   const [reviewUserId, setReviewUserId] = useState<string | null>(null)
+  const [rejectTarget, setRejectTarget] = useState<{ id: string; name: string } | null>(null)
 
-  async function doAction(userId: string, action: string) {
+  async function doAction(userId: string, action: string, reason?: string) {
     setActionBusy(userId + action)
     const res = await fetch('/api/admin/accounts', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, action }),
+      body: JSON.stringify({ user_id: userId, action, ...(reason ? { reason } : {}) }),
     })
     if (res.ok) await load()
     setActionBusy(null)
@@ -191,7 +193,7 @@ function AccountsInner() {
                                 {actionBusy === u.id + 'approve_photographer' ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
                                 Approve
                               </button>
-                              <button onClick={() => doAction(u.id, 'reject_photographer')} disabled={!!actionBusy}
+                              <button onClick={() => setRejectTarget({ id: u.id, name: u.full_name })} disabled={!!actionBusy}
                                 className="flex items-center gap-1 text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2.5 py-1.5 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50">
                                 {actionBusy === u.id + 'reject_photographer' ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
                                 Reject
@@ -259,7 +261,24 @@ function AccountsInner() {
           busy={actionBusy === reviewUserId + 'approve_photographer' || actionBusy === reviewUserId + 'reject_photographer'}
           onClose={() => setReviewUserId(null)}
           onApprove={async () => { await doAction(reviewUserId, 'approve_photographer'); setReviewUserId(null) }}
-          onReject={async () => { await doAction(reviewUserId, 'reject_photographer'); setReviewUserId(null) }}
+          onReject={() => {
+            const target = users.find(u => u.id === reviewUserId)
+            setReviewUserId(null)
+            setRejectTarget({ id: reviewUserId, name: target?.full_name ?? '' })
+          }}
+        />
+      )}
+
+      {rejectTarget && (
+        <RejectReasonModal
+          photographerName={rejectTarget.name}
+          busy={actionBusy === rejectTarget.id + 'reject_photographer'}
+          onClose={() => setRejectTarget(null)}
+          onConfirm={async (reason) => {
+            const id = rejectTarget.id
+            await doAction(id, 'reject_photographer', reason)
+            setRejectTarget(null)
+          }}
         />
       )}
     </div>

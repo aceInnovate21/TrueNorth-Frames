@@ -113,6 +113,16 @@ export async function PATCH(request: NextRequest) {
       .update({ account_status: 'active' })
       .eq('id', user_id)
     if (error) return serverError('Failed to unsuspend account')
+
+    // Email the user that they're reactivated and can log back in.
+    try {
+      const { data: targetUser } = await db
+        .from('users').select('email, full_name').eq('id', user_id).single()
+      if (targetUser?.email) {
+        const firstName = (targetUser.full_name ?? 'there').split(' ')[0]
+        await sendEmailDirect({ to: targetUser.email, templateId: 'account_reactivated', payload: { firstName } })
+      }
+    } catch { /* best-effort */ }
   } else if (action === 'reject_photographer') {
     const { reason } = body
     const { error } = await db.from('photographer_profiles')
