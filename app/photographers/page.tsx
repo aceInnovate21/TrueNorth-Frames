@@ -529,7 +529,7 @@ function PhotographersPageInner() {
           <div className="flex items-end justify-between gap-4 flex-wrap">
             <div>
               <h1 className="font-serif text-3xl sm:text-4xl font-bold text-ink mb-1">Edmonton Photographers</h1>
-              <p className="text-ink-400 text-sm">Verified trust scores · No booking fees</p>
+              <p className="text-ink-400 text-sm">Verified trust scores · Free to browse</p>
             </div>
 
             {/* 3-tab toggle */}
@@ -562,6 +562,7 @@ function PhotographersPageInner() {
                 <Search className="w-3.5 h-3.5 text-ink-300 flex-shrink-0" />
                 <input type="text" value={query} onChange={e => setQuery(e.target.value)}
                   placeholder={tab === 'photographers' ? 'Search by name…' : 'Search packages…'}
+                  aria-label={tab === 'photographers' ? 'Search photographers by name' : 'Search packages'}
                   className="bg-transparent text-ink text-sm placeholder-ink-300 outline-none w-full" />
                 {query && <button onClick={() => setQuery('')}><X className="w-3.5 h-3.5 text-ink-300 hover:text-ink" /></button>}
               </label>
@@ -623,6 +624,7 @@ function PhotographersPageInner() {
               <select
                 value={tab === 'photographers' ? photoSort : packageSort}
                 onChange={e => tab === 'photographers' ? setPhotoSort(e.target.value) : setPackageSort(e.target.value)}
+                aria-label="Sort results"
                 className="text-xs font-medium text-ink-500 border border-ink-100 rounded-lg px-3 py-2 outline-none bg-white cursor-pointer flex-shrink-0 ml-auto">
                 {(tab === 'photographers' ? PHOTOGRAPHER_SORT : PACKAGE_SORT).map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -679,9 +681,11 @@ function PhotographersPageInner() {
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-300 mb-2">Price range</p>
                   <div className="flex items-center gap-2">
                     <input type="number" placeholder="Min $" value={minPrice || ''} onChange={e => setMinPrice(Number(e.target.value))}
+                      aria-label="Minimum price"
                       className="w-24 text-xs border border-ink-100 rounded-lg px-2.5 py-1.5 outline-none focus:border-ink" />
                     <span className="text-ink-300 text-xs">–</span>
                     <input type="number" placeholder="Max $" value={maxPrice || ''} onChange={e => setMaxPrice(Number(e.target.value))}
+                      aria-label="Maximum price"
                       className="w-24 text-xs border border-ink-100 rounded-lg px-2.5 py-1.5 outline-none focus:border-ink" />
                   </div>
                 </div>

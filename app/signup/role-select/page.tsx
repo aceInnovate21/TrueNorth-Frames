@@ -98,14 +98,14 @@ function RoleSelectForm() {
               Icon: User,
               title: 'Client',
               sub: 'I want to find and book a photographer',
-              perks: ['Browse Edmonton photographers', 'Message directly', 'No booking fees'],
+              perks: ['Browse Edmonton photographers', 'Message directly', 'Free to browse'],
             },
             {
               value: 'photographer' as const,
               Icon: Camera,
               title: 'Photographer',
               sub: 'I want to list my services and get clients',
-              perks: ['Free profile + portfolio', 'Direct enquiries', 'No commission'],
+              perks: ['Free profile + portfolio', 'Direct enquiries', 'Set your own rates'],
             },
           ]).map(({ value, Icon, title, sub, perks }) => (
             <button

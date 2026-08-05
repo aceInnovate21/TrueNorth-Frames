@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     template: '%s — TrueNorth Frames',
   },
   description:
-    'Find, discover, and book talented Edmonton photographers. Real reviews from Google in one trusted profile. Completely free.',
+    'Find, discover, and book talented Edmonton photographers. Real reviews from Google in one trusted profile. Free to browse and message.',
   keywords: ['Edmonton photographer', 'wedding photographer Edmonton', 'portrait photographer Edmonton', 'photography marketplace'],
   applicationName: SITE_NAME,
   // Default canonical is the site root; pages override with their own path.
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'TrueNorth Frames — Edmonton Photographer Marketplace',
-    description: 'Find your perfect Edmonton photographer. Free to browse, free to book.',
+    description: 'Find your perfect Edmonton photographer. Free to browse and message directly.',
     url: SITE_URL,
     siteName: SITE_NAME,
     locale: 'en_CA',
@@ -53,7 +53,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'TrueNorth Frames — Edmonton Photographer Marketplace',
-    description: 'Find your perfect Edmonton photographer. Free to browse, free to book.',
+    description: 'Find your perfect Edmonton photographer. Free to browse and message directly.',
     images: [absoluteUrl('/logo.png')],
   },
 }

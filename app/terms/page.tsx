@@ -140,7 +140,13 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">18. Contact</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">18. Fees and payments</h2>
+          <p>Access to core features of the platform &mdash; including browsing photographers, creating an account, sending and receiving messages, and (for photographers) creating and maintaining a profile &mdash; is currently provided free of charge. Payments for photography services are arranged directly between clients and photographers, and TrueNorth Frames is not currently a party to those payments.</p>
+          <p className="mt-2">We reserve the right to introduce fees in the future &mdash; including, without limitation, booking or service fees, commissions, transaction fees, or charges for premium, subscription, or optional features. Any new fee will apply only on a going-forward basis and will not apply retroactively to bookings or activity that occurred before the fee took effect. Before a new fee applies to you, we will provide advance notice by email and/or by posting a notice on the Site, together with the applicable pricing and terms. If a fee requires your agreement, we will obtain it before charging you, and your continued use of the affected feature after a fee takes effect constitutes acceptance of that fee. Nothing in these Terms or elsewhere on the Site guarantees that any feature will remain free of charge indefinitely.</p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">19. Contact</h2>
           <p>Please contact us if you have any questions or concerns: <a href="mailto:aceinnovate21@gmail.com" className="text-blue-600">aceinnovate21@gmail.com</a>. You can also contact us through the feedback form available on our Site.</p>
         </section>
       </div>

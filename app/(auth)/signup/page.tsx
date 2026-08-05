@@ -33,12 +33,12 @@ type Role = 'client' | 'photographer' | null
 const CLIENT_PERKS = [
   'Free to browse & contact photographers',
   'Get notified when a photographer replies',
-  'No booking fees — ever',
+  'Message photographers directly',
 ]
 const PHOTOGRAPHER_PERKS = [
   'Free profile with portfolio gallery',
   'Instant trust score from your existing reviews',
-  'Direct enquiries — no commission taken',
+  'Direct client enquiries to your inbox',
 ]
 
 function getStrength(pw: string) {
@@ -204,7 +204,7 @@ function SignupForm() {
 
           {/* Trust strip */}
           <div className="border-t border-ink-800 pt-4 space-y-2 mt-4">
-            {['No spam — ever', 'No credit card required', 'No booking fees'].map((item) => (
+            {['No spam — ever', 'No credit card required', 'Free to browse'].map((item) => (
               <div key={item} className="flex items-center gap-2">
                 <div className="w-1 h-1 rounded-full bg-ink-500" />
                 <p className="text-ink-400 text-xs">{item}</p>
