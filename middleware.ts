@@ -100,7 +100,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // ── Logged in ────────────────────────────────────────────────────────────────
-  const { role, photographerStatus } = await getUserInfo(user.id)
+  const { role } = await getUserInfo(user.id)
 
   // No public.users row yet — user is logged in but hasn't completed setup.
   // Login page handles creating the row and routing to onboarding.
@@ -121,10 +121,10 @@ export async function middleware(request: NextRequest) {
     return forceSignOut(request, 'suspended')
   }
 
-  // Rejected photographer — clear session
-  if (role === 'photographer' && photographerStatus === 'rejected') {
-    return forceSignOut(request, 'rejected')
-  }
+  // Rejected photographers are NOT signed out — they keep access to their own
+  // dashboard/onboarding so they can fix their profile and resubmit for review.
+  // Their public profile stays hidden because public routes gate on
+  // profile_status = 'approved'.
 
   // Already logged in — bounce off auth pages to dashboard
   if (isAuthPage) {
