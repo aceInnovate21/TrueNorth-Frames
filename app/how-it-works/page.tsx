@@ -9,7 +9,7 @@ import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'How it works',
-  description: 'Find an Edmonton photographer in three steps. No booking fees, no account required to browse.',
+  description: 'Find an Edmonton photographer in three steps. Free to browse, no account required to start.',
   alternates: { canonical: '/how-it-works' },
 }
 
@@ -44,7 +44,7 @@ const CLIENT_STEPS = [
     step: '03',
     icon: MessageSquare,
     title: 'Message directly',
-    desc: 'Click "Book a session" on any profile. Create a free account (takes 60 seconds) to send your request and track the reply. No commission, no middleman.',
+    desc: 'Click "Book a session" on any profile. Create a free account (takes 60 seconds) to send your request and track the reply. Direct with the photographer, no middleman.',
     detail: [
       'Free account — no credit card',
       'Email notification when photographer replies',
@@ -89,7 +89,7 @@ const FAQS = [
   },
   {
     q: 'Is there a fee for clients?',
-    a: 'Never. TrueNorth Frames is completely free for clients — no booking fees, no service charges, no hidden costs.',
+    a: 'Browsing, searching, and messaging photographers is free today. If we ever introduce fees for new features, we\'ll always be upfront about it in advance — no surprises, no hidden costs.',
   },
   {
     q: 'How is the Trust Score calculated?',
@@ -101,7 +101,7 @@ const FAQS = [
   },
   {
     q: 'Can I book directly through TrueNorth Frames?',
-    a: 'Yes — you submit a booking request with your preferred date, time, and a description of what you need. The photographer accepts or declines. Payment is negotiated directly between you and the photographer — we stay out of it and never charge commission.',
+    a: 'Yes — you submit a booking request with your preferred date, time, and a description of what you need. The photographer accepts or declines. Payment is arranged directly between you and the photographer.',
   },
   {
     q: 'Are all photographers based in Edmonton?',
@@ -122,7 +122,7 @@ export default function HowItWorksPage() {
             Finding an Edmonton photographer<br className="hidden sm:block" /> in three steps.
           </h1>
           <p className="text-ink-400 text-lg leading-relaxed max-w-xl mx-auto">
-            No booking fees. No account needed to browse. No algorithm deciding who you see first.
+            Free to browse. No account needed to search. No algorithm deciding who you see first.
           </p>
         </div>
       </section>

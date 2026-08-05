@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = {
   title: 'Browse Edmonton Photographers',
   description:
-    'Browse and compare trusted Edmonton photographers by specialty, rating, price, and availability. Real Google reviews in one profile. Free to browse and book.',
+    'Browse and compare trusted Edmonton photographers by specialty, rating, price, and availability. Real Google reviews in one profile. Free to browse and message directly.',
   alternates: { canonical: '/photographers' },
   openGraph: {
     title: 'Browse Edmonton Photographers',

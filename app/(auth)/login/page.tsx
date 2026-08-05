@@ -193,10 +193,10 @@ function LoginForm() {
             Edmonton's photographer marketplace
           </p>
           <blockquote className="font-serif text-2xl font-bold text-white leading-snug">
-            "Find your perfect photographer — completely free."
+            "Find your perfect photographer — free to browse."
           </blockquote>
           <p className="text-ink-400 text-sm leading-relaxed">
-            Discover Edmonton photographers, backed by real Google reviews. No booking fees, no spam — ever.
+            Discover Edmonton photographers, backed by real Google reviews. Free to browse, no spam — ever.
           </p>
 
           <div className="border-t border-ink-800 pt-4 space-y-2">
@@ -329,7 +329,7 @@ function LoginForm() {
             </button>
           </form>
 
-          <p className="text-center text-xs text-ink-300 mt-5">No spam. No newsletters. No booking fees.</p>
+          <p className="text-center text-xs text-ink-300 mt-5">No spam. No newsletters. Free to browse.</p>
           <p className="text-center text-sm text-ink-300 mt-3">
             Don&apos;t have an account?{' '}
             <Link href="/signup" className="text-ink font-semibold hover:text-ink-600 transition-colors underline underline-offset-2">

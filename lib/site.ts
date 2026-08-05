@@ -9,7 +9,7 @@
 // fall back to the production www host. Trailing slashes are stripped so paths
 // concatenate cleanly.
 export const SITE_URL = (
-  process.env.NEXT_PUBLIC_APP_URL || 'https://www.thetruenorthframes.com'
+  process.env.NEXT_PUBLIC_APP_URL || 'https://thetruenorthframes.com'
 ).replace(/\/+$/, '')
 
 export const SITE_NAME = 'TrueNorth Frames'
