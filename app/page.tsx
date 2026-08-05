@@ -310,12 +310,14 @@ export default function HomePage() {
                   onChange={(e) => { setQuery(e.target.value); setShowSugg(true) }}
                   onFocus={() => setShowSugg(true)}
                   placeholder="Specialty, name, or style..."
+                  aria-label="Search photographers by specialty, name, or style"
                   className="bg-transparent text-ink placeholder-ink-300 text-sm outline-none w-full"
                 />
               </label>
               <select
                 value={specialty}
                 onChange={(e) => setSpecialty(e.target.value)}
+                aria-label="Filter by specialty"
                 className="text-ink-400 text-sm px-5 py-4 outline-none bg-transparent cursor-pointer flex-shrink-0 border-b sm:border-b-0 sm:border-r border-ink-100"
               >
                 <option value="">All specialties</option>
