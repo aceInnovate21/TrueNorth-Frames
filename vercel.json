@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/review-request",
       "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/photographer-welcome",
+      "schedule": "0 18 * * *"
     }
   ]
 }
