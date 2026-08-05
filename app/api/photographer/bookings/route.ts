@@ -206,7 +206,7 @@ export async function PATCH(request: NextRequest) {
           await sendEmailDirect({
             to: clientUser.email,
             templateId: 'booking_completed',
-            payload: { photographerName, date: dateLabel },
+            payload: { photographerName, date: dateLabel, bookingId: id },
           })
         } else if (status === 'cancelled') {
           await sendEmailDirect({

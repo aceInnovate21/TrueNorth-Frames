@@ -211,6 +211,18 @@ function starRating(rating: number) {
   return `<div style="margin:12px 0 16px;">${stars} <span style="font-size:14px;font-weight:600;color:#333;vertical-align:middle;margin-left:4px;">${rating}/5</span></div>`
 }
 
+// Five clickable star links that deep-link into the review form for a specific
+// booking, each pre-selecting that rating. Turns "leave a review" from a chore
+// into one tap from the inbox.
+function starRatingLinks(bookingId: string) {
+  const base = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/client?review=${encodeURIComponent(bookingId)}`
+  const stars = [1, 2, 3, 4, 5].map(n =>
+    `<a href="${base}&rating=${n}" style="text-decoration:none;font-size:34px;color:#f59e0b;padding:0 3px;">&#9733;</a>`
+  ).join('')
+  return `<div style="text-align:center;margin:8px 0 4px;">${stars}</div>
+    <div style="text-align:center;font-size:12px;color:#888;margin-bottom:8px;">Tap a star to leave your review</div>`
+}
+
 function alertBox(text: string, color: string = BRAND.blue) {
   return `<div style="background:${color}11;border-left:3px solid ${color};border-radius:0 8px 8px 0;padding:14px 18px;margin:0 0 20px;font-size:14px;color:#333;line-height:1.6;">${text}</div>`
 }
@@ -399,15 +411,15 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
   booking_completed: (p) => ({
     subject: `How was your session with ${p.photographerName}? ⭐`,
     html: base({
-      preheader: `Your session is complete — leave a quick review to help the Edmonton photography community.`,
+      preheader: `Your session is complete — tap a star to leave a quick review.`,
       accentColor: BRAND.amber,
       body: `
         ${h1('Session Complete!')}
         ${lead(`Hope you had an amazing shoot with ${p.photographerName} on ${p.date}. 📸`)}
         ${divider()}
         ${p_('Reviews help other Edmonton clients make great decisions — and they mean the world to independent photographers. It takes less than 60 seconds.')}
-        ${alertBox('Your review is visible on the photographer\'s public profile and helps build trust in the Edmonton community.', BRAND.amber)}
-        ${cta('Leave a Review', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/client`, BRAND.amber)}
+        ${p.bookingId ? starRatingLinks(String(p.bookingId)) : ''}
+        ${cta('Leave a Review', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/client${p.bookingId ? `?review=${encodeURIComponent(String(p.bookingId))}` : ''}`, BRAND.amber)}
         ${divider()}
         ${p_('If anything didn\'t go as expected, contact our support team and we\'ll look into it promptly.')}
       `,

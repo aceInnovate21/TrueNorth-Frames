@@ -91,7 +91,9 @@ export async function middleware(request: NextRequest) {
     if (isProtected) {
       const url = request.nextUrl.clone()
       url.pathname = '/login'
-      url.searchParams.set('redirect', pathname)
+      // Preserve the full path + query so deep links (e.g. a review-request
+      // link with ?review=&rating=) survive the login round-trip.
+      url.searchParams.set('redirect', pathname + request.nextUrl.search)
       return NextResponse.redirect(url)
     }
     return response
