@@ -654,7 +654,7 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
           'Rate or location not set',
           'Profile photo missing',
         ])}
-        ${p_('Your account is still active. Log in, fix the issues, and your updated profile will be automatically reviewed within 1–2 business days.')}
+        ${p_('Your account is still active. Log in, fix the issues above, then click "Resubmit for review" on your dashboard — we\'ll take another look within 1–2 business days.')}
         ${cta('Fix My Profile', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer`, BRAND.amber)}
         ${divider()}
         ${p_('Questions? Just reply to this email — we\'ll help you get approved.')}
