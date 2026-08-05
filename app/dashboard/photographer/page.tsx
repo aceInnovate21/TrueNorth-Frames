@@ -14,7 +14,7 @@ import {
   ChevronsUp, ChevronsDown, LogOut,
   Plus, Pencil, Trash2, Paperclip, FileText, Play,
   FolderPlus, FolderOpen, Video, Image as ImageIcon,
-  Facebook, RefreshCw, Link2, UserPlus, Search, Home, Menu,
+  Facebook, RefreshCw, Link2, UserPlus, Search, Home, Menu, Loader2,
 } from 'lucide-react'
 import { DashboardSidebar, type SidebarGroup } from '@/components/dashboard-sidebar'
 import { DashboardTour, type TourStep } from '@/components/dashboard-tour'
@@ -809,6 +809,7 @@ interface ProfileData {
   gbpReviewCount: number
   accountAgeDays: number
   profileStatus: string
+  statusNote: string | null
   onboardingTourCompleted: boolean
 }
 
@@ -4070,9 +4071,23 @@ function PhotographerDashboardInner() {
     gbpReviewCount: 0,
     accountAgeDays: 0,
     profileStatus: 'pending',
+    statusNote: null,
     onboardingTourCompleted: true, // assume seen until the profile load says otherwise (prevents a flash)
   })
   const [showTour, setShowTour] = useState(false)
+  const [resubmitting, setResubmitting] = useState(false)
+
+  async function handleResubmit() {
+    setResubmitting(true)
+    try {
+      const r = await fetch('/api/photographer/profile/resubmit', { method: 'POST' })
+      if (r.ok) {
+        setProfile(prev => ({ ...prev, profileStatus: 'pending', statusNote: null }))
+      }
+    } finally {
+      setResubmitting(false)
+    }
+  }
 
   // Load real profile from DB on mount.
   // On fresh signup (isFresh=1) the session cookie may not be propagated yet —
@@ -4114,6 +4129,7 @@ function PhotographerDashboardInner() {
           gbpReviewCount:      data.gbp_review_count ?? 0,
           accountAgeDays:      data.account_age_days ?? 0,
           profileStatus:       data.profile_status ?? 'pending',
+          statusNote:          data.status_note ?? null,
           onboardingTourCompleted: !!data.onboarding_tour_completed,
         }))
         if (!data.onboarding_tour_completed) setShowTour(true)
@@ -4904,6 +4920,36 @@ function PhotographerDashboardInner() {
 
       <div className="lg:pl-64">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        {/* Changes-requested banner — shown when the profile was rejected */}
+        {profile.profileStatus === 'rejected' && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl px-5 py-4 mb-6 flex items-start gap-3">
+            <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-red-800">Changes requested before you go live</p>
+              {profile.statusNote ? (
+                <p className="text-xs text-red-700 leading-relaxed mt-1">
+                  <span className="font-semibold">What to fix:</span> {profile.statusNote}
+                </p>
+              ) : (
+                <p className="text-xs text-red-700 leading-relaxed mt-1">
+                  Our team asked for a few updates before approving your profile. Check your email for details.
+                </p>
+              )}
+              <p className="text-xs text-red-600 leading-relaxed mt-1">
+                Update your profile below, then resubmit it for review.
+              </p>
+              <button
+                onClick={handleResubmit}
+                disabled={resubmitting}
+                className="mt-3 inline-flex items-center gap-2 text-xs font-semibold bg-ink text-white px-3.5 py-2 rounded-xl hover:bg-ink-800 transition-colors disabled:opacity-50"
+              >
+                {resubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Resubmit for review
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Pending review banner — shown whenever profile_status is pending */}
         {profile.profileStatus === 'pending' && (

@@ -21,6 +21,7 @@ export type EmailTemplateId =
   | 'support_ticket_resolved'
   | 'photographer_approved'
   | 'photographer_suspended'
+  | 'account_reactivated'
   | 'review_removed'
   | 'review_dismissed'
   | 'photographer_rejected'
@@ -211,6 +212,18 @@ function starRating(rating: number) {
   return `<div style="margin:12px 0 16px;">${stars} <span style="font-size:14px;font-weight:600;color:#333;vertical-align:middle;margin-left:4px;">${rating}/5</span></div>`
 }
 
+// Five clickable star links that deep-link into the review form for a specific
+// booking, each pre-selecting that rating. Turns "leave a review" from a chore
+// into one tap from the inbox.
+function starRatingLinks(bookingId: string) {
+  const base = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/client?review=${encodeURIComponent(bookingId)}`
+  const stars = [1, 2, 3, 4, 5].map(n =>
+    `<a href="${base}&rating=${n}" style="text-decoration:none;font-size:34px;color:#f59e0b;padding:0 3px;">&#9733;</a>`
+  ).join('')
+  return `<div style="text-align:center;margin:8px 0 4px;">${stars}</div>
+    <div style="text-align:center;font-size:12px;color:#888;margin-bottom:8px;">Tap a star to leave your review</div>`
+}
+
 function alertBox(text: string, color: string = BRAND.blue) {
   return `<div style="background:${color}11;border-left:3px solid ${color};border-radius:0 8px 8px 0;padding:14px 18px;margin:0 0 20px;font-size:14px;color:#333;line-height:1.6;">${text}</div>`
 }
@@ -399,15 +412,15 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
   booking_completed: (p) => ({
     subject: `How was your session with ${p.photographerName}? ⭐`,
     html: base({
-      preheader: `Your session is complete — leave a quick review to help the Edmonton photography community.`,
+      preheader: `Your session is complete — tap a star to leave a quick review.`,
       accentColor: BRAND.amber,
       body: `
         ${h1('Session Complete!')}
         ${lead(`Hope you had an amazing shoot with ${p.photographerName} on ${p.date}. 📸`)}
         ${divider()}
         ${p_('Reviews help other Edmonton clients make great decisions — and they mean the world to independent photographers. It takes less than 60 seconds.')}
-        ${alertBox('Your review is visible on the photographer\'s public profile and helps build trust in the Edmonton community.', BRAND.amber)}
-        ${cta('Leave a Review', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/client`, BRAND.amber)}
+        ${p.bookingId ? starRatingLinks(String(p.bookingId)) : ''}
+        ${cta('Leave a Review', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/client${p.bookingId ? `?review=${encodeURIComponent(String(p.bookingId))}` : ''}`, BRAND.amber)}
         ${divider()}
         ${p_('If anything didn\'t go as expected, contact our support team and we\'ll look into it promptly.')}
       `,
@@ -564,6 +577,25 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
     }),
   }),
 
+  // ── Account reactivated (→ suspended user, on unsuspend) ──────────────────
+
+  account_reactivated: (p) => ({
+    subject: `Your TrueNorth Frames account has been reactivated ✅`,
+    html: base({
+      preheader: `Good news — your account is active again and you can log back in.`,
+      accentColor: BRAND.green,
+      body: `
+        ${h1('Account Reactivated')}
+        ${lead(`Hi ${p.firstName}, good news — your TrueNorth Frames account has been reactivated.`)}
+        ${divider()}
+        ${p_('You can log back in right away. Your profile is visible on the marketplace again and you can receive booking requests as before.')}
+        ${cta('Log In', `${process.env.NEXT_PUBLIC_APP_URL}/login`, BRAND.green)}
+        ${divider()}
+        ${p_('If you have any questions, just reply to this email and our team will help.')}
+      `,
+    }),
+  }),
+
   // ── Review removed by admin (→ photographer) ──────────────────────────────
 
   review_removed: (p) => ({
@@ -622,7 +654,7 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
           'Rate or location not set',
           'Profile photo missing',
         ])}
-        ${p_('Your account is still active. Log in, fix the issues, and your updated profile will be automatically reviewed within 1–2 business days.')}
+        ${p_('Your account is still active. Log in, fix the issues above, then click "Resubmit for review" on your dashboard — we\'ll take another look within 1–2 business days.')}
         ${cta('Fix My Profile', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer`, BRAND.amber)}
         ${divider()}
         ${p_('Questions? Just reply to this email — we\'ll help you get approved.')}

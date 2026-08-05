@@ -24,7 +24,7 @@ export async function GET() {
 
   const { data: profile, error: profileError } = await db
     .from('photographer_profiles')
-    .select('id, username, display_name, bio, location, rate_display, website_url, instagram_url, avatar_url, cover_image_url, contact_instagram_url, contact_facebook_url, completeness_score, native_avg_rating, native_review_count, years_experience, created_at, profile_status')
+    .select('id, username, display_name, bio, location, rate_display, website_url, instagram_url, avatar_url, cover_image_url, contact_instagram_url, contact_facebook_url, completeness_score, native_avg_rating, native_review_count, years_experience, created_at, profile_status, status_note')
     .eq('user_id', user.id)
     .single()
 
@@ -111,6 +111,7 @@ export async function GET() {
     native_review_count:   profile?.native_review_count ?? 0,
     years_experience:      profile?.years_experience ?? null,
     profile_status:        profile?.profile_status ?? 'pending',
+    status_note:           profile?.status_note ?? null,
     onboarding_tour_completed: onboardingTourCompleted,
     portfolio_photo_count: portfolioPhotoCount,
     completed_bookings:    completedBookings,

@@ -229,15 +229,17 @@ function StarRow({
 
 function ReviewModal({
   item,
+  initialRating = 0,
   onClose,
   onSuccess,
 }: {
   item: PendingReviewItem
+  initialRating?: number
   onClose: () => void
   onSuccess: (bookingId: string) => void
 }) {
   const [step, setStep] = useState<1 | 2>(1)
-  const [overall, setOverall] = useState(0)
+  const [overall, setOverall] = useState(initialRating)
   const [hoverOverall, setHoverOverall] = useState(0)
   const [communication, setCommunication] = useState(0)
   const [quality, setQuality] = useState(0)
@@ -773,6 +775,8 @@ export default function ClientDashboard() {
 
   const [notifOpen, setNotifOpen] = useState(false)
   const [reviewTarget, setReviewTarget] = useState<PendingReviewItem | null>(null)
+  const [reviewInitialRating, setReviewInitialRating] = useState(0)
+  const deepLinkHandled = useRef(false)
   const [showSignOut, setShowSignOut] = useState(false)
   const [showDeleteAccount, setShowDeleteAccount] = useState(false)
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null)
@@ -812,6 +816,34 @@ export default function ClientDashboard() {
       })
       .finally(() => setLoadingBookings(false))
   }, [])
+
+  // ── Deep link: /dashboard/client?review=<bookingId>&rating=<n> ───────────────
+  // Opens the review form for a specific booking (from the review-request email),
+  // pre-selecting the tapped star rating. Runs once bookings are loaded.
+  useEffect(() => {
+    if (deepLinkHandled.current || bookings.length === 0) return
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const bookingId = params.get('review')
+    if (!bookingId) return
+    deepLinkHandled.current = true
+
+    const b = bookings.find(x => x.id === bookingId)
+    if (b && b.status === 'completed' && !b.reviewed) {
+      const ratingParam = parseInt(params.get('rating') ?? '0', 10)
+      setReviewInitialRating(ratingParam >= 1 && ratingParam <= 5 ? ratingParam : 0)
+      setReviewTarget({
+        bookingId: b.id,
+        photographerUsername: b.photographer_username,
+        photographerDisplayName: b.photographer_display_name,
+        photographerAvatarUrl: b.photographer_avatar_url,
+        occasion: b.occasion,
+        requested_date: b.requested_date,
+      })
+    }
+    // Strip the query params so a refresh doesn't reopen the modal.
+    window.history.replaceState({}, '', '/dashboard/client')
+  }, [bookings])
 
   useEffect(() => {
     fetch('/api/client/reviews')
@@ -1670,10 +1702,12 @@ export default function ClientDashboard() {
       {reviewTarget && (
         <ReviewModal
           item={reviewTarget}
-          onClose={() => setReviewTarget(null)}
+          initialRating={reviewInitialRating}
+          onClose={() => { setReviewTarget(null); setReviewInitialRating(0) }}
           onSuccess={(bookingId) => {
             setReviewedBookingIds(prev => { const next = new Set(prev); next.add(bookingId); return next })
             setReviewTarget(null)
+            setReviewInitialRating(0)
           }}
         />
       )}
