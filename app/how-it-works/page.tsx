@@ -8,8 +8,9 @@ import {
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'How it works — TrueNorth Frames',
+  title: 'How it works',
   description: 'Find an Edmonton photographer in three steps. No booking fees, no account required to browse.',
+  alternates: { canonical: '/how-it-works' },
 }
 
 const CLIENT_STEPS = [

@@ -6,8 +6,9 @@ import { ArrowRight, MapPin, Shield, Star, Users, Heart, Camera, CheckCircle2 } 
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'About — TrueNorth Frames',
+  title: 'About',
   description: 'We built TrueNorth Frames because finding a great Edmonton photographer should be simple, transparent, and free.',
+  alternates: { canonical: '/about' },
 }
 
 const TEAM = [
