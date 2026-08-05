@@ -22,6 +22,7 @@ export type EmailTemplateId =
   | 'photographer_approved'
   | 'photographer_suspended'
   | 'account_reactivated'
+  | 'photographer_local_business'
   | 'review_removed'
   | 'review_dismissed'
   | 'photographer_rejected'
@@ -573,6 +574,34 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
         ${p_('While suspended, your profile is hidden from the marketplace and you cannot receive new booking requests. Existing conversations remain accessible.')}
         ${p_('To appeal this decision or get more information, email us directly:')}
         ${cta('Contact Support', `mailto:${SUPPORT_EMAIL()}?subject=Account suspension — ${encodeURIComponent(String(p.email))}`, BRAND.red)}
+      `,
+    }),
+  }),
+
+  // ── Local-business welcome series #1 (→ photographer, day 1) ──────────────
+
+  photographer_local_business: (p) => ({
+    subject: `Let's bring you more Edmonton clients 📸`,
+    html: base({
+      preheader: `How TrueNorth Frames grows your photography business — and our local economy.`,
+      accentColor: BRAND.green,
+      body: `
+        ${h1('Welcome — let\'s grow your business together')}
+        ${lead(`Hi ${p.firstName}, your profile is live on TrueNorth Frames. Here's how we help you get more bookings — and why doing business here makes it work.`)}
+        ${divider()}
+        ${p_('TrueNorth Frames is built for Edmonton. Every booking that happens here keeps more of our local economy in the community — supporting independent Edmonton photographers like you, not a faceless national platform.')}
+        ${p_('<strong>Here\'s the loop that grows your business:</strong>')}
+        ${ul([
+          'Keep your client chats, booking requests, and sessions on TrueNorth Frames',
+          'Each completed session earns you a review',
+          'More reviews build your Trust Score and push you higher in search',
+          'Higher visibility means we send more new Edmonton clients your way',
+        ])}
+        ${p_('It\'s a partnership: we work every day to bring new clients to the platform, and when your bookings and conversations happen here, that fuels more visibility for you — and more business for the whole Edmonton community.')}
+        ${alertBox('The single most powerful thing you can do: run each client relationship — messages, booking, and the review afterward — right here on TrueNorth Frames.', BRAND.green)}
+        ${cta('Go to My Dashboard', `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/photographer`, BRAND.green)}
+        ${divider()}
+        ${p_('Questions? Just reply to this email — we\'re a small Edmonton team and we read every message.')}
       `,
     }),
   }),
