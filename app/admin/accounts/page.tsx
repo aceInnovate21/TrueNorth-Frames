@@ -5,9 +5,10 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Search, CheckCircle2, XCircle, Shield,
-  ChevronLeft, ChevronRight, Loader2, ArrowLeft, Award,
+  ChevronLeft, ChevronRight, Loader2, ArrowLeft, Award, Eye,
 } from 'lucide-react'
 import { AdminNav } from '@/components/admin-nav'
+import { PhotographerReviewModal } from '@/components/admin/photographer-review-modal'
 
 interface User {
   id: string
@@ -67,6 +68,8 @@ function AccountsInner() {
   }, [roleFilter, q, page, router])
 
   useEffect(() => { load() }, [load])
+
+  const [reviewUserId, setReviewUserId] = useState<string | null>(null)
 
   async function doAction(userId: string, action: string) {
     setActionBusy(userId + action)
@@ -173,6 +176,14 @@ function AccountsInner() {
                       <td className="px-4 py-4 text-xs text-ink-300 whitespace-nowrap">{relTime(u.created_at)}</td>
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-1.5 flex-wrap">
+                          {u.role === 'photographer' && u.profile && (
+                            <button onClick={() => setReviewUserId(u.id)} disabled={!!actionBusy}
+                              title="Preview the full submitted profile"
+                              className="flex items-center gap-1 text-[10px] font-semibold text-ink-500 bg-white border border-ink-200 px-2.5 py-1.5 rounded-lg hover:bg-ink-50 transition-colors disabled:opacity-50">
+                              <Eye className="w-3 h-3" />
+                              Review
+                            </button>
+                          )}
                           {u.role === 'photographer' && u.profile?.profile_status === 'pending' && (
                             <>
                               <button onClick={() => doAction(u.id, 'approve_photographer')} disabled={!!actionBusy}
@@ -241,6 +252,16 @@ function AccountsInner() {
           )}
         </div>
       </main>
+
+      {reviewUserId && (
+        <PhotographerReviewModal
+          userId={reviewUserId}
+          busy={actionBusy === reviewUserId + 'approve_photographer' || actionBusy === reviewUserId + 'reject_photographer'}
+          onClose={() => setReviewUserId(null)}
+          onApprove={async () => { await doAction(reviewUserId, 'approve_photographer'); setReviewUserId(null) }}
+          onReject={async () => { await doAction(reviewUserId, 'reject_photographer'); setReviewUserId(null) }}
+        />
+      )}
     </div>
   )
 }

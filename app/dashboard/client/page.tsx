@@ -6,6 +6,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { NotificationCentre } from '@/components/notification-centre'
 import { DashboardSidebar, type SidebarGroup } from '@/components/dashboard-sidebar'
+import { AddToCalendar } from '@/components/add-to-calendar'
+import { bookingDescription } from '@/lib/calendar'
 import {
   Bell,
   MessageSquare,
@@ -1293,6 +1295,24 @@ export default function ClientDashboard() {
                                 >
                                   {b.status === 'approved' ? 'Request cancellation' : 'Cancel request'}
                                 </button>
+                              )}
+                              {b.status === 'approved' && (
+                                <AddToCalendar
+                                  uid={b.id}
+                                  event={{
+                                    title: `${b.occasion}${b.photographer_display_name ? ` with ${b.photographer_display_name}` : ''}`,
+                                    description: bookingDescription({
+                                      photographerName: b.photographer_display_name,
+                                      sessionType: b.occasion,
+                                      timeSlot: b.time_slot,
+                                      note: b.description,
+                                    }),
+                                    location: b.location_note ?? '',
+                                    startDate: b.requested_date,
+                                    endDate: b.requested_end_date,
+                                    timeSlot: b.time_slot,
+                                  }}
+                                />
                               )}
                               {b.status === 'approved' && (
                                 <Link
