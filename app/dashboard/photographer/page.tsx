@@ -20,6 +20,8 @@ import { DashboardSidebar, type SidebarGroup } from '@/components/dashboard-side
 import { DashboardTour, type TourStep } from '@/components/dashboard-tour'
 import { HelpButton } from '@/components/help-popover'
 import { AvailabilityTimeSlots, type WeeklySchedule } from '@/components/availability-time-slots'
+import { AddToCalendar } from '@/components/add-to-calendar'
+import { bookingDescription } from '@/lib/calendar'
 import { ProjectPackages, type ProjectPackage } from '@/components/project-packages'
 import { ReviewManager } from '@/components/review-manager'
 import { PhotographerConnections, GroupChat, type Group, type GroupMessage } from '@/components/photographer-connections'
@@ -189,6 +191,9 @@ interface BookingRequest {
   date: string          // display label e.g. "May 24, 2026"
   dateKey: string       // "2026-4-24" — matches availability key
   isoDate: string       // "2026-05-24" — YYYY-MM-DD for calendar
+  isoEndDate: string | null // optional multi-day end, YYYY-MM-DD
+  occasion: string
+  locationNote: string
   timeSlot: string      // "10:00 AM – 12:00 PM"
   note: string
   billingType: BookingBillingType
@@ -577,6 +582,24 @@ function BookingRequestsTab({
                         className="w-full flex items-center justify-center gap-2 text-sm font-medium border border-ink-100 text-ink-500 py-2.5 rounded-xl hover:bg-ink-50 hover:text-ink transition-colors">
                         <MessageSquare className="w-4 h-4" /> Open chat →
                       </button>
+                      <div className="flex justify-center">
+                        <AddToCalendar
+                          uid={req.id}
+                          event={{
+                            title: `${req.occasion}${req.clientName ? ` with ${req.clientName}` : ''}`,
+                            description: bookingDescription({
+                              clientName: req.clientName,
+                              sessionType: req.occasion,
+                              timeSlot: req.timeSlot,
+                              note: req.note,
+                            }),
+                            location: req.locationNote ?? '',
+                            startDate: req.isoDate,
+                            endDate: req.isoEndDate,
+                            timeSlot: req.timeSlot,
+                          }}
+                        />
+                      </div>
                     </div>
                   )}
 
@@ -4223,6 +4246,9 @@ function PhotographerDashboardInner() {
               date: displayDate,
               dateKey,
               isoDate: b.date,
+              isoEndDate: b.endDate ?? null,
+              occasion: b.occasion ?? 'Photography session',
+              locationNote: b.locationNote ?? '',
               timeSlot: b.timeSlot,
               note: b.description,
               billingType: b.billingType,
