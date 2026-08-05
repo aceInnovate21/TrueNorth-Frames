@@ -21,6 +21,7 @@ export type EmailTemplateId =
   | 'support_ticket_resolved'
   | 'photographer_approved'
   | 'photographer_suspended'
+  | 'account_reactivated'
   | 'review_removed'
   | 'review_dismissed'
   | 'photographer_rejected'
@@ -572,6 +573,25 @@ const TEMPLATES: Record<EmailTemplateId, (p: EmailPayload) => { subject: string;
         ${p_('While suspended, your profile is hidden from the marketplace and you cannot receive new booking requests. Existing conversations remain accessible.')}
         ${p_('To appeal this decision or get more information, email us directly:')}
         ${cta('Contact Support', `mailto:${SUPPORT_EMAIL()}?subject=Account suspension — ${encodeURIComponent(String(p.email))}`, BRAND.red)}
+      `,
+    }),
+  }),
+
+  // ── Account reactivated (→ suspended user, on unsuspend) ──────────────────
+
+  account_reactivated: (p) => ({
+    subject: `Your TrueNorth Frames account has been reactivated ✅`,
+    html: base({
+      preheader: `Good news — your account is active again and you can log back in.`,
+      accentColor: BRAND.green,
+      body: `
+        ${h1('Account Reactivated')}
+        ${lead(`Hi ${p.firstName}, good news — your TrueNorth Frames account has been reactivated.`)}
+        ${divider()}
+        ${p_('You can log back in right away. Your profile is visible on the marketplace again and you can receive booking requests as before.')}
+        ${cta('Log In', `${process.env.NEXT_PUBLIC_APP_URL}/login`, BRAND.green)}
+        ${divider()}
+        ${p_('If you have any questions, just reply to this email and our team will help.')}
       `,
     }),
   }),
