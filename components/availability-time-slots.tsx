@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CheckCircle2, Clock, Plus, Save, Trash2, X } from 'lucide-react'
+import { useUnsavedGuard } from '@/components/unsaved-changes'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -166,7 +167,29 @@ export function AvailabilityTimeSlots({
   const [saved, setSaved] = useState(false)
   const [activeDays, setActiveDays] = useState<Set<number>>(new Set([1, 2, 3, 4, 5]))
 
+  // Track unsaved edits so the dashboard can warn before the user navigates
+  // away. `dirty` flips true on any user edit and back to false on save/discard.
+  // While clean, we keep a baseline snapshot in sync with the incoming props so
+  // that "discard" can revert to the last persisted schedule — including the
+  // schedule the parent loads from the server after mount.
+  const [dirty, setDirty] = useState(false)
+  const baseline = useRef<{ schedule: WeeklySchedule; activeDays: Set<number> }>({ schedule, activeDays })
+  useEffect(() => {
+    if (!dirty) baseline.current = { schedule, activeDays }
+  }, [schedule, activeDays, dirty])
+
+  useUnsavedGuard('availability-time-slots', {
+    isDirty: () => dirty,
+    save: async () => { await handleSave() },
+    discard: () => {
+      setSchedule(baseline.current.schedule)
+      setActiveDays(new Set(baseline.current.activeDays))
+      setDirty(false)
+    },
+  })
+
   function toggleDay(d: number) {
+    setDirty(true)
     setActiveDays(prev => {
       const next = new Set(prev)
       if (next.has(d)) {
@@ -180,6 +203,11 @@ export function AvailabilityTimeSlots({
     })
   }
 
+  function changeDay(d: number, s: DaySchedule) {
+    setDirty(true)
+    setSchedule(prev => ({ ...prev, [d]: s }))
+  }
+
   async function handleSave() {
     setSaving(true)
     if (onSave) {
@@ -187,6 +215,7 @@ export function AvailabilityTimeSlots({
     } else {
       await new Promise(r => setTimeout(r, 700))
     }
+    setDirty(false)
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
@@ -223,7 +252,7 @@ export function AvailabilityTimeSlots({
           key={d}
           dayIndex={d}
           schedule={schedule[d] ?? { slots: [] }}
-          onChange={s => setSchedule(prev => ({ ...prev, [d]: s }))}
+          onChange={s => changeDay(d, s)}
         />
       ))}
 
