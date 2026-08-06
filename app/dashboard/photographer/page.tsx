@@ -20,6 +20,7 @@ import { DashboardSidebar, type SidebarGroup } from '@/components/dashboard-side
 import { DashboardTour, type TourStep } from '@/components/dashboard-tour'
 import { HelpButton } from '@/components/help-popover'
 import { AvailabilityTimeSlots, type WeeklySchedule } from '@/components/availability-time-slots'
+import { UnsavedChangesProvider, useUnsavedChangesRegistry, useUnsavedGuard } from '@/components/unsaved-changes'
 import { AddToCalendar } from '@/components/add-to-calendar'
 import { bookingDescription } from '@/lib/calendar'
 import { ProjectPackages, type ProjectPackage } from '@/components/project-packages'
@@ -965,12 +966,14 @@ function BookingCalendar({
   setBookedDates,
   onSelectBooking,
   readOnly = false,
+  guardKey = 'default',
 }: {
   bookings: BookingRequest[]
   bookedDates: Record<string, DayStatus>
   setBookedDates: React.Dispatch<React.SetStateAction<Record<string, DayStatus>>>
   onSelectBooking: (req: BookingRequest) => void
   readOnly?: boolean
+  guardKey?: string
 }) {
   const today = new Date()
   const [calView, setCalView] = useState<'month' | 'week'>('month')
@@ -987,6 +990,29 @@ function BookingCalendar({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [changedKeys, setChangedKeys] = useState<Set<string>>(new Set())
+  // Snapshot of each changed day's value *before* the user touched it, so a
+  // "discard" can revert the calendar to its last-saved state.
+  const originalValues = useRef<Record<string, DayStatus | undefined>>({})
+
+  // Register an unsaved-changes guard (skipped for the read-only overview
+  // calendar, which never mutates availability). `guardKey` keeps the two
+  // editable/overview instances distinct in the registry.
+  useUnsavedGuard(readOnly ? `booking-calendar-readonly-${guardKey}` : `booking-calendar-${guardKey}`, {
+    isDirty: () => !readOnly && changedKeys.size > 0,
+    save: async () => { await handleSave() },
+    discard: () => {
+      setBookedDates(prev => {
+        const updated = { ...prev }
+        for (const [lk, val] of Object.entries(originalValues.current)) {
+          if (val === undefined || val === null) delete updated[lk]
+          else updated[lk] = val
+        }
+        return updated
+      })
+      originalValues.current = {}
+      setChangedKeys(new Set())
+    },
+  })
 
   // Index bookings by isoDate for fast lookup
   const bookingsByDate = bookings.reduce<Record<string, BookingRequest[]>>((acc, b) => {
@@ -1010,6 +1036,8 @@ function BookingCalendar({
   function toggleDay(iso: string) {
     const [y, m, d] = iso.split('-').map(Number)
     const lk = legacyKey(y, m - 1, d)
+    // Record the pre-edit value the first time a day is touched, for discard.
+    if (!(lk in originalValues.current)) originalValues.current[lk] = bookedDates[lk]
     setChangedKeys(prev => new Set([...Array.from(prev), lk]))
     setBookedDates(prev => {
       const current = prev[lk]
@@ -1035,6 +1063,7 @@ function BookingCalendar({
         body: JSON.stringify({ date: isoDate, status }),
       })
     }))
+    originalValues.current = {}
     setChangedKeys(new Set())
     setSaving(false)
     setSaved(true)
@@ -2671,6 +2700,45 @@ function ProfileSettingsTab({ profile, setProfile }: {
       .then(data => { if (data?.email) setLocal(l => ({ ...l, email: data.email })) })
       .catch(() => {})
   }, [])
+
+  // Which settings sections currently hold edits that differ from the saved
+  // profile. `account` (email) only counts once the field has been touched,
+  // since its value is loaded asynchronously from a separate endpoint.
+  function dirtySections(): string[] {
+    const dirty: string[] = []
+    if (
+      local.displayName !== profile.displayName ||
+      local.bio !== profile.bio ||
+      local.area !== profile.area ||
+      (local.rate || '') !== (profile.rate || '') ||
+      local.rateUnit !== profile.rateUnit ||
+      local.websiteUrl !== profile.websiteUrl ||
+      local.yearsExperience !== profile.yearsExperience
+    ) dirty.push('basics')
+    if (JSON.stringify(local.specialties) !== JSON.stringify(profile.specialties)) dirty.push('specialties')
+    if (
+      local.websiteUrl !== profile.websiteUrl ||
+      local.contactInstagram !== profile.contactInstagram ||
+      local.contactFacebook !== profile.contactFacebook
+    ) dirty.push('contacts')
+    if (touched.account && local.email !== profile.email) dirty.push('account')
+    return dirty
+  }
+
+  useUnsavedGuard('profile-settings', {
+    isDirty: () => dirtySections().length > 0,
+    save: async () => {
+      // Save each dirty section sequentially. saveSection persists the fields
+      // and syncs them back into `profile`, so isDirty clears afterward.
+      for (const key of dirtySections()) {
+        await saveSection(key)
+      }
+    },
+    discard: () => {
+      setLocal({ ...profile })
+      setTouched({})
+    },
+  })
 
   async function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -4727,6 +4795,27 @@ function PhotographerDashboardInner() {
   // Unified tab switcher — updates state, URL, and scrolls to top on mobile
   const [drawerOpen, setDrawerOpen] = useState(false)
 
+  // ── Unsaved-changes guard ──────────────────────────────────────────────────
+  // Editing surfaces (Settings sections, availability calendar, time slots)
+  // register guards below. When the photographer tries to leave a tab with
+  // unsaved edits, we intercept the navigation and prompt Save / Discard.
+  const { contextValue: unsavedCtx, getDirtyGuards } = useUnsavedChangesRegistry()
+  const [pendingTab, setPendingTab] = useState<DashboardTab | null>(null)
+  const [unsavedSaving, setUnsavedSaving] = useState(false)
+  const [unsavedError, setUnsavedError] = useState(false)
+
+  // Warn on full-page unload (refresh / close / external link) while dirty.
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (getDirtyGuards().length > 0) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [getDirtyGuards])
+
   function completeTour() {
     setShowTour(false)
     setProfile(prev => ({ ...prev, onboardingTourCompleted: true }))
@@ -4734,7 +4823,7 @@ function PhotographerDashboardInner() {
     fetch('/api/photographer/onboarding-tour', { method: 'POST' }).catch(() => {})
   }
 
-  function switchTab(tab: DashboardTab) {
+  function doSwitchTab(tab: DashboardTab) {
     setActiveTab(tab)
     const params = new URLSearchParams(window.location.search)
     params.set('tab', tab)
@@ -4746,6 +4835,40 @@ function PhotographerDashboardInner() {
     } else {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
+  }
+
+  function switchTab(tab: DashboardTab) {
+    // Nothing to guard when staying put or when the current tab is clean.
+    if (tab !== activeTab && getDirtyGuards().length > 0) {
+      setUnsavedError(false)
+      setPendingTab(tab)
+      return
+    }
+    doSwitchTab(tab)
+  }
+
+  async function handleSaveAndLeave() {
+    if (!pendingTab) return
+    setUnsavedSaving(true)
+    setUnsavedError(false)
+    try {
+      await Promise.all(getDirtyGuards().map(g => g.save()))
+      const target = pendingTab
+      setPendingTab(null)
+      doSwitchTab(target)
+    } catch {
+      setUnsavedError(true)
+    } finally {
+      setUnsavedSaving(false)
+    }
+  }
+
+  function handleDiscardAndLeave() {
+    if (!pendingTab) return
+    getDirtyGuards().forEach(g => g.discard())
+    const target = pendingTab
+    setPendingTab(null)
+    doSwitchTab(target)
   }
 
   // Availability counts as "set" when the photographer has any weekly time slot
@@ -4826,7 +4949,69 @@ function PhotographerDashboardInner() {
   ]
 
   return (
+    <UnsavedChangesProvider value={unsavedCtx}>
     <div className="min-h-screen bg-ink-50">
+      {/* ── Unsaved-changes prompt ──────────────────────────────────────── */}
+      {pendingTab && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-float-xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-ink-50">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-500" />
+                <p className="font-semibold text-ink">Unsaved changes</p>
+              </div>
+              <button
+                onClick={() => { if (!unsavedSaving) setPendingTab(null) }}
+                disabled={unsavedSaving}
+                className="text-ink-300 hover:text-ink disabled:opacity-40"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-sm text-ink-600 leading-relaxed">
+                You have unsaved changes on this page. Do you want to save them before leaving, or discard them?
+              </p>
+              {unsavedError && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
+                  <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+                  <p className="text-xs text-red-700">Couldn’t save your changes. Please try again.</p>
+                </div>
+              )}
+            </div>
+            <div className="px-5 py-4 border-t border-ink-50 flex flex-col gap-2.5">
+              <button
+                onClick={handleSaveAndLeave}
+                disabled={unsavedSaving}
+                className="w-full flex items-center justify-center gap-2 text-sm font-semibold bg-ink text-white rounded-xl py-2.5 hover:bg-ink-800 disabled:opacity-50 transition-colors"
+              >
+                {unsavedSaving ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
+                ) : (
+                  <><Save className="w-4 h-4" /> Save &amp; continue</>
+                )}
+              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { if (!unsavedSaving) setPendingTab(null) }}
+                  disabled={unsavedSaving}
+                  className="flex-1 text-sm font-medium border border-ink-100 rounded-xl py-2.5 hover:bg-ink-50 text-ink-400 disabled:opacity-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDiscardAndLeave}
+                  disabled={unsavedSaving}
+                  className="flex-1 text-sm font-medium border border-red-200 text-red-600 rounded-xl py-2.5 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Desktop left rail (lg+) ─────────────────────────────────────── */}
       <DashboardSidebar
         groups={sidebarGroups}
@@ -5296,6 +5481,7 @@ function PhotographerDashboardInner() {
                   bookedDates={bookedDates}
                   setBookedDates={setBookedDates}
                   onSelectBooking={(req) => { switchTab('requests') }}
+                  guardKey="availability"
                 />
 
                 {/* Time-slot scheduler */}
@@ -6217,6 +6403,7 @@ function PhotographerDashboardInner() {
       </div>
       </div>
     </div>
+    </UnsavedChangesProvider>
   )
 }
 
