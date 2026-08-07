@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Eye, CalendarCheck, MessageSquare, Star, Zap, Trophy, Medal, Award } from 'lucide-react'
+import { Eye, CalendarCheck, MessageSquare, Star, Zap, Trophy, Medal, Award, Share2 } from 'lucide-react'
+import { AchievementShareModal, type ShareAchievement } from './achievement-share'
 
 type Achievement = {
   category: string
@@ -54,6 +55,7 @@ export function PhotographerAchievements({
 }) {
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
+  const [shareTarget, setShareTarget] = useState<ShareAchievement | null>(null)
 
   useEffect(() => {
     const url = username
@@ -145,10 +147,19 @@ export function PhotographerAchievements({
                 <BadgeIcon className="w-3 h-3" />
                 {badge.text}
               </span>
+              <button
+                onClick={() => setShareTarget(a)}
+                title="Share this win"
+                className="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-lg bg-ink-50 hover:bg-ink text-ink-500 hover:text-white transition-colors"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+              </button>
             </div>
           )
         })}
       </div>
+
+      {shareTarget && <AchievementShareModal ach={shareTarget} onClose={() => setShareTarget(null)} />}
     </div>
   )
 }
