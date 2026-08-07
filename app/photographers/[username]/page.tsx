@@ -926,6 +926,14 @@ export default function ProfilePage({ params }: { params: { username: string } }
     })
   }, [params.username])
 
+  // Record a profile view (deduped server-side to one per viewer per day).
+  useEffect(() => {
+    fetch(`/api/photographer/${params.username}/view`, {
+      method: 'POST',
+      keepalive: true,
+    }).catch(() => {})
+  }, [params.username])
+
   if (loading) {
     return (
       <>
