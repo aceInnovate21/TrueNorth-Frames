@@ -12,6 +12,7 @@ type Profile = {
   username: string
   displayName: string
   avatarUrl: string
+  coverUrl: string
   status: string
 }
 
@@ -117,6 +118,83 @@ function QrSticker({
   )
 }
 
+// ─── Announcement graphic — "Now featured on True North Frames" ───────────────
+// Two variants: `clean` (ink/serif on a light ground) and `photo` (the
+// photographer's cover image with a dark overlay). Works at both square (post)
+// and vertical (story) ratios; type scales off the width.
+function AnnouncementCard({
+  width,
+  height,
+  variant,
+  displayName,
+  username,
+  avatarSrc,
+  coverSrc,
+}: {
+  width: number
+  height: number
+  variant: 'clean' | 'photo'
+  displayName: string
+  username: string
+  avatarSrc: string | null
+  coverSrc: string | null
+}) {
+  const u = width / 1080 // scale unit relative to a 1080-wide canvas
+  const domain = SITE_URL.replace(/^https?:\/\//, '')
+  const usePhoto = variant === 'photo' && !!coverSrc
+  const fg = usePhoto ? '#ffffff' : INK
+  const sub = usePhoto ? 'rgba(255,255,255,0.75)' : '#737373'
+  const avatarD = 150 * u
+
+  return (
+    <div style={{ width, height, position: 'relative', overflow: 'hidden', background: usePhoto ? INK : '#f5f5f4' }}>
+      {usePhoto && (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={coverSrc!} alt="" crossOrigin="anonymous"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.45) 45%, rgba(0,0,0,0.8) 100%)' }} />
+        </>
+      )}
+
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 90 * u, boxSizing: 'border-box', textAlign: 'center' }}>
+        {/* TNF logo — bare on light, in a white pill on photo */}
+        <div style={usePhoto
+          ? { background: '#fff', borderRadius: 999, padding: `${16 * u}px ${28 * u}px`, marginBottom: 46 * u }
+          : { marginBottom: 46 * u }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="True North Frames" style={{ height: 60 * u, objectFit: 'contain', display: 'block' }} />
+        </div>
+
+        <p style={{ fontFamily: 'sans-serif', fontSize: 26 * u, letterSpacing: 3 * u, color: sub, fontWeight: 600, textTransform: 'uppercase' }}>
+          Now officially featured on
+        </p>
+        <p style={{ fontFamily: 'Georgia, serif', fontSize: 82 * u, fontWeight: 700, color: fg, lineHeight: 1.03, margin: `${18 * u}px 0 ${40 * u}px` }}>
+          True North Frames
+        </p>
+
+        {/* Photographer identity */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 * u }}>
+          <div style={{ width: avatarD, height: avatarD, borderRadius: '50%', overflow: 'hidden', border: `${5 * u}px solid ${usePhoto ? '#fff' : INK}`, background: INK, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {avatarSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={avatarSrc} alt={displayName} crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <span style={{ color: '#fff', fontFamily: 'Georgia, serif', fontWeight: 700, fontSize: avatarD * 0.44 }}>{displayName[0]?.toUpperCase()}</span>
+            )}
+          </div>
+          <p style={{ fontFamily: 'Georgia, serif', fontSize: 42 * u, fontWeight: 700, color: fg }}>{displayName}</p>
+        </div>
+
+        {/* Footer link */}
+        <p style={{ fontFamily: 'sans-serif', fontSize: 28 * u, color: usePhoto ? '#fff' : INK, fontWeight: 600, marginTop: 56 * u }}>
+          Book me → <span style={{ color: sub, fontWeight: 400 }}>{domain}/p/{username}</span>
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export function SocialsTab() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [qrUrl, setQrUrl] = useState<string | null>(null)
@@ -125,10 +203,13 @@ export function SocialsTab() {
   const [copied, setCopied] = useState<string | null>(null)
   const [badgeTheme, setBadgeTheme] = useState<'dark' | 'light'>('dark')
   const [badgeStyle, setBadgeStyle] = useState<'featured' | 'book'>('featured')
+  const [annVariant, setAnnVariant] = useState<'clean' | 'photo'>('clean')
 
   const storyRef = useRef<HTMLDivElement>(null)
   const wallpaperRef = useRef<HTMLDivElement>(null)
   const printRef = useRef<HTMLDivElement>(null)
+  const annPostRef = useRef<HTMLDivElement>(null)
+  const annStoryRef = useRef<HTMLDivElement>(null)
 
   // Load the photographer's own profile fields.
   useEffect(() => {
@@ -139,6 +220,7 @@ export function SocialsTab() {
           username: d.username ?? '',
           displayName: d.display_name ?? 'Photographer',
           avatarUrl: d.avatar_url ?? '',
+          coverUrl: d.cover_image_url ?? '',
           status: d.profile_status ?? 'pending',
         })
       )
@@ -182,6 +264,10 @@ export function SocialsTab() {
   const avatarSrc = profile?.avatarUrl
     ? `/api/socials/avatar-proxy?url=${encodeURIComponent(profile.avatarUrl)}`
     : null
+  const coverSrc = profile?.coverUrl
+    ? `/api/socials/avatar-proxy?url=${encodeURIComponent(profile.coverUrl)}`
+    : null
+  const canPhoto = !!coverSrc
 
   const download = useCallback(async (ref: React.RefObject<HTMLDivElement>, name: string, key: string) => {
     if (!ref.current) return
@@ -299,6 +385,71 @@ export function SocialsTab() {
         </div>
       </div>
 
+      {/* Announcement graphics */}
+      <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+        <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <Instagram className="w-4 h-4 text-ink-400" />
+            <h3 className="font-semibold text-ink text-sm">Announcement graphics</h3>
+          </div>
+          {/* Variant toggle */}
+          <div className="inline-flex rounded-lg border border-ink-200 overflow-hidden">
+            <button onClick={() => setAnnVariant('clean')}
+              className={`px-3 py-1.5 text-xs font-semibold ${annVariant === 'clean' ? 'bg-ink text-white' : 'bg-white text-ink-500'}`}>
+              Clean
+            </button>
+            <button onClick={() => canPhoto && setAnnVariant('photo')} disabled={!canPhoto}
+              title={canPhoto ? '' : 'Add a cover photo to your profile to unlock this'}
+              className={`px-3 py-1.5 text-xs font-semibold ${annVariant === 'photo' ? 'bg-ink text-white' : 'bg-white text-ink-500'} disabled:opacity-40`}>
+              Photo
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-8 items-center sm:items-start">
+          {/* Live preview (post) */}
+          <div className="flex-shrink-0 rounded-xl overflow-hidden" style={{ width: 260, height: 260, boxShadow: '0 4px 16px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.06)' }}>
+            <div style={{ transform: 'scale(0.2407)', transformOrigin: 'top left' }}>
+              <AnnouncementCard width={1080} height={1080} variant={annVariant} displayName={profile.displayName} username={profile.username} avatarSrc={avatarSrc} coverSrc={coverSrc} />
+            </div>
+          </div>
+
+          {/* Downloads */}
+          <div className="flex-1 w-full">
+            <p className="text-sm text-ink-500 mb-3">Share your feature the moment you go live:</p>
+            <div className="grid grid-cols-1 gap-2.5">
+              <button
+                disabled={busy !== null}
+                onClick={() => download(annPostRef, `${profile.username}-announcement-post.png`, 'ann-post')}
+                className="flex items-center gap-3 text-left bg-ink-50 hover:bg-ink-100 transition-colors rounded-xl px-4 py-3 disabled:opacity-50"
+              >
+                <Instagram className="w-4 h-4 text-ink-500" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-ink">Instagram / Facebook post</p>
+                  <p className="text-xs text-ink-400">1080×1080 · stays on your feed grid</p>
+                </div>
+                {busy === 'ann-post' ? <Loader2 className="w-4 h-4 animate-spin text-ink-400" /> : <Download className="w-4 h-4 text-ink-400" />}
+              </button>
+              <button
+                disabled={busy !== null}
+                onClick={() => download(annStoryRef, `${profile.username}-announcement-story.png`, 'ann-story')}
+                className="flex items-center gap-3 text-left bg-ink-50 hover:bg-ink-100 transition-colors rounded-xl px-4 py-3 disabled:opacity-50"
+              >
+                <Smartphone className="w-4 h-4 text-ink-500" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-ink">Instagram Story</p>
+                  <p className="text-xs text-ink-400">1080×1920 · full-screen vertical</p>
+                </div>
+                {busy === 'ann-story' ? <Loader2 className="w-4 h-4 animate-spin text-ink-400" /> : <Download className="w-4 h-4 text-ink-400" />}
+              </button>
+            </div>
+            {!canPhoto && (
+              <p className="text-xs text-ink-300 mt-3">Add a cover photo to your profile to unlock the photo-backed variant.</p>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Announcement caption */}
       <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
         <div className="flex items-center justify-between mb-3">
@@ -384,6 +535,16 @@ export function SocialsTab() {
           <p style={{ fontFamily: 'Georgia, serif', fontSize: 72, fontWeight: 700, color: INK, marginBottom: 70, textAlign: 'center', lineHeight: 1.05 }}>True North Frames</p>
           <QrSticker size={680} qrUrl={qrUrl} avatarSrc={avatarSrc} displayName={profile.displayName} username={profile.username} />
           <p style={{ fontFamily: 'sans-serif', fontSize: 30, color: '#525252', marginTop: 70, textAlign: 'center' }}>Scan to explore my work &amp; book a session</p>
+        </div>
+
+        {/* Announcement — post 1080×1080 */}
+        <div ref={annPostRef}>
+          <AnnouncementCard width={1080} height={1080} variant={annVariant} displayName={profile.displayName} username={profile.username} avatarSrc={avatarSrc} coverSrc={coverSrc} />
+        </div>
+
+        {/* Announcement — story 1080×1920 */}
+        <div ref={annStoryRef}>
+          <AnnouncementCard width={1080} height={1920} variant={annVariant} displayName={profile.displayName} username={profile.username} avatarSrc={avatarSrc} coverSrc={coverSrc} />
         </div>
       </div>
     </div>
