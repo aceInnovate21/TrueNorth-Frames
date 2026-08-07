@@ -15,7 +15,7 @@ import {
   Plus, Pencil, Trash2, Paperclip, FileText, Play,
   FolderPlus, FolderOpen, Video, Image as ImageIcon,
   Facebook, RefreshCw, Link2, UserPlus, Search, Home, Menu, Loader2,
-  Trophy,
+  Trophy, Share2,
 } from 'lucide-react'
 import { DashboardSidebar, type SidebarGroup } from '@/components/dashboard-sidebar'
 import { DashboardTour, type TourStep } from '@/components/dashboard-tour'
@@ -33,6 +33,7 @@ import { computeBadge, computeBadgeProgress, type BadgeSignals } from '@/lib/bad
 import { PhotographerBadge } from '@/components/photographer-badge'
 import { ChampionsStanding } from '@/components/champions-standing'
 import { PhotographerAchievements } from '@/components/photographer-achievements'
+import { SocialsTab } from '@/components/socials-tab'
 
 // ─── FAQ types & seed ─────────────────────────────────────────────────────────
 
@@ -80,7 +81,7 @@ function totalPortfolioVideos(albums: PortfolioAlbum[]) { return albums.reduce((
 
 // ─── Booking request types ───────────────────────────────────────────────────
 
-type DashboardTab = 'overview' | 'portfolio' | 'messages' | 'requests' | 'availability' | 'packages' | 'reviews' | 'network' | 'faq' | 'settings' | 'trust' | 'achievements'
+type DashboardTab = 'overview' | 'portfolio' | 'messages' | 'requests' | 'availability' | 'packages' | 'reviews' | 'network' | 'faq' | 'settings' | 'trust' | 'achievements' | 'socials'
 
 // First-run guided tour. Each step spotlights a rail nav item (desktop) and
 // switches to that tab; on mobile the rail is a drawer, so the step gracefully
@@ -4700,7 +4701,7 @@ function PhotographerDashboardInner() {
     if (res.ok) { setStandaloneVideos(prev => prev.filter(v => v.id !== videoId)); refreshStorage() }
   }
 
-  const validTabs: DashboardTab[] = ['overview','portfolio','messages','requests','availability','packages','reviews','network','faq','settings','trust','achievements']
+  const validTabs: DashboardTab[] = ['overview','portfolio','messages','requests','availability','packages','reviews','network','faq','settings','trust','achievements','socials']
   const [activeTab, setActiveTab] = useState<DashboardTab>(() => {
     if (trustConnected || trustError) return 'trust'
     return tabParam && validTabs.includes(tabParam) ? tabParam : 'overview'
@@ -4916,6 +4917,7 @@ function PhotographerDashboardInner() {
     { key: 'reviews', label: 'Reviews' },
     { key: 'network', label: 'Network' },
     { key: 'achievements', label: 'Achievements' },
+    { key: 'socials', label: 'Socials' },
     { key: 'faq', label: 'FAQ' },
     { key: 'trust', label: 'Trust Score' },
     { key: 'settings', label: 'Settings' },
@@ -4942,6 +4944,7 @@ function PhotographerDashboardInner() {
         { key: 'reviews', label: 'Reviews', icon: Star },
         { key: 'network', label: 'Network', icon: Users },
         { key: 'achievements', label: 'Achievements', icon: Trophy },
+        { key: 'socials', label: 'Socials', icon: Share2 },
       ],
     },
     {
@@ -5621,6 +5624,9 @@ function PhotographerDashboardInner() {
                 />
               </div>
             )}
+
+            {/* ── Socials tab ───────────────────────────────────────── */}
+            {activeTab === 'socials' && <SocialsTab />}
 
             {/* ── FAQ tab ───────────────────────────────────────────── */}
             {activeTab === 'faq' && (
