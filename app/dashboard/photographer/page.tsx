@@ -15,6 +15,7 @@ import {
   Plus, Pencil, Trash2, Paperclip, FileText, Play,
   FolderPlus, FolderOpen, Video, Image as ImageIcon,
   Facebook, RefreshCw, Link2, UserPlus, Search, Home, Menu, Loader2,
+  Trophy,
 } from 'lucide-react'
 import { DashboardSidebar, type SidebarGroup } from '@/components/dashboard-sidebar'
 import { DashboardTour, type TourStep } from '@/components/dashboard-tour'
@@ -30,6 +31,8 @@ import { Inbox } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { computeBadge, computeBadgeProgress, type BadgeSignals } from '@/lib/badges'
 import { PhotographerBadge } from '@/components/photographer-badge'
+import { ChampionsStanding } from '@/components/champions-standing'
+import { PhotographerAchievements } from '@/components/photographer-achievements'
 
 // ─── FAQ types & seed ─────────────────────────────────────────────────────────
 
@@ -77,7 +80,7 @@ function totalPortfolioVideos(albums: PortfolioAlbum[]) { return albums.reduce((
 
 // ─── Booking request types ───────────────────────────────────────────────────
 
-type DashboardTab = 'overview' | 'portfolio' | 'messages' | 'requests' | 'availability' | 'packages' | 'reviews' | 'network' | 'faq' | 'settings' | 'trust'
+type DashboardTab = 'overview' | 'portfolio' | 'messages' | 'requests' | 'availability' | 'packages' | 'reviews' | 'network' | 'faq' | 'settings' | 'trust' | 'achievements'
 
 // First-run guided tour. Each step spotlights a rail nav item (desktop) and
 // switches to that tab; on mobile the rail is a drawer, so the step gracefully
@@ -4697,7 +4700,7 @@ function PhotographerDashboardInner() {
     if (res.ok) { setStandaloneVideos(prev => prev.filter(v => v.id !== videoId)); refreshStorage() }
   }
 
-  const validTabs: DashboardTab[] = ['overview','portfolio','messages','requests','availability','packages','reviews','network','faq','settings','trust']
+  const validTabs: DashboardTab[] = ['overview','portfolio','messages','requests','availability','packages','reviews','network','faq','settings','trust','achievements']
   const [activeTab, setActiveTab] = useState<DashboardTab>(() => {
     if (trustConnected || trustError) return 'trust'
     return tabParam && validTabs.includes(tabParam) ? tabParam : 'overview'
@@ -4912,6 +4915,7 @@ function PhotographerDashboardInner() {
     { key: 'packages', label: 'Packages' },
     { key: 'reviews', label: 'Reviews' },
     { key: 'network', label: 'Network' },
+    { key: 'achievements', label: 'Achievements' },
     { key: 'faq', label: 'FAQ' },
     { key: 'trust', label: 'Trust Score' },
     { key: 'settings', label: 'Settings' },
@@ -4937,6 +4941,7 @@ function PhotographerDashboardInner() {
         { key: 'messages', label: 'Messages', icon: MessageSquare, badge: totalUnreadMessages },
         { key: 'reviews', label: 'Reviews', icon: Star },
         { key: 'network', label: 'Network', icon: Users },
+        { key: 'achievements', label: 'Achievements', icon: Trophy },
       ],
     },
     {
@@ -5197,6 +5202,9 @@ function PhotographerDashboardInner() {
             {/* ── Overview ─────────────────────────────────────────── */}
             {activeTab === 'overview' && (
               <div className="space-y-5">
+
+                {/* ── Champions standing teaser ── */}
+                <ChampionsStanding />
 
                 {/* ── Badge + stats row ── */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -5567,6 +5575,29 @@ function PhotographerDashboardInner() {
                   </div>
                 </div>
                 <ReviewManager />
+              </div>
+            )}
+
+            {/* ── Achievements tab ──────────────────────────────────── */}
+            {activeTab === 'achievements' && (
+              <div className="space-y-5">
+                <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="w-9 h-9 bg-ink-50 rounded-xl flex items-center justify-center">
+                      <Trophy className="w-4 h-4 text-amber-500" />
+                    </div>
+                    <div>
+                      <h2 className="font-semibold text-ink">Your achievements</h2>
+                      <p className="text-xs text-ink-300">Monthly Champion wins and podium finishes — shown on your public profile</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live standing teaser */}
+                <ChampionsStanding />
+
+                {/* Past achievements timeline (self) */}
+                <PhotographerAchievements />
               </div>
             )}
 

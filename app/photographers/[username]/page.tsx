@@ -375,6 +375,7 @@ import { Footer } from '@/components/footer'
 import { ContactModal } from '@/components/contact-modal'
 import { SaveButton } from '@/components/save-button'
 import { PhotographerBadge } from '@/components/photographer-badge'
+import { PhotographerAchievements } from '@/components/photographer-achievements'
 import { InfoTooltip } from '@/components/tooltip'
 import { todayInMarket } from '@/lib/date'
 
@@ -1058,6 +1059,10 @@ export default function ProfilePage({ params }: { params: { username: string } }
                   {p.badge && <PhotographerBadge badge={p.badge} size="md" showTooltip />}
                 </div>
                 {p.tagline && <p className="text-ink-400 text-sm mt-1">{p.tagline}</p>}
+                {/* Champion win badges */}
+                <div className="mt-2">
+                  <PhotographerAchievements username={params.username} variant="public" />
+                </div>
                 {/* Meta row */}
                 <div className="flex flex-wrap items-center gap-3 mt-2">
                   {p.location && (
