@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { Nav } from '@/components/nav'
 import { Footer } from '@/components/footer'
+import { ChampionsSection } from '@/components/champions-section'
 
 const SPECIALTIES = [
   { name: 'Wedding',     icon: Heart,     href: '/photographers?specialty=wedding' },
@@ -592,6 +593,9 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* -- Champions (monthly leaderboard) ---------------------------- */}
+      <ChampionsSection />
 
       {/* -- Browse by specialty ---------------------------------------- */}
       <section className="bg-ink-50 py-24 border-y border-ink-100">
