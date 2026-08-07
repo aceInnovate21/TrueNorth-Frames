@@ -8,6 +8,12 @@ const nextConfig = {
       { protocol: 'https', hostname: '*.cloudflare.com' },
     ],
   },
+  async redirects() {
+    return [
+      // Short, shareable profile link used by the Socials QR pack.
+      { source: '/p/:username', destination: '/photographers/:username', permanent: true },
+    ]
+  },
   webpack(config, { isServer }) {
     if (isServer) {
       // Keep ffmpeg native binaries as external — they can't be bundled
