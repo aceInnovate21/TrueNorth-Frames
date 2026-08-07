@@ -21,6 +21,7 @@ type Champion = {
 
 type ChampionsPayload = {
   period: string | null
+  bookedLabelMode?: 'auto' | 'booked' | 'contacted'
   categories: Record<string, Champion[]>
 }
 
@@ -213,16 +214,23 @@ export function ChampionsSection() {
       .finally(() => setLoading(false))
   }, [])
 
-  // Resolve each card against the payload, applying the most_booked → most_contacted fallback.
+  // Resolve each card against the payload. The Most Booked card can be forced by
+  // an admin (bookedLabelMode) or, in 'auto', falls back to Most Contacted when
+  // there is no booking data yet.
+  const mode = data?.bookedLabelMode ?? 'auto'
   const resolved = CARDS.map((card) => {
     const primary = data?.categories?.[card.key] ?? []
     let rows = primary
     let label: string = card.label
     let headline: string = card.headline
-    if ('fallbackKey' in card && primary.length === 0) {
-      rows = data?.categories?.[(card as any).fallbackKey] ?? []
-      label = (card as any).fallbackLabel
-      headline = (card as any).fallbackHeadline
+    if ('fallbackKey' in card) {
+      const showContacted =
+        mode === 'contacted' || (mode === 'auto' && primary.length === 0)
+      if (showContacted) {
+        rows = data?.categories?.[(card as any).fallbackKey] ?? []
+        label = (card as any).fallbackLabel
+        headline = (card as any).fallbackHeadline
+      }
     }
     return { ...card, _label: label, _headline: headline, rows }
   })

@@ -65,5 +65,9 @@ export async function GET() {
     })
   }
 
-  return NextResponse.json({ period: latest.period, categories })
+  const { data: modeRow } = await db
+    .from('platform_config').select('value').eq('key', 'champions_booked_label_mode').maybeSingle()
+  const bookedLabelMode = modeRow?.value ?? 'auto' // 'auto' | 'booked' | 'contacted'
+
+  return NextResponse.json({ period: latest.period, bookedLabelMode, categories })
 }
