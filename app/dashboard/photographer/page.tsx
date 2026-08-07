@@ -30,6 +30,7 @@ import { Inbox } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { computeBadge, computeBadgeProgress, type BadgeSignals } from '@/lib/badges'
 import { PhotographerBadge } from '@/components/photographer-badge'
+import { ChampionsStanding } from '@/components/champions-standing'
 
 // ─── FAQ types & seed ─────────────────────────────────────────────────────────
 
@@ -5197,6 +5198,9 @@ function PhotographerDashboardInner() {
             {/* ── Overview ─────────────────────────────────────────── */}
             {activeTab === 'overview' && (
               <div className="space-y-5">
+
+                {/* ── Champions standing teaser ── */}
+                <ChampionsStanding />
 
                 {/* ── Badge + stats row ── */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

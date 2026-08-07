@@ -59,10 +59,26 @@ AS $$
 DECLARE
   period_start      timestamptz := p_period::timestamptz;
   period_end        timestamptz := (p_period + interval '1 month')::timestamptz;
+  prev_period       date        := (p_period - interval '1 month')::date;
   top_n             int := 10;
   min_reviews       int := 3;
   min_conversations int := 3;
+  -- Back-to-back rule: last month's #1 in a category cannot win / rank in the
+  -- SAME category this month, to spread wins across more photographers. They
+  -- remain fully eligible in every OTHER category. NULL when there was no prior
+  -- winner (e.g. the very first month), which disables the exclusion.
+  prev_most_viewed     uuid;
+  prev_most_booked     uuid;
+  prev_most_contacted  uuid;
+  prev_highest_rated   uuid;
+  prev_quick_responder uuid;
 BEGIN
+  SELECT photographer_id INTO prev_most_viewed     FROM monthly_champions WHERE period = prev_period AND category = 'most_viewed'     AND rank = 1;
+  SELECT photographer_id INTO prev_most_booked     FROM monthly_champions WHERE period = prev_period AND category = 'most_booked'     AND rank = 1;
+  SELECT photographer_id INTO prev_most_contacted  FROM monthly_champions WHERE period = prev_period AND category = 'most_contacted'  AND rank = 1;
+  SELECT photographer_id INTO prev_highest_rated   FROM monthly_champions WHERE period = prev_period AND category = 'highest_rated'   AND rank = 1;
+  SELECT photographer_id INTO prev_quick_responder FROM monthly_champions WHERE period = prev_period AND category = 'quick_responder' AND rank = 1;
+
   -- Wipe the target month so the recompute is authoritative.
   DELETE FROM monthly_champions WHERE period = p_period;
 
@@ -82,6 +98,7 @@ BEGIN
       AND v.view_date >= p_period
       AND v.view_date <  (p_period + interval '1 month')
       AND (v.viewer_id IS NULL OR v.viewer_id <> p.user_id)   -- drop self-views
+      AND v.photographer_id IS DISTINCT FROM prev_most_viewed -- back-to-back rule
     GROUP BY v.photographer_id
   ) t
   WHERE t.rnk <= top_n;
@@ -102,6 +119,7 @@ BEGIN
       AND b.status IN ('approved', 'completed')
       AND b.created_at >= period_start
       AND b.created_at <  period_end
+      AND b.photographer_id IS DISTINCT FROM prev_most_booked  -- back-to-back rule
     GROUP BY b.photographer_id
   ) t
   WHERE t.rnk <= top_n;
@@ -120,6 +138,7 @@ BEGIN
     WHERE p.profile_status = 'approved'
       AND c.created_at >= period_start
       AND c.created_at <  period_end
+      AND c.photographer_id IS DISTINCT FROM prev_most_contacted  -- back-to-back rule
     GROUP BY c.photographer_id
   ) t
   WHERE t.rnk <= top_n;
@@ -139,6 +158,7 @@ BEGIN
     JOIN photographer_profiles p ON p.id = r.photographer_id
     WHERE p.profile_status = 'approved'
       AND r.flag_status <> 'flagged'
+      AND r.photographer_id IS DISTINCT FROM prev_highest_rated  -- back-to-back rule
     GROUP BY r.photographer_id
     HAVING COUNT(*) >= min_reviews
   ) t
@@ -181,9 +201,108 @@ BEGIN
     FROM resp r
     JOIN photographer_profiles p ON p.id = r.photographer_id
     WHERE p.profile_status = 'approved'
+      AND r.photographer_id IS DISTINCT FROM prev_quick_responder  -- back-to-back rule
     GROUP BY r.photographer_id
     HAVING COUNT(*) >= min_conversations
   ) t
   WHERE t.rnk <= top_n;
+END;
+$$;
+
+-- ─── Live standings (teaser) ──────────────────────────────────────────────────
+-- Powers the "You're #3 in Most Viewed — 12 more views to take the lead" nudge.
+-- Computed LIVE for the current month (not from the frozen snapshot) so the
+-- number moves as views/enquiries/bookings come in. Covers the count-based
+-- categories where a "N more to take the lead" gap is intuitive.
+--
+-- Respects the back-to-back rule: last month's category winner is omitted from
+-- that category here too (they are sitting this month out), so their standing
+-- row simply won't be returned for that category.
+--
+-- Returns one row per count-category the photographer has any activity in:
+--   my_value    → the photographer's current metric
+--   my_rank     → their rank among eligible photographers (1 = leading)
+--   leader_value→ the current top value in that category
+--   gap_to_lead → how many more they need to take #1 (0 if already leading)
+CREATE OR REPLACE FUNCTION photographer_live_standings(
+  p_photographer_id uuid,
+  p_period          date DEFAULT date_trunc('month', now())::date
+)
+RETURNS TABLE (
+  category     champion_category,
+  my_value     numeric,
+  my_rank      int,
+  leader_value numeric,
+  gap_to_lead  numeric
+)
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+  period_start timestamptz := p_period::timestamptz;
+  period_end   timestamptz := (p_period + interval '1 month')::timestamptz;
+  prev_period  date        := (p_period - interval '1 month')::date;
+  prev_viewed    uuid;
+  prev_booked    uuid;
+  prev_contacted uuid;
+BEGIN
+  SELECT photographer_id INTO prev_viewed    FROM monthly_champions WHERE period = prev_period AND category = 'most_viewed'    AND rank = 1;
+  SELECT photographer_id INTO prev_booked    FROM monthly_champions WHERE period = prev_period AND category = 'most_booked'    AND rank = 1;
+  SELECT photographer_id INTO prev_contacted FROM monthly_champions WHERE period = prev_period AND category = 'most_contacted' AND rank = 1;
+
+  RETURN QUERY
+  WITH
+  -- Most Viewed live counts
+  viewed AS (
+    SELECT v.photographer_id AS pid, COUNT(*)::numeric AS n
+    FROM photographer_profile_views v
+    JOIN photographer_profiles p ON p.id = v.photographer_id
+    WHERE p.profile_status = 'approved'
+      AND v.view_date >= p_period AND v.view_date < (p_period + interval '1 month')
+      AND (v.viewer_id IS NULL OR v.viewer_id <> p.user_id)
+      AND v.photographer_id IS DISTINCT FROM prev_viewed
+    GROUP BY v.photographer_id
+  ),
+  viewed_ranked AS (
+    SELECT pid, n, RANK() OVER (ORDER BY n DESC) AS rnk, MAX(n) OVER () AS leader FROM viewed
+  ),
+  -- Most Contacted live counts
+  contacted AS (
+    SELECT c.photographer_id AS pid, COUNT(DISTINCT c.client_id)::numeric AS n
+    FROM conversations c
+    JOIN photographer_profiles p ON p.id = c.photographer_id
+    WHERE p.profile_status = 'approved'
+      AND c.created_at >= period_start AND c.created_at < period_end
+      AND c.photographer_id IS DISTINCT FROM prev_contacted
+    GROUP BY c.photographer_id
+  ),
+  contacted_ranked AS (
+    SELECT pid, n, RANK() OVER (ORDER BY n DESC) AS rnk, MAX(n) OVER () AS leader FROM contacted
+  ),
+  -- Most Booked live counts
+  booked AS (
+    SELECT b.photographer_id AS pid, COUNT(*)::numeric AS n
+    FROM booking_requests b
+    JOIN photographer_profiles p ON p.id = b.photographer_id
+    WHERE p.profile_status = 'approved'
+      AND b.status IN ('approved', 'completed')
+      AND b.created_at >= period_start AND b.created_at < period_end
+      AND b.photographer_id IS DISTINCT FROM prev_booked
+    GROUP BY b.photographer_id
+  ),
+  booked_ranked AS (
+    SELECT pid, n, RANK() OVER (ORDER BY n DESC) AS rnk, MAX(n) OVER () AS leader FROM booked
+  )
+  SELECT 'most_viewed'::champion_category, r.n, r.rnk::int, r.leader,
+         CASE WHEN r.rnk = 1 THEN 0 ELSE r.leader - r.n + 1 END
+  FROM viewed_ranked r WHERE r.pid = p_photographer_id
+  UNION ALL
+  SELECT 'most_contacted'::champion_category, r.n, r.rnk::int, r.leader,
+         CASE WHEN r.rnk = 1 THEN 0 ELSE r.leader - r.n + 1 END
+  FROM contacted_ranked r WHERE r.pid = p_photographer_id
+  UNION ALL
+  SELECT 'most_booked'::champion_category, r.n, r.rnk::int, r.leader,
+         CASE WHEN r.rnk = 1 THEN 0 ELSE r.leader - r.n + 1 END
+  FROM booked_ranked r WHERE r.pid = p_photographer_id;
 END;
 $$;
