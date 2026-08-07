@@ -228,14 +228,14 @@ export function SocialsTab() {
         height: 1000,
         type: 'canvas',
         data: absoluteUrl(`/p/${profile.username}`),
-        image: '/logo.png',
+        image: '/tnf-emblem.png',
         margin: 0,
         qrOptions: { errorCorrectionLevel: 'H' },
         dotsOptions: { color: INK, type: 'rounded' },
         cornersSquareOptions: { color: INK, type: 'extra-rounded' },
         cornersDotOptions: { color: INK },
         backgroundOptions: { color: 'transparent' },
-        imageOptions: { crossOrigin: 'anonymous', margin: 10, imageSize: 0.22, hideBackgroundDots: true },
+        imageOptions: { crossOrigin: 'anonymous', margin: 10, imageSize: 0.24, hideBackgroundDots: true },
       })
       const blob = await qr.getRawData('png')
       if (cancelled || !blob) return
