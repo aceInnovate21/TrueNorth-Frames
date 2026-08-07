@@ -36,7 +36,6 @@ function QrSticker({
 }) {
   const avatarR = size * 0.13
   const pad = size * 0.08
-  const domain = SITE_URL.replace(/^https?:\/\//, '')
 
   return (
     <div style={{ width: size, position: 'relative', paddingTop: avatarR }}>
@@ -72,17 +71,6 @@ function QrSticker({
           }}
         >
           {displayName}
-        </p>
-        <p
-          style={{
-            fontFamily: '-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
-            fontSize: size * 0.038,
-            color: '#737373',
-            marginTop: size * 0.012,
-            letterSpacing: 0.3,
-          }}
-        >
-          {domain}/p/{username}
         </p>
       </div>
 
@@ -232,8 +220,7 @@ export function SocialsTab() {
   // profile URL is known. Regenerates automatically if the username changes.
   useEffect(() => {
     if (!profile?.username) return
-    let revoked = false
-    let objectUrl: string | null = null
+    let cancelled = false
     ;(async () => {
       const QRCodeStyling = (await import('qr-code-styling')).default
       const qr = new QRCodeStyling({
@@ -251,14 +238,17 @@ export function SocialsTab() {
         imageOptions: { crossOrigin: 'anonymous', margin: 10, imageSize: 0.22, hideBackgroundDots: true },
       })
       const blob = await qr.getRawData('png')
-      if (revoked || !blob) return
-      objectUrl = URL.createObjectURL(blob as Blob)
-      setQrUrl(objectUrl)
+      if (cancelled || !blob) return
+      // Use a data URL (not blob:) so html-to-image can embed the QR during
+      // capture — blob: URLs break when the library appends cache-bust queries.
+      const dataUrl: string = await new Promise((resolve) => {
+        const reader = new FileReader()
+        reader.onloadend = () => resolve(reader.result as string)
+        reader.readAsDataURL(blob as Blob)
+      })
+      if (!cancelled) setQrUrl(dataUrl)
     })()
-    return () => {
-      revoked = true
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
-    }
+    return () => { cancelled = true }
   }, [profile?.username])
 
   const avatarSrc = profile?.avatarUrl
@@ -273,7 +263,12 @@ export function SocialsTab() {
     if (!ref.current) return
     setBusy(key)
     try {
-      const dataUrl = await toPng(ref.current, { pixelRatio: 1, cacheBust: true })
+      // Make sure every image in the capture node has decoded first (off-screen
+      // images can otherwise be blank at capture time).
+      const imgs = Array.from(ref.current.querySelectorAll('img'))
+      await Promise.all(imgs.map((img) => (img.decode ? img.decode().catch(() => {}) : Promise.resolve())))
+      // No cacheBust — it corrupts data:/blob: image sources.
+      const dataUrl = await toPng(ref.current, { pixelRatio: 1 })
       const a = document.createElement('a')
       a.href = dataUrl
       a.download = name
@@ -303,7 +298,11 @@ export function SocialsTab() {
   }
 
   const profileUrl = absoluteUrl(`/p/${profile.username}`)
+  // Absolute (production) URL for the copy-paste snippet the photographer pastes
+  // on their own site; relative URL for the in-app preview so it resolves on the
+  // current deployment (preview/dev) instead of pointing at prod.
   const badgeUrl = absoluteUrl(`/api/badge/${profile.username}?theme=${badgeTheme}&style=${badgeStyle}`)
+  const badgePreviewSrc = `/api/badge/${profile.username}?theme=${badgeTheme}&style=${badgeStyle}`
   const embedSnippet = `<a href="${profileUrl}" target="_blank" rel="noopener">\n  <img src="${badgeUrl}" alt="${badgeStyle === 'book' ? 'Book me' : 'Featured'} on True North Frames" width="280" height="64" />\n</a>`
   const caption = `I'm excited to share that I'm officially featured on True North Frames — Edmonton's home for trusted local photographers! 📸\n\nBook me directly here: ${profileUrl}`
 
@@ -493,7 +492,7 @@ export function SocialsTab() {
         {/* Live badge preview */}
         <div className={`rounded-xl p-6 flex justify-center mb-4 ${badgeTheme === 'dark' ? 'bg-ink-100' : 'bg-ink-50'}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={badgeUrl} alt="Badge preview" width={280} height={64} />
+          <img src={badgePreviewSrc} alt="Badge preview" width={280} height={64} />
         </div>
 
         <div className="relative">
@@ -510,8 +509,11 @@ export function SocialsTab() {
         </a>
       </div>
 
-      {/* ── Off-screen render targets for downloads (full pixel size) ── */}
-      <div style={{ position: 'fixed', left: -99999, top: 0, pointerEvents: 'none' }} aria-hidden>
+      {/* ── Render targets for downloads (full pixel size) ──
+           Kept in the viewport but invisible (opacity 0, behind everything) so
+           the browser does NOT lazy-defer their images — off-screen images get
+           replaced with placeholders and capture blank. ── */}
+      <div style={{ position: 'fixed', left: 0, top: 0, opacity: 0, zIndex: -1, pointerEvents: 'none', overflow: 'hidden' }} aria-hidden>
         {/* Phone wallpaper 1080×1920 — sticker in lower third */}
         <div ref={wallpaperRef} style={{ width: 1080, height: 1920, background: '#f5f5f4', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 220 }}>
           <p style={{ fontFamily: 'Georgia, serif', fontSize: 40, color: INK, fontWeight: 700, marginBottom: 40 }}>Scan to book me</p>
