@@ -25,8 +25,16 @@ async function run(request: NextRequest) {
   const lastMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
   const periods = [lastMonth, thisMonth].map((d) => d.toISOString().slice(0, 10))
 
+  // Admin-locked months are curated by hand — never auto-recompute them.
+  const { data: locks } = await db.from('champion_locks').select('period')
+  const lockedSet = new Set<string>((locks ?? []).map((l: any) => l.period))
+
   const results: Record<string, string> = {}
   for (const period of periods) {
+    if (lockedSet.has(period)) {
+      results[period] = 'skipped (locked)'
+      continue
+    }
     const { error } = await db.rpc('refresh_monthly_champions', { p_period: period })
     results[period] = error ? `error: ${error.message}` : 'ok'
   }

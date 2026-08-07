@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   // { href: '/admin/conversations',label: 'Conversations' },
   { href: '/admin/analytics',    label: 'Analytics'    },
   { href: '/admin/trust-health', label: 'Trust health' },
+  { href: '/admin/champions',    label: 'Champions'    },
 ]
 
 export function AdminNav({ openCount }: { openCount?: number }) {
