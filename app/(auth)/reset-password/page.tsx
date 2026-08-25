@@ -34,22 +34,51 @@ export default function ResetPasswordPage() {
   const [sessionReady, setSessionReady] = useState(false)
   const [invalidLink, setInvalidLink] = useState(false)
 
-  // Supabase sends the session tokens in the URL hash after the redirect.
-  // We listen for the PASSWORD_RECOVERY event which fires automatically
-  // when the page loads with a valid reset token in the URL.
+  // Establish the recovery session from whatever link format Supabase used.
+  // Depending on the project's flow type the reset link lands here with either
+  // a PKCE `code`, a `token_hash` (+ type=recovery), or session tokens in the
+  // URL hash (implicit flow, surfaced via the PASSWORD_RECOVERY event). We
+  // handle all three so the reset form works regardless of configuration.
   useEffect(() => {
+    let resolved = false
+    const markReady = () => { resolved = true; setSessionReady(true) }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setSessionReady(true)
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+        markReady()
       }
     })
 
-    // Fallback: if no recovery event fires within 3s, link is invalid/expired
+    async function establishSession() {
+      const url = new URL(window.location.href)
+      const code      = url.searchParams.get('code')
+      const tokenHash = url.searchParams.get('token_hash')
+      const type      = url.searchParams.get('type')
+      try {
+        if (code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+          if (!error && data.session) markReady()
+        } else if (tokenHash) {
+          const { data, error } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: (type as any) || 'recovery',
+          })
+          if (!error && data.session) markReady()
+        } else {
+          // Implicit hash flow is handled by the listener above, but the
+          // session may already be present (e.g. on a remount).
+          const { data } = await supabase.auth.getSession()
+          if (data.session) markReady()
+        }
+      } catch {
+        // fall through to the timeout → invalid-link state
+      }
+    }
+    establishSession()
+
+    // Fallback: if no session is established within 3s, link is invalid/expired
     const timer = setTimeout(() => {
-      setInvalidLink((prev) => {
-        if (!prev && !sessionReady) return true
-        return prev
-      })
+      if (!resolved) setInvalidLink(true)
     }, 3000)
 
     return () => {
