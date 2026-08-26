@@ -263,12 +263,19 @@ export function SocialsTab() {
     if (!ref.current) return
     setBusy(key)
     try {
-      // Make sure every image in the capture node has decoded first (off-screen
-      // images can otherwise be blank at capture time).
+      // Make sure fonts and every image in the capture node have decoded first
+      // (off-screen images can otherwise be blank at capture time).
+      if (document.fonts?.ready) await document.fonts.ready
       const imgs = Array.from(ref.current.querySelectorAll('img'))
       await Promise.all(imgs.map((img) => (img.decode ? img.decode().catch(() => {}) : Promise.resolve())))
       // No cacheBust — it corrupts data:/blob: image sources.
-      const dataUrl = await toPng(ref.current, { pixelRatio: 1 })
+      // html-to-image renders large data-URL images (the QR) blank on the first
+      // pass because they aren't decoded inside the library's cloned node yet.
+      // A warm-up pass primes that cache; the following pass captures correctly.
+      const opts = { pixelRatio: 1 } as const
+      await toPng(ref.current, opts)
+      await toPng(ref.current, opts)
+      const dataUrl = await toPng(ref.current, opts)
       const a = document.createElement('a')
       a.href = dataUrl
       a.download = name
