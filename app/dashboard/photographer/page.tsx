@@ -9,7 +9,7 @@ import {
   Bell, Camera, CheckCircle2, ChevronRight, Globe, Instagram,
   MapPin, MessageSquare, Star, User, Zap, ArrowRight,
   Eye, AlertCircle, Shield, ImagePlus, X, Send, Calendar,
-  Clock, ChevronLeft, DollarSign, Save, Settings, ExternalLink,
+  Clock, ChevronLeft, Save, Settings, ExternalLink,
   Package, Users, HelpCircle, GripVertical, ChevronDown, ChevronUp,
   ChevronsUp, ChevronsDown, LogOut,
   Plus, Pencil, Trash2, Paperclip, FileText, Play,
@@ -789,8 +789,6 @@ interface ProfileData {
   displayName: string
   bio: string
   area: string
-  rate: string
-  rateUnit: string
   specialties: string[]
   websiteUrl: string
   contactInstagram: string
@@ -843,8 +841,9 @@ interface ChatMsg {
 
 
 const SPECIALTIES_ALL = [
-  'Wedding', 'Portrait', 'Corporate', 'Newborn', 'Family', 'Event',
-  'Real Estate', 'Product', 'Street', 'Boudoir', 'Sports', 'Food',
+  'Wedding', 'Portrait', 'Headshot', 'Corporate', 'Newborn', 'Maternity',
+  'Family', 'Event', 'Graduation', 'Real Estate', 'Product', 'Fashion',
+  'Street', 'Boudoir', 'Sports', 'Food', 'Pets', 'Travel',
 ]
 
 const EDMONTON_AREAS = [
@@ -860,7 +859,6 @@ function computeScore(p: ProfileData & { faqCount?: number }) {
     { key: 'name',         label: 'Display name',          done: !!p.displayName,                weight: 10, tab: 'settings',      cta: 'Add your name' },
     { key: 'bio',          label: 'Bio written',            done: p.bio.length >= 20,             weight: 10, tab: 'settings',      cta: 'Write your bio' },
     { key: 'area',         label: 'Location set',           done: !!p.area,                       weight: 5,  tab: 'settings',      cta: 'Set your area' },
-    { key: 'rate',         label: 'Rate added',             done: !!p.rate,                       weight: 5,  tab: 'settings',      cta: 'Add your rate' },
     { key: 'avatar',       label: 'Profile photo',          done: !!p.avatarUrl,                  weight: 10, tab: 'settings',      cta: 'Upload photo' },
     { key: 'specialties',  label: 'Specialties chosen',     done: p.specialties.length > 0,       weight: 10, tab: 'settings',      cta: 'Pick specialties' },
     { key: 'portfolio',    label: 'Portfolio photos',        done: p.hasPortfolio,                 weight: 15, tab: 'portfolio',     cta: 'Upload photos' },
@@ -2677,6 +2675,7 @@ function ProfileSettingsTab({ profile, setProfile }: {
   setProfile: React.Dispatch<React.SetStateAction<ProfileData>>
 }) {
   const [local, setLocal] = useState({ ...profile })
+  const [customSpecialty, setCustomSpecialty] = useState('')
   const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({
     basics: 'idle', specialties: 'idle', contacts: 'idle', account: 'idle',
   })
@@ -2712,8 +2711,6 @@ function ProfileSettingsTab({ profile, setProfile }: {
       local.displayName !== profile.displayName ||
       local.bio !== profile.bio ||
       local.area !== profile.area ||
-      (local.rate || '') !== (profile.rate || '') ||
-      local.rateUnit !== profile.rateUnit ||
       local.websiteUrl !== profile.websiteUrl ||
       local.yearsExperience !== profile.yearsExperience
     ) dirty.push('basics')
@@ -2874,8 +2871,6 @@ function ProfileSettingsTab({ profile, setProfile }: {
         display_name: local.displayName.trim(),
         bio: local.bio.trim(),
         location: local.area,
-        rate_amount: local.rate || null,
-        rate_unit: local.rateUnit,
         website_url: local.websiteUrl.trim(),
         years_experience: local.yearsExperience,
       }
@@ -2934,6 +2929,20 @@ function ProfileSettingsTab({ profile, setProfile }: {
         ? l.specialties.filter(x => x !== s)
         : l.specialties.length < 5 ? [...l.specialties, s] : l.specialties,
     }))
+  }
+
+  function addCustomSpecialty() {
+    const raw = customSpecialty.trim().slice(0, 60)
+    if (!raw) return
+    // Snap to a preset's canonical casing when it matches one, so chips stay in sync
+    const preset = SPECIALTIES_ALL.find(s => s.toLowerCase() === raw.toLowerCase())
+    const value = preset ?? raw
+    setLocal(l => {
+      if (l.specialties.length >= 5) return l
+      if (l.specialties.some(s => s.toLowerCase() === value.toLowerCase())) return l
+      return { ...l, specialties: [...l.specialties, value] }
+    })
+    setCustomSpecialty('')
   }
 
   const bioLen = local.bio.length
@@ -3144,33 +3153,6 @@ function ProfileSettingsTab({ profile, setProfile }: {
             </div>
           </div>
 
-          {/* Rate */}
-          <div>
-            <label className="block text-sm font-medium text-ink mb-1.5">
-              <span className="flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5 text-ink-300" />Starting rate</span>
-            </label>
-            <div className="flex gap-3">
-              <div className="relative flex-1">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-300 text-sm font-medium pointer-events-none">$</span>
-                <input
-                  type="number" min={0} placeholder="150"
-                  value={local.rate}
-                  onChange={e => setLocal(l => ({ ...l, rate: e.target.value }))}
-                  className="w-full border border-ink-100 rounded-xl pl-8 pr-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
-                />
-              </div>
-              <select
-                value={local.rateUnit}
-                onChange={e => setLocal(l => ({ ...l, rateUnit: e.target.value }))}
-                className="border border-ink-100 rounded-xl px-3 py-3 text-sm text-ink outline-none focus:border-ink bg-white"
-              >
-                <option value="hr">/ hr</option>
-                <option value="half">/ half day</option>
-                <option value="full">/ full day</option>
-              </select>
-            </div>
-          </div>
-
           {/* Years of experience */}
           <div>
             <label className="block text-sm font-medium text-ink mb-2">Years of photography experience</label>
@@ -3211,7 +3193,7 @@ function ProfileSettingsTab({ profile, setProfile }: {
           <h2 className="font-semibold text-ink">Specialties</h2>
         </div>
 
-        <p className="text-xs text-ink-300 mb-4">Pick up to 5. These appear as tags on your public profile.</p>
+        <p className="text-xs text-ink-300 mb-4">Pick up to 5, or add your own. These appear as tags on your public profile.</p>
         <div className="flex flex-wrap gap-2 mb-4">
           {SPECIALTIES_ALL.map(s => {
             const sel = local.specialties.includes(s)
@@ -3227,6 +3209,38 @@ function ProfileSettingsTab({ profile, setProfile }: {
             )
           })}
         </div>
+
+        {/* Custom specialty entry */}
+        <div className="flex gap-2 mb-4">
+          <input
+            type="text" value={customSpecialty} maxLength={60}
+            onChange={e => setCustomSpecialty(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomSpecialty() } }}
+            disabled={local.specialties.length >= 5}
+            placeholder={local.specialties.length >= 5 ? 'Maximum 5 specialties selected' : 'Add your own — e.g. Headshot, Pets…'}
+            className="flex-1 border border-ink-100 rounded-xl px-4 py-2 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink-300 transition-all disabled:bg-ink-50 disabled:cursor-not-allowed"
+          />
+          <button
+            type="button" onClick={addCustomSpecialty}
+            disabled={!customSpecialty.trim() || local.specialties.length >= 5}
+            className="text-sm font-medium px-4 py-2 rounded-xl border border-ink-100 text-ink-500 hover:border-ink-300 hover:text-ink transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Add
+          </button>
+        </div>
+
+        {/* Custom (non-preset) selections shown as removable chips */}
+        {local.specialties.filter(s => !SPECIALTIES_ALL.includes(s)).length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {local.specialties.filter(s => !SPECIALTIES_ALL.includes(s)).map(s => (
+              <button key={s} type="button" onClick={() => toggleSpecialty(s)}
+                className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl border bg-ink text-white border-ink">
+                {s}
+                <X className="w-3.5 h-3.5" />
+              </button>
+            ))}
+          </div>
+        )}
 
         {local.specialties.length > 0 && (
           <div className="bg-ink-50 rounded-xl px-4 py-3 mb-4">
@@ -4119,8 +4133,6 @@ function PhotographerDashboardInner() {
     displayName: '',
     bio: '',
     area: '',
-    rate: '',
-    rateUnit: 'hr',
     specialties: [],
     websiteUrl: '',
     contactInstagram: '',
@@ -4180,8 +4192,6 @@ function PhotographerDashboardInner() {
           displayName:         data.display_name ?? '',
           bio:                 data.bio ?? '',
           area:                data.location ?? '',
-          rate:                data.rate_amount ?? '',
-          rateUnit:            data.rate_unit ?? 'hr',
           specialties:         data.specialties ?? [],
           websiteUrl:          data.website_url ?? '',
           contactInstagram:    data.contact_instagram_url ?? '',
