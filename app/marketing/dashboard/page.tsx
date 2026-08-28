@@ -20,9 +20,9 @@ type Tab = 'overview' | 'portfolio' | 'packages' | 'availability' | 'faq' | 'req
 type Req = { id: number; name: string; initials: string; color: string; detail: string; pkg: string; state: 'pending' | 'accepted' | 'declined' }
 
 const INITIAL_REQS: Req[] = [
-  { id: 1, name: 'Ava Lindqvist', initials: 'AL', color: 'bg-rose-500', detail: 'Wedding · Jun 18 · Muttart Conservatory', pkg: 'Full Wedding · $3,400', state: 'pending' },
-  { id: 2, name: 'Marcus Cole', initials: 'MC', color: 'bg-zinc-700', detail: 'Corporate headshots · Jun 24 · Downtown', pkg: 'Portrait Session · $350', state: 'pending' },
-  { id: 3, name: 'Priya Nair', initials: 'PN', color: 'bg-indigo-600', detail: 'Engagement · Jul 2 · River Valley', pkg: 'Portrait Session · $350', state: 'pending' },
+  { id: 1, name: 'Ava Lindqvist', initials: 'AL', color: 'bg-rose-500', detail: 'Wedding · Jun 18 · Muttart Conservatory', pkg: 'Full Wedding · 10 hours', state: 'pending' },
+  { id: 2, name: 'Marcus Cole', initials: 'MC', color: 'bg-zinc-700', detail: 'Corporate headshots · Jun 24 · Downtown', pkg: 'Portrait Session · 1 hour', state: 'pending' },
+  { id: 3, name: 'Priya Nair', initials: 'PN', color: 'bg-indigo-600', detail: 'Engagement · Jul 2 · River Valley', pkg: 'Portrait Session · 1 hour', state: 'pending' },
 ]
 
 const TAB_LABELS: Record<Tab, string> = {
@@ -302,7 +302,6 @@ export default function DashboardPage() {
                   <div key={pk.id} className="rounded-xl border border-ink-100 p-4">
                     <div className="flex items-center justify-between mb-1">
                       <span className="bg-ink-50 text-ink-500 text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize">{pk.specialty.replace('-', ' ')}</span>
-                      <span className="font-bold text-ink">{pk.price}</span>
                     </div>
                     <p className="font-semibold text-ink text-sm mt-1">{pk.name}</p>
                     <p className="text-ink-400 text-xs mt-0.5">{pk.duration}</p>

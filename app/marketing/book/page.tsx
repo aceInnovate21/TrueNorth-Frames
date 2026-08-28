@@ -41,7 +41,7 @@ function BookInner() {
           </p>
           <div className="text-left bg-ink-50 rounded-2xl p-4 mt-6 space-y-2 text-sm">
             <Row label="Photographer" value={p.name} />
-            <Row label="Package" value={`${p.packages[pkg].name} · ${p.packages[pkg].price}`} />
+            <Row label="Package" value={`${p.packages[pkg].name} · ${p.packages[pkg].duration}`} />
             <Row label="Date" value={`June ${day}, 2026`} />
             {note && <Row label="Note" value={note} />}
           </div>
@@ -97,7 +97,7 @@ function BookInner() {
               <button key={pk.name} onClick={() => setPkg(i)} className={`w-full text-left rounded-xl border p-4 transition-colors ${pkg === i ? 'border-ink bg-ink-50' : 'border-ink-100 hover:border-ink-300'}`}>
                 <div className="flex items-center justify-between">
                   <span className="font-semibold">{pk.name}</span>
-                  <span className="font-bold">{pk.price}</span>
+                  <span className="text-xs text-ink-400">{pk.duration}</span>
                 </div>
                 <p className="text-sm text-ink-400 mt-0.5">{pk.blurb}</p>
               </button>
@@ -144,7 +144,7 @@ function BookInner() {
               className="w-full text-sm bg-ink-50 rounded-xl p-3 outline-none focus:ring-2 focus:ring-ink/10 placeholder:text-ink-300 resize-none"
             />
             <div className="bg-ink-50 rounded-xl p-4 mt-4 space-y-2 text-sm">
-              <Row label="Package" value={`${p.packages[pkg].name} · ${p.packages[pkg].price}`} />
+              <Row label="Package" value={`${p.packages[pkg].name} · ${p.packages[pkg].duration}`} />
               <Row label="Date" value={day ? `June ${day}, 2026` : '—'} />
             </div>
           </div>

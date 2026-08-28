@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { notFound, useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
-  ArrowLeft, Star, MapPin, Shield, Camera, Award, DollarSign, Package,
+  ArrowLeft, Star, MapPin, Shield, Camera, Award, Package,
   Calendar, Eye, MessageSquare, X, BadgeCheck, ExternalLink, Heart, ChevronDown,
 } from 'lucide-react'
 import { PhotographerBadge } from '@/components/photographer-badge'
@@ -74,7 +74,6 @@ export default function PhotographerProfile() {
                   <span className="flex items-center gap-1 text-ink-400 text-xs"><MapPin className="w-3 h-3" />{p.location}</span>
                   <span className="flex items-center gap-1 text-ink-400 text-xs"><Camera className="w-3 h-3" />{p.yearsExperience >= 10 ? '10+ years' : `${p.yearsExperience}+ years`} in Edmonton</span>
                   <span className="flex items-center gap-1 text-ink-300 text-xs"><Award className="w-3 h-3" />Member since {p.memberSince}</span>
-                  <span className="flex items-center gap-1 text-xs font-semibold text-ink bg-ink-50 px-2 py-0.5 rounded-full border border-ink-100"><DollarSign className="w-3 h-3" />{p.rateDisplay}</span>
                   <StarRow rating={p.rating} count={p.reviews} />
                 </div>
                 <div className="flex flex-wrap gap-1.5 mt-3">
@@ -185,14 +184,10 @@ export default function PhotographerProfile() {
 
             {/* Right sidebar */}
             <div className="space-y-4">
-              <div className="rounded-2xl p-5 text-white relative overflow-hidden lg:sticky lg:top-24" style={{ background: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
+              <div className="rounded-2xl p-5 text-white relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
                 <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
                 <p className="font-semibold text-base mb-1">Book {p.name.split(' ')[0]}</p>
-                <div className="mb-4">
-                  <p className="text-white/50 text-[10px] uppercase tracking-widest mb-1">Starting from</p>
-                  <p className="font-bold text-white text-2xl leading-none tracking-tight">{p.rateDisplay.replace('From ', '')}</p>
-                  <p className="text-white/40 text-xs mt-1">{p.rateNote}</p>
-                </div>
+                <p className="text-white/40 text-xs mb-4">Send a request — {p.name.split(' ')[0]} usually replies within an hour.</p>
                 <Link href={`/marketing/book?to=${p.slug}`} className="w-full bg-white hover:bg-ink-50 text-ink font-semibold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm">
                   Request a booking
                 </Link>
@@ -291,7 +286,6 @@ function PackageCard({ pkg, slug }: { pkg: Pkg; slug: string }) {
     <div className="rounded-xl border border-ink-100 p-4 flex flex-col">
       <div className="flex items-center justify-between mb-1">
         <span className="bg-ink-50 text-ink-500 text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize">{pkg.specialty.replace('-', ' ')}</span>
-        <span className="font-bold text-ink">{pkg.price}</span>
       </div>
       <p className="font-semibold text-ink text-sm mt-1">{pkg.name}</p>
       <p className="text-ink-400 text-xs mt-0.5">{pkg.duration} · {pkg.blurb}</p>
