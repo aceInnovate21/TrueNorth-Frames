@@ -73,6 +73,13 @@ export async function fetchGoogleSignals(accessToken: string): Promise<PlatformS
         return { platform: 'google', error: 'Google connection expired — please reconnect your account.' }
       }
 
+      // 429 (or 403 RESOURCE_EXHAUSTED) → the Business Profile API is enabled
+      // but this app's project has 0 / exhausted quota. Requires Google's
+      // one-time Business Profile API access approval — not a user problem.
+      if (accountsRes.status === 429) {
+        return { platform: 'google', error: `Google Business Profile API quota not yet granted for this app — the access request is still pending (platform config on our side). [429${detail ? ': ' + detail : ''}]` }
+      }
+
       // 403 does NOT mean "no business profile". It almost always means the
       // Business Profile APIs are not enabled / not yet granted quota for this
       // app's Google Cloud project (SERVICE_DISABLED / accessNotConfigured /
