@@ -80,10 +80,10 @@ export async function fetchGoogleSignals(accessToken: string): Promise<PlatformS
       // who owns a profile to go create one.
       if (accountsRes.status === 403) {
         if (/disabled|not been used|accessNotConfigured|SERVICE_DISABLED/i.test(`${reason} ${detail}`)) {
-          return { platform: 'google', error: 'Google Business Profile API is not enabled for this app yet. This is a platform configuration issue on our side — no action needed from you; our team has been notified.' }
+          return { platform: 'google', error: `Google Business Profile API is not enabled for this app yet (platform config on our side). [${reason || 403}${detail ? ': ' + detail : ''}]` }
         }
         if (/rateLimitExceeded|RESOURCE_EXHAUSTED|quota/i.test(`${reason} ${detail}`)) {
-          return { platform: 'google', error: 'Google Business Profile API access is pending approval for this app. This is on our side — our team has been notified.' }
+          return { platform: 'google', error: `Google Business Profile API quota not yet granted for this app — the access request is still pending (platform config on our side). [${reason || 403}${detail ? ': ' + detail : ''}]` }
         }
         return { platform: 'google', error: `Google denied access to your Business Profile (permission denied)${detail ? `: ${detail}` : ''}. If you manage your profile through a Google group or organization, make sure this account has owner/manager access, then reconnect.` }
       }
