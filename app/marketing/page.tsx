@@ -10,14 +10,14 @@ import { ClientDemo, PhotographerDemo } from './demos'
  *
  * The page IS the ad: each full-height section is a beat in the 1:10 storyboard.
  * Screen-record a slow top-to-bottom scroll and the reveal animations play back
- * as the edited film. Black canvas, bold white type, real product UI in the
- * demo acts. No stock footage — minimal accent motif only.
+ * as the edited film. White canvas, bold ink type, real product UI in the demo
+ * acts. No stock footage — minimal accent motif only.
  */
 
-// The white/gold lockup already rendered on black — blends into the canvas.
-const WHITE_LOGO = '/black%20logo.png'
+// The full lockup on its light ground — sits cleanly on the white canvas.
+const LOGO = '/logo.png'
 
-// A full-viewport beat on the black canvas.
+// A full-viewport beat on the white canvas.
 function Beat({
   children,
   className = '',
@@ -38,8 +38,8 @@ function ActLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="sticky top-24 z-10 mb-10 flex justify-center">
       <Reveal>
-        <span className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-[0.35em] text-white/50">
-          <span className="w-6 h-px bg-white/30" />
+        <span className="inline-flex items-center gap-2 text-xs font-mono uppercase tracking-[0.35em] text-ink-400">
+          <span className="w-6 h-px bg-ink-200" />
           {children}
         </span>
       </Reveal>
@@ -47,7 +47,7 @@ function ActLabel({ children }: { children: React.ReactNode }) {
   )
 }
 
-const H = 'font-semibold tracking-tight leading-[1.05] text-balance'
+const H = 'font-semibold tracking-tight leading-[1.05] text-balance text-ink'
 
 export default function MarketingFilm() {
   const [progress, setProgress] = useState(0)
@@ -63,10 +63,10 @@ export default function MarketingFilm() {
   }, [])
 
   return (
-    <main className="bg-black text-white antialiased selection:bg-white selection:text-black overflow-x-hidden">
+    <main className="bg-white text-ink antialiased selection:bg-ink selection:text-white overflow-x-hidden">
       {/* Scroll progress rail — the only accent motif */}
-      <div className="fixed top-0 left-0 right-0 h-0.5 z-50 bg-white/5">
-        <div className="h-full bg-white/70 origin-left" style={{ transform: `scaleX(${progress})` }} />
+      <div className="fixed top-0 left-0 right-0 h-0.5 z-50 bg-ink-100">
+        <div className="h-full bg-ink origin-left" style={{ transform: `scaleX(${progress})` }} />
       </div>
 
       {/* ── ACT 1 — Problem ─────────────────────────────────────────── */}
@@ -78,10 +78,10 @@ export default function MarketingFilm() {
             </p>
           </Reveal>
           <Reveal delay={120}>
-            <p className={`${H} text-3xl sm:text-5xl text-white/50`}>Clients can’t find them.</p>
+            <p className={`${H} text-3xl sm:text-5xl !text-ink-300`}>Clients can’t find them.</p>
           </Reveal>
           <Reveal delay={240}>
-            <p className={`${H} text-3xl sm:text-5xl text-white/50`}>Photographers can’t be found.</p>
+            <p className={`${H} text-3xl sm:text-5xl !text-ink-300`}>Photographers can’t be found.</p>
           </Reveal>
         </div>
       </Beat>
@@ -91,19 +91,19 @@ export default function MarketingFilm() {
         <div className="max-w-3xl text-center space-y-8">
           <Reveal>
             <Image
-              src={WHITE_LOGO}
+              src={LOGO}
               alt="TrueNorth Frames"
               width={320}
               height={320}
               priority
-              className="mx-auto w-56 sm:w-72 h-auto"
+              className="mx-auto w-48 sm:w-60 h-auto"
             />
           </Reveal>
           <Reveal delay={200}>
             <p className={`${H} text-5xl sm:text-7xl`}>Introducing TrueNorth&nbsp;Frames.</p>
           </Reveal>
           <Reveal delay={360}>
-            <p className="text-xl sm:text-2xl text-white/50 font-light">One platform. Both sides solved.</p>
+            <p className="text-xl sm:text-2xl text-ink-400 font-light">One platform. Both sides solved.</p>
           </Reveal>
         </div>
       </Beat>
@@ -115,7 +115,7 @@ export default function MarketingFilm() {
           <ClientDemo />
         </Reveal>
         <Reveal delay={160} className="mt-14">
-          <p className="text-center text-white/40 text-sm max-w-xs mx-auto">
+          <p className="text-center text-ink-400 text-sm max-w-xs mx-auto">
             Browse verified photographers, read the proof, chat, book a date — in minutes.
           </p>
         </Reveal>
@@ -128,7 +128,7 @@ export default function MarketingFilm() {
           <PhotographerDemo />
         </Reveal>
         <Reveal delay={160} className="mt-14">
-          <p className="text-center text-white/40 text-sm max-w-xs mx-auto">
+          <p className="text-center text-ink-400 text-sm max-w-xs mx-auto">
             Upload your work, sync your trust signals, accept bookings — all in one place.
           </p>
         </Reveal>
@@ -144,7 +144,7 @@ export default function MarketingFilm() {
             <p className={`${H} text-5xl sm:text-7xl`}>No middlemen.</p>
           </Reveal>
           <Reveal delay={280}>
-            <p className={`${H} text-5xl sm:text-7xl text-white/60`}>
+            <p className={`${H} text-5xl sm:text-7xl !text-ink-300`}>
               Just proof, and bookings.
             </p>
           </Reveal>
@@ -161,17 +161,17 @@ export default function MarketingFilm() {
           </Reveal>
           <Reveal delay={220} y={16}>
             <Image
-              src={WHITE_LOGO}
+              src={LOGO}
               alt="TrueNorth Frames"
               width={360}
               height={360}
-              className="mx-auto w-64 sm:w-80 h-auto"
+              className="mx-auto w-56 sm:w-72 h-auto"
             />
           </Reveal>
           <Reveal delay={420}>
             <a
               href="https://thetruenorthframes.com"
-              className="text-sm font-mono tracking-[0.2em] text-white/50 hover:text-white transition-colors"
+              className="text-sm font-mono tracking-[0.2em] text-ink-400 hover:text-ink transition-colors"
             >
               thetruenorthframes.com
             </a>
