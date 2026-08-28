@@ -841,8 +841,9 @@ interface ChatMsg {
 
 
 const SPECIALTIES_ALL = [
-  'Wedding', 'Portrait', 'Corporate', 'Newborn', 'Family', 'Event',
-  'Real Estate', 'Product', 'Street', 'Boudoir', 'Sports', 'Food',
+  'Wedding', 'Portrait', 'Headshot', 'Corporate', 'Newborn', 'Maternity',
+  'Family', 'Event', 'Graduation', 'Real Estate', 'Product', 'Fashion',
+  'Street', 'Boudoir', 'Sports', 'Food', 'Pets', 'Travel',
 ]
 
 const EDMONTON_AREAS = [
@@ -2674,6 +2675,7 @@ function ProfileSettingsTab({ profile, setProfile }: {
   setProfile: React.Dispatch<React.SetStateAction<ProfileData>>
 }) {
   const [local, setLocal] = useState({ ...profile })
+  const [customSpecialty, setCustomSpecialty] = useState('')
   const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({
     basics: 'idle', specialties: 'idle', contacts: 'idle', account: 'idle',
   })
@@ -2929,6 +2931,20 @@ function ProfileSettingsTab({ profile, setProfile }: {
     }))
   }
 
+  function addCustomSpecialty() {
+    const raw = customSpecialty.trim().slice(0, 60)
+    if (!raw) return
+    // Snap to a preset's canonical casing when it matches one, so chips stay in sync
+    const preset = SPECIALTIES_ALL.find(s => s.toLowerCase() === raw.toLowerCase())
+    const value = preset ?? raw
+    setLocal(l => {
+      if (l.specialties.length >= 5) return l
+      if (l.specialties.some(s => s.toLowerCase() === value.toLowerCase())) return l
+      return { ...l, specialties: [...l.specialties, value] }
+    })
+    setCustomSpecialty('')
+  }
+
   const bioLen = local.bio.length
   const bioMax = PLATFORM_CONFIG.max_photographer_bio_length
 
@@ -3177,7 +3193,7 @@ function ProfileSettingsTab({ profile, setProfile }: {
           <h2 className="font-semibold text-ink">Specialties</h2>
         </div>
 
-        <p className="text-xs text-ink-300 mb-4">Pick up to 5. These appear as tags on your public profile.</p>
+        <p className="text-xs text-ink-300 mb-4">Pick up to 5, or add your own. These appear as tags on your public profile.</p>
         <div className="flex flex-wrap gap-2 mb-4">
           {SPECIALTIES_ALL.map(s => {
             const sel = local.specialties.includes(s)
@@ -3193,6 +3209,38 @@ function ProfileSettingsTab({ profile, setProfile }: {
             )
           })}
         </div>
+
+        {/* Custom specialty entry */}
+        <div className="flex gap-2 mb-4">
+          <input
+            type="text" value={customSpecialty} maxLength={60}
+            onChange={e => setCustomSpecialty(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomSpecialty() } }}
+            disabled={local.specialties.length >= 5}
+            placeholder={local.specialties.length >= 5 ? 'Maximum 5 specialties selected' : 'Add your own — e.g. Headshot, Pets…'}
+            className="flex-1 border border-ink-100 rounded-xl px-4 py-2 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink-300 transition-all disabled:bg-ink-50 disabled:cursor-not-allowed"
+          />
+          <button
+            type="button" onClick={addCustomSpecialty}
+            disabled={!customSpecialty.trim() || local.specialties.length >= 5}
+            className="text-sm font-medium px-4 py-2 rounded-xl border border-ink-100 text-ink-500 hover:border-ink-300 hover:text-ink transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Add
+          </button>
+        </div>
+
+        {/* Custom (non-preset) selections shown as removable chips */}
+        {local.specialties.filter(s => !SPECIALTIES_ALL.includes(s)).length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {local.specialties.filter(s => !SPECIALTIES_ALL.includes(s)).map(s => (
+              <button key={s} type="button" onClick={() => toggleSpecialty(s)}
+                className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl border bg-ink text-white border-ink">
+                {s}
+                <X className="w-3.5 h-3.5" />
+              </button>
+            ))}
+          </div>
+        )}
 
         {local.specialties.length > 0 && (
           <div className="bg-ink-50 rounded-xl px-4 py-3 mb-4">

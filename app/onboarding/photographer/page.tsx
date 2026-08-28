@@ -6,12 +6,13 @@ import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import {
   ArrowRight, ArrowLeft, CheckCircle2, Camera,
-  User, Globe, Shield, Zap, AlertCircle, Star,
+  User, Globe, Shield, Zap, AlertCircle, Star, X,
 } from 'lucide-react'
 
 const SPECIALTIES = [
-  'Wedding', 'Portrait', 'Corporate', 'Newborn', 'Family', 'Event',
-  'Real Estate', 'Product', 'Street', 'Boudoir', 'Sports', 'Food',
+  'Wedding', 'Portrait', 'Headshot', 'Corporate', 'Newborn', 'Maternity',
+  'Family', 'Event', 'Graduation', 'Real Estate', 'Product', 'Fashion',
+  'Street', 'Boudoir', 'Sports', 'Food', 'Pets', 'Travel',
 ]
 
 const EDMONTON_AREAS = [
@@ -110,6 +111,7 @@ function PhotographerOnboardingForm() {
 
   // Step 2 — specialties
   const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>([])
+  const [customSpecialty, setCustomSpecialty] = useState('')
 
   // Step 3 — trust questions
   const [hasGbp, setHasGbp]             = useState<boolean | null>(null)
@@ -139,6 +141,20 @@ function PhotographerOnboardingForm() {
     setSelectedSpecialties(prev =>
       prev.includes(s) ? prev.filter(x => x !== s) : prev.length < 5 ? [...prev, s] : prev
     )
+  }
+
+  function addCustomSpecialty() {
+    const raw = customSpecialty.trim().slice(0, 60)
+    if (!raw) return
+    // Snap to a preset's canonical casing when it matches one, so chips stay in sync
+    const preset = SPECIALTIES.find(s => s.toLowerCase() === raw.toLowerCase())
+    const value = preset ?? raw
+    setSelectedSpecialties(prev => {
+      if (prev.length >= 5) return prev
+      if (prev.some(s => s.toLowerCase() === value.toLowerCase())) return prev
+      return [...prev, value]
+    })
+    setCustomSpecialty('')
   }
 
   async function handleFinish() {
@@ -338,10 +354,10 @@ function PhotographerOnboardingForm() {
               <Camera className="w-5 h-5 text-ink-400" />
             </div>
             <h1 className="font-serif text-3xl font-bold text-ink mb-2">What do you shoot?</h1>
-            <p className="text-ink-300 text-sm">Pick up to 5 specialties. These appear as filter tags on your profile. <span className="text-red-500">*</span></p>
+            <p className="text-ink-300 text-sm">Pick up to 5 specialties, or add your own. These appear as filter tags on your profile. <span className="text-red-500">*</span></p>
           </div>
 
-          <div className="flex flex-wrap gap-2 mb-8">
+          <div className="flex flex-wrap gap-2 mb-4">
             {SPECIALTIES.map(s => {
               const selected = selectedSpecialties.includes(s)
               const maxed = selectedSpecialties.length >= 5 && !selected
@@ -357,6 +373,38 @@ function PhotographerOnboardingForm() {
               )
             })}
           </div>
+
+          {/* Custom specialty entry */}
+          <div className="flex gap-2 mb-4">
+            <input
+              type="text" value={customSpecialty} maxLength={60}
+              onChange={e => setCustomSpecialty(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomSpecialty() } }}
+              disabled={selectedSpecialties.length >= 5}
+              placeholder={selectedSpecialties.length >= 5 ? 'Maximum 5 specialties selected' : 'Add your own — e.g. Headshot, Pets…'}
+              className="flex-1 border-2 border-ink-100 rounded-full px-4 py-2 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink-300 transition-all disabled:bg-ink-50 disabled:cursor-not-allowed"
+            />
+            <button
+              type="button" onClick={addCustomSpecialty}
+              disabled={!customSpecialty.trim() || selectedSpecialties.length >= 5}
+              className="text-sm font-medium px-4 py-2 rounded-full border-2 border-ink-100 text-ink-500 hover:border-ink-300 hover:text-ink transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Add
+            </button>
+          </div>
+
+          {/* Custom (non-preset) selections shown as removable chips */}
+          {selectedSpecialties.filter(s => !SPECIALTIES.includes(s)).length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {selectedSpecialties.filter(s => !SPECIALTIES.includes(s)).map(s => (
+                <button key={s} type="button" onClick={() => toggleSpecialty(s)}
+                  className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-full border-2 bg-ink text-white border-ink">
+                  {s}
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              ))}
+            </div>
+          )}
 
           {selectedSpecialties.length > 0 && (
             <div className="bg-ink-50 rounded-xl px-4 py-3 mb-6">
