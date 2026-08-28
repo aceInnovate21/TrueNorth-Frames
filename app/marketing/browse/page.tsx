@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react'
 import { Search, SlidersHorizontal, Check, X } from 'lucide-react'
 import { PHOTOGRAPHERS, SPECIALTIES } from '../data'
 import { PhotographerCard } from '../photographer-card'
+import { SiteNav } from '../site-nav'
+import { SiteFooter } from '../site-footer'
 
 type Sort = 'trust' | 'rating' | 'reviews'
 
@@ -31,7 +33,9 @@ export default function BrowsePage() {
   }, [query, specialty, availableOnly, sort])
 
   return (
-    <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+    <>
+    <SiteNav />
+    <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 min-h-screen">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Photographers in Edmonton</h1>
@@ -102,6 +106,8 @@ export default function BrowsePage() {
         </div>
       )}
     </main>
+    <SiteFooter />
+    </>
   )
 }
 

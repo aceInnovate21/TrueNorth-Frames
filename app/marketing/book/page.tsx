@@ -7,6 +7,7 @@ import {
   Star, Check, CheckCircle2, ChevronRight, ChevronLeft, Calendar, MessageSquare,
 } from 'lucide-react'
 import { PHOTOGRAPHERS, getPhotographer } from '../data'
+import { SiteNav } from '../site-nav'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -14,9 +15,11 @@ function BookInner() {
   const params = useSearchParams()
   const to = params.get('to') ?? 'jordan-mercer'
   const p = getPhotographer(to) ?? PHOTOGRAPHERS[0]
+  const pkgParam = params.get('pkg')
+  const initialPkg = Math.max(0, p.packages.findIndex((x) => x.id === pkgParam))
 
   const [stepIdx, setStepIdx] = useState(0)
-  const [pkg, setPkg] = useState(0)
+  const [pkg, setPkg] = useState(initialPkg)
   const [day, setDay] = useState<number | null>(18)
   const [note, setNote] = useState('')
   const [done, setDone] = useState(false)
@@ -26,7 +29,8 @@ function BookInner() {
 
   if (done) {
     return (
-      <main className="max-w-xl mx-auto px-4 sm:px-6 py-14">
+      <><SiteNav />
+      <main className="max-w-xl mx-auto px-4 sm:px-6 py-14 min-h-screen">
         <div className="bg-white ring-1 ring-ink-100 rounded-3xl p-8 text-center shadow-sm">
           <div className="w-16 h-16 rounded-2xl bg-emerald-500 mx-auto flex items-center justify-center mb-5">
             <CheckCircle2 className="w-9 h-9 text-white" />
@@ -51,11 +55,14 @@ function BookInner() {
           </div>
         </div>
       </main>
+      </>
     )
   }
 
   return (
-    <main className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
+    <>
+    <SiteNav />
+    <main className="max-w-2xl mx-auto px-4 sm:px-6 py-8 min-h-screen">
       {/* Photographer header */}
       <div className="flex items-center gap-3 mb-6">
         <span className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold ${p.avatarColor}`}>{p.initials}</span>
@@ -170,6 +177,7 @@ function BookInner() {
         )}
       </div>
     </main>
+    </>
   )
 }
 

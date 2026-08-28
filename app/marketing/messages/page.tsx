@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { Send, CheckCheck, CalendarCheck, Phone, Video } from 'lucide-react'
 import { PHOTOGRAPHERS, getPhotographer, type DemoPhotographer } from '../data'
+import { SiteNav } from '../site-nav'
 
 type Msg = { id: number; from: 'me' | 'them'; text: string; time: string }
 
@@ -58,6 +59,8 @@ function MessagesInner() {
   }
 
   return (
+    <>
+    <SiteNav />
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
       <h1 className="text-2xl font-semibold tracking-tight mb-4">Messages</h1>
       <div className="grid md:grid-cols-[300px_1fr] gap-4 bg-white ring-1 ring-ink-100 rounded-2xl overflow-hidden shadow-sm" style={{ height: 'min(72vh, 640px)' }}>
@@ -140,6 +143,7 @@ function MessagesInner() {
         </section>
       </div>
     </main>
+    </>
   )
 }
 

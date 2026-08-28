@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
-import { DemoNav } from './demo-nav'
 
 export const metadata: Metadata = {
   title: 'TrueNorth Frames — Demo',
@@ -8,11 +7,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
+// Each page brings its own shell — client pages use SiteNav + SiteFooter, the
+// dashboard uses its own sidebar layout — exactly like production.
 export default function MarketingLayout({ children }: { children: ReactNode }) {
-  return (
-    <div className="min-h-screen bg-white text-ink antialiased">
-      <DemoNav />
-      {children}
-    </div>
-  )
+  return children
 }
