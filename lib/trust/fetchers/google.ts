@@ -5,7 +5,7 @@ import { PlatformSignals } from '../types'
 // Access via OAuth 2.0 — token stored in platform_oauth_tokens
 
 const GBP_BASE = 'https://mybusinessaccountmanagement.googleapis.com/v1'
-const GBP_INFO = 'https://mybusinessinformation.googleapis.com/v1'
+const GBP_INFO = 'https://mybusinessbusinessinformation.googleapis.com/v1'
 const GBP_REVIEWS = 'https://mybusiness.googleapis.com/v4'
 
 // ── Places API fallback ────────────────────────────────────────────────────────
