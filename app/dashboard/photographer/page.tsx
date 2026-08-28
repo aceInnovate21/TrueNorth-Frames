@@ -9,7 +9,7 @@ import {
   Bell, Camera, CheckCircle2, ChevronRight, Globe, Instagram,
   MapPin, MessageSquare, Star, User, Zap, ArrowRight,
   Eye, AlertCircle, Shield, ImagePlus, X, Send, Calendar,
-  Clock, ChevronLeft, DollarSign, Save, Settings, ExternalLink,
+  Clock, ChevronLeft, Save, Settings, ExternalLink,
   Package, Users, HelpCircle, GripVertical, ChevronDown, ChevronUp,
   ChevronsUp, ChevronsDown, LogOut,
   Plus, Pencil, Trash2, Paperclip, FileText, Play,
@@ -789,8 +789,6 @@ interface ProfileData {
   displayName: string
   bio: string
   area: string
-  rate: string
-  rateUnit: string
   specialties: string[]
   websiteUrl: string
   contactInstagram: string
@@ -860,7 +858,6 @@ function computeScore(p: ProfileData & { faqCount?: number }) {
     { key: 'name',         label: 'Display name',          done: !!p.displayName,                weight: 10, tab: 'settings',      cta: 'Add your name' },
     { key: 'bio',          label: 'Bio written',            done: p.bio.length >= 20,             weight: 10, tab: 'settings',      cta: 'Write your bio' },
     { key: 'area',         label: 'Location set',           done: !!p.area,                       weight: 5,  tab: 'settings',      cta: 'Set your area' },
-    { key: 'rate',         label: 'Rate added',             done: !!p.rate,                       weight: 5,  tab: 'settings',      cta: 'Add your rate' },
     { key: 'avatar',       label: 'Profile photo',          done: !!p.avatarUrl,                  weight: 10, tab: 'settings',      cta: 'Upload photo' },
     { key: 'specialties',  label: 'Specialties chosen',     done: p.specialties.length > 0,       weight: 10, tab: 'settings',      cta: 'Pick specialties' },
     { key: 'portfolio',    label: 'Portfolio photos',        done: p.hasPortfolio,                 weight: 15, tab: 'portfolio',     cta: 'Upload photos' },
@@ -2712,8 +2709,6 @@ function ProfileSettingsTab({ profile, setProfile }: {
       local.displayName !== profile.displayName ||
       local.bio !== profile.bio ||
       local.area !== profile.area ||
-      (local.rate || '') !== (profile.rate || '') ||
-      local.rateUnit !== profile.rateUnit ||
       local.websiteUrl !== profile.websiteUrl ||
       local.yearsExperience !== profile.yearsExperience
     ) dirty.push('basics')
@@ -2874,8 +2869,6 @@ function ProfileSettingsTab({ profile, setProfile }: {
         display_name: local.displayName.trim(),
         bio: local.bio.trim(),
         location: local.area,
-        rate_amount: local.rate || null,
-        rate_unit: local.rateUnit,
         website_url: local.websiteUrl.trim(),
         years_experience: local.yearsExperience,
       }
@@ -3141,33 +3134,6 @@ function ProfileSettingsTab({ profile, setProfile }: {
                   }`}
                 >{a}</button>
               ))}
-            </div>
-          </div>
-
-          {/* Rate */}
-          <div>
-            <label className="block text-sm font-medium text-ink mb-1.5">
-              <span className="flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5 text-ink-300" />Starting rate</span>
-            </label>
-            <div className="flex gap-3">
-              <div className="relative flex-1">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-300 text-sm font-medium pointer-events-none">$</span>
-                <input
-                  type="number" min={0} placeholder="150"
-                  value={local.rate}
-                  onChange={e => setLocal(l => ({ ...l, rate: e.target.value }))}
-                  className="w-full border border-ink-100 rounded-xl pl-8 pr-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
-                />
-              </div>
-              <select
-                value={local.rateUnit}
-                onChange={e => setLocal(l => ({ ...l, rateUnit: e.target.value }))}
-                className="border border-ink-100 rounded-xl px-3 py-3 text-sm text-ink outline-none focus:border-ink bg-white"
-              >
-                <option value="hr">/ hr</option>
-                <option value="half">/ half day</option>
-                <option value="full">/ full day</option>
-              </select>
             </div>
           </div>
 
@@ -4119,8 +4085,6 @@ function PhotographerDashboardInner() {
     displayName: '',
     bio: '',
     area: '',
-    rate: '',
-    rateUnit: 'hr',
     specialties: [],
     websiteUrl: '',
     contactInstagram: '',
@@ -4180,8 +4144,6 @@ function PhotographerDashboardInner() {
           displayName:         data.display_name ?? '',
           bio:                 data.bio ?? '',
           area:                data.location ?? '',
-          rate:                data.rate_amount ?? '',
-          rateUnit:            data.rate_unit ?? 'hr',
           specialties:         data.specialties ?? [],
           websiteUrl:          data.website_url ?? '',
           contactInstagram:    data.contact_instagram_url ?? '',

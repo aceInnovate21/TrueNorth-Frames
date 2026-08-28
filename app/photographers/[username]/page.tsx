@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
 import {
   ArrowLeft, Star, MapPin, Shield, Camera, CheckCircle2,
-  Globe, Instagram, ExternalLink, Award, Calendar, DollarSign,
+  Globe, Instagram, ExternalLink, Award, Calendar,
   ChevronDown, Package, Eye, X, ChevronLeft, ChevronRight, Layers,
   Facebook, BadgeCheck,
 } from 'lucide-react'
@@ -1078,11 +1078,6 @@ export default function ProfilePage({ params }: { params: { username: string } }
                   <span className="flex items-center gap-1 text-ink-300 text-xs">
                     <Award className="w-3 h-3" />Member since {formatDate(p.member_since)}
                   </span>
-                  {p.rate_display && (
-                    <span className="flex items-center gap-1 text-xs font-semibold text-ink bg-ink-50 px-2 py-0.5 rounded-full border border-ink-100">
-                      <DollarSign className="w-3 h-3" />{p.rate_display}
-                    </span>
-                  )}
                   {hasReviews && <StarRow rating={liveAvgRating} count={liveReviewCount} />}
                 </div>
                 {/* Specialties */}
@@ -1259,15 +1254,7 @@ export default function ProfilePage({ params }: { params: { username: string } }
                   {/* Subtle highlight */}
                   <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
                   <p className="font-semibold text-base mb-1">Book {p.display_name.split(' ')[0]}</p>
-                  {p.rate_display ? (
-                    <div className="mb-4">
-                      <p className="text-white/50 text-[10px] uppercase tracking-widest mb-1">Starting from</p>
-                      <p className="font-bold text-white text-2xl leading-none tracking-tight">{p.rate_display}</p>
-                      {p.rate_note && <p className="text-white/40 text-xs mt-1">{p.rate_note}</p>}
-                    </div>
-                  ) : (
-                    <p className="text-white/40 text-xs mb-4">Contact for pricing</p>
-                  )}
+                  <p className="text-white/50 text-xs mb-4">Message to discuss your date, package and pricing.</p>
                   <ContactModal
                     photographerId={p.id}
                     photographerName={p.display_name}

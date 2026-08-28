@@ -28,7 +28,7 @@ const CARD_GRADIENTS = [
 
 type FeaturedPhotographer = {
   name: string; initials: string; specialty: string[]
-  rating: number; reviews: number; rate: string
+  rating: number; reviews: number
   location: string; slug: string; gradient: string
   avatarUrl: string | null; trustScore: number
 }
@@ -146,7 +146,6 @@ function PhotographerCard({ p, index }: { p: FeaturedPhotographer; index: number
                 <p className="text-ink-300 text-[11px]">{p.location || 'Edmonton, AB'}</p>
               </div>
             </div>
-            {p.rate && <p className="font-bold text-ink text-sm">{p.rate}</p>}
           </div>
           <div className="flex flex-wrap gap-1 mb-3">
             {p.specialty.slice(0, 3).map((s) => (
@@ -224,7 +223,6 @@ export default function HomePage() {
             specialty: p.specialties ?? [],
             rating: Number(p.native_avg_rating ?? p.trust_score ?? 0),
             reviews: Number(p.native_review_count ?? 0),
-            rate: p.rate_display ?? '',
             location: p.location ?? '',
             slug: p.username ?? p.id,
             gradient: CARD_GRADIENTS[i % CARD_GRADIENTS.length],

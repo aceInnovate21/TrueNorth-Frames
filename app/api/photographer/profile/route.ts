@@ -1,21 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
 
-// Parse "$150 / hr" → { amount: "150", unit: "hr" }
-function parseRateDisplay(rateDisplay: string | null): { amount: string; unit: string } {
-  if (!rateDisplay) return { amount: '', unit: 'hr' }
-  const match = rateDisplay.match(/\$?(\d+(?:\.\d+)?)\s*\/\s*(.+)/)
-  if (!match) return { amount: '', unit: 'hr' }
-  const unitMap: Record<string, string> = { hr: 'hr', 'half day': 'half', 'full day': 'full' }
-  return { amount: match[1], unit: unitMap[match[2].trim()] ?? 'hr' }
-}
-
-function formatRateDisplay(amount: string, unit: string): string | null {
-  if (!amount) return null
-  const labelMap: Record<string, string> = { hr: 'hr', half: 'half day', full: 'full day' }
-  return `$${parseFloat(amount).toFixed(0)} / ${labelMap[unit] ?? 'hr'}`
-}
-
 export async function GET() {
   const { adminDb, user } = await getServerSession()
   if (!user) return unauthorized()
@@ -24,7 +9,7 @@ export async function GET() {
 
   const { data: profile, error: profileError } = await db
     .from('photographer_profiles')
-    .select('id, username, display_name, bio, location, rate_display, website_url, instagram_url, avatar_url, cover_image_url, contact_instagram_url, contact_facebook_url, completeness_score, native_avg_rating, native_review_count, years_experience, created_at, profile_status, status_note')
+    .select('id, username, display_name, bio, location, website_url, instagram_url, avatar_url, cover_image_url, contact_instagram_url, contact_facebook_url, completeness_score, native_avg_rating, native_review_count, years_experience, created_at, profile_status, status_note')
     .eq('user_id', user.id)
     .single()
 
@@ -83,8 +68,6 @@ export async function GET() {
     }
   }
 
-  const { amount, unit } = parseRateDisplay(profile?.rate_display ?? null)
-
   const accountAgeDays = profile?.created_at
     ? Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 86400))
     : 0
@@ -94,8 +77,6 @@ export async function GET() {
     display_name:          profile?.display_name ?? '',
     bio:                   profile?.bio ?? '',
     location:              profile?.location ?? '',
-    rate_amount:           amount,
-    rate_unit:             unit,
     website_url:           profile?.website_url ?? '',
     avatar_url:            profile?.avatar_url ?? '',
     cover_image_url:       profile?.cover_image_url ?? '',
@@ -140,11 +121,9 @@ export async function PATCH(request: NextRequest) {
   const photographerId = profile.id
 
   if (section === 'basics') {
-    const { display_name, bio, location, rate_amount, rate_unit, website_url, years_experience } = body
+    const { display_name, bio, location, website_url, years_experience } = body
 
     if (!display_name?.trim()) return badRequest('display_name is required')
-
-    const rateDisplay = formatRateDisplay(rate_amount, rate_unit)
 
     const { error: userError } = await db
       .from('users')
@@ -159,7 +138,6 @@ export async function PATCH(request: NextRequest) {
         display_name: display_name.trim(),
         bio: bio?.trim() || null,
         location: location?.trim() || null,
-        rate_display: rateDisplay,
         website_url: website_url?.trim() || null,
         ...(years_experience != null ? { years_experience: Number(years_experience) } : {}),
         updated_at: new Date().toISOString(),

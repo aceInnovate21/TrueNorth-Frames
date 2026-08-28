@@ -106,7 +106,6 @@ function PhotographerOnboardingForm() {
   const [displayName, setDisplayName] = useState('')
   const [bio, setBio] = useState('')
   const [area, setArea] = useState('')
-  const [rate, setRate] = useState('')
   const [yearsExperience, setYearsExperience] = useState<string>('')
 
   // Step 2 — specialties
@@ -132,7 +131,7 @@ function PhotographerOnboardingForm() {
   function touch(f: string) { setTouched(t => ({ ...t, [f]: true })) }
 
   // Validations — step 3 is always valid (presence questions are optional context)
-  const step1Valid = displayName.trim() && bio.trim().length >= 20 && area && rate && yearsExperience !== ''
+  const step1Valid = displayName.trim() && bio.trim().length >= 20 && area && yearsExperience !== ''
   const step2Valid = selectedSpecialties.length >= 1
   const step3Valid = true
 
@@ -155,7 +154,6 @@ function PhotographerOnboardingForm() {
         display_name: displayName,
         bio,
         location: area,
-        rate,
         specialties: selectedSpecialties,
         website_url: hasWebsite && websiteUrl.trim() ? websiteUrl.trim() : null,
         years_experience: yearsExperience ? Number(yearsExperience) : null,
@@ -280,24 +278,6 @@ function PhotographerOnboardingForm() {
               )}
             </div>
 
-            {/* Rate */}
-            <div>
-              <label className="block text-sm font-medium text-ink mb-1.5">
-                Starting rate (CAD/hr) <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-300 text-sm">$</span>
-                <input
-                  type="number" min={50} max={1000} placeholder="150"
-                  value={rate} onChange={e => setRate(e.target.value)} onBlur={() => touch('rate')}
-                  className={`w-full border rounded-xl pl-8 pr-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:ring-2 transition-all ${
-                    touched.rate && !rate ? 'border-red-300 focus:ring-red-100' : 'border-ink-100 focus:border-ink focus:ring-ink/10'
-                  }`}
-                />
-              </div>
-              <p className="mt-1 text-xs text-ink-300">You negotiate the final rate directly — this is just your starting point.</p>
-            </div>
-
             {/* Years of experience */}
             <div>
               <label className="block text-sm font-medium text-ink mb-1.5">
@@ -333,7 +313,7 @@ function PhotographerOnboardingForm() {
           <button
             type="button"
             onClick={() => {
-              touch('displayName'); touch('bio'); touch('rate')
+              touch('displayName'); touch('bio')
               touch('area'); touch('yearsExperience')
               if (step1Valid) setStep(2)
             }}
