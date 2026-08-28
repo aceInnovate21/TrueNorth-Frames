@@ -63,10 +63,32 @@ export async function fetchGoogleSignals(accessToken: string): Promise<PlatformS
       next: { revalidate: 0 },
     })
     if (!accountsRes.ok) {
-      if (accountsRes.status === 403) {
-        return { platform: 'google', error: 'No Google Business Profile found for this account. Create one at business.google.com and reconnect.' }
+      // Read Google's structured error so we don't mislabel the failure.
+      const body = await accountsRes.json().catch(() => null)
+      const reason: string = body?.error?.status ?? body?.error?.errors?.[0]?.reason ?? ''
+      const detail: string = body?.error?.message ?? ''
+
+      // 401 → the access token is expired/revoked → user needs to reconnect.
+      if (accountsRes.status === 401) {
+        return { platform: 'google', error: 'Google connection expired — please reconnect your account.' }
       }
-      return { platform: 'google', error: `Google API error (${accountsRes.status}) — please reconnect your account.` }
+
+      // 403 does NOT mean "no business profile". It almost always means the
+      // Business Profile APIs are not enabled / not yet granted quota for this
+      // app's Google Cloud project (SERVICE_DISABLED / accessNotConfigured /
+      // rate-limit-0). Surface the real reason instead of telling a photographer
+      // who owns a profile to go create one.
+      if (accountsRes.status === 403) {
+        if (/disabled|not been used|accessNotConfigured|SERVICE_DISABLED/i.test(`${reason} ${detail}`)) {
+          return { platform: 'google', error: 'Google Business Profile API is not enabled for this app yet. This is a platform configuration issue on our side — no action needed from you; our team has been notified.' }
+        }
+        if (/rateLimitExceeded|RESOURCE_EXHAUSTED|quota/i.test(`${reason} ${detail}`)) {
+          return { platform: 'google', error: 'Google Business Profile API access is pending approval for this app. This is on our side — our team has been notified.' }
+        }
+        return { platform: 'google', error: `Google denied access to your Business Profile (permission denied)${detail ? `: ${detail}` : ''}. If you manage your profile through a Google group or organization, make sure this account has owner/manager access, then reconnect.` }
+      }
+
+      return { platform: 'google', error: `Google API error (${accountsRes.status})${detail ? `: ${detail}` : ''} — please reconnect your account.` }
     }
     const accountsData = await accountsRes.json()
     const account = accountsData?.accounts?.[0]
