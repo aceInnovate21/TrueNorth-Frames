@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 
 import { PLATFORM_CONFIG } from '@/lib/platform-config'
+import { combinedRating } from '@/lib/trust/combined-rating'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -347,6 +348,11 @@ export function ReviewManager() {
   const [reviews, setReviews] = useState<Review[]>([])
   const [filter, setFilter] = useState<FilterType>('all')
   const [loading, setLoading] = useState(true)
+  // Aggregate rating sources for the weighted "Overall rating" KPI
+  const [tnfRating, setTnfRating]       = useState(0)
+  const [tnfCount, setTnfCount]         = useState(0)
+  const [googleRating, setGoogleRating] = useState<number | null>(null)
+  const [googleCount, setGoogleCount]   = useState(0)
 
   useEffect(() => {
     fetch('/api/photographer/reviews')
@@ -354,7 +360,21 @@ export function ReviewManager() {
       .then((data: Review[]) => setReviews(Array.isArray(data) ? data : []))
       .catch(() => {})
       .finally(() => setLoading(false))
+
+    // Pull native + Google aggregates for the weighted overall rating.
+    fetch('/api/photographer/trust')
+      .then(r => r.ok ? r.json() : null)
+      .then((d: any) => {
+        if (!d) return
+        setTnfRating(Number(d.native_avg_rating ?? 0))
+        setTnfCount(Number(d.native_review_count ?? 0))
+        setGoogleRating(d.google?.rating ?? null)
+        setGoogleCount(Number(d.google?.review_count ?? 0))
+      })
+      .catch(() => {})
   }, [])
+
+  const combined = combinedRating({ tnfAvg: tnfRating, tnfCount, googleAvg: googleRating, googleCount })
 
   function saveReply(id: string, reply: string) {
     setReviews(prev => prev.map(r => r.id === id ? { ...r, publicReply: reply } : r))
@@ -417,19 +437,30 @@ export function ReviewManager() {
   return (
     <div className="space-y-5">
 
-      {/* Summary */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Total reviews', value: reviews.length.toString() },
-          { label: 'Avg rating',    value: `★ ${avgRating}` },
-          { label: 'Need reply',    value: noReplyCount.toString() },
-        ].map(s => (
-          <div key={s.label} className="bg-white rounded-xl px-4 py-3 text-center border border-ink-100">
-            <p className="font-bold text-ink text-lg">{s.value}</p>
-            <p className="text-ink-300 text-xs mt-0.5">{s.label}</p>
-          </div>
-        ))}
+      {/* Summary — weighted overall + per-source */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-emerald-50/50 rounded-xl px-4 py-3 text-center border border-emerald-100">
+          <p className="font-bold text-ink text-lg">{combined.rating != null ? `★ ${combined.rating.toFixed(1)}` : '—'}</p>
+          <p className="text-emerald-700 text-xs mt-0.5 font-medium">Overall (weighted)</p>
+        </div>
+        <div className="bg-white rounded-xl px-4 py-3 text-center border border-ink-100">
+          <p className="font-bold text-ink text-lg">{tnfCount > 0 ? `★ ${Number(tnfRating).toFixed(1)}` : '—'}</p>
+          <p className="text-ink-300 text-xs mt-0.5">TrueNorth ({tnfCount})</p>
+        </div>
+        <div className="bg-white rounded-xl px-4 py-3 text-center border border-ink-100">
+          <p className="font-bold text-ink text-lg">{googleRating != null ? `★ ${Number(googleRating).toFixed(1)}` : '—'}</p>
+          <p className="text-ink-300 text-xs mt-0.5">Google ({googleCount})</p>
+        </div>
+        <div className="bg-white rounded-xl px-4 py-3 text-center border border-ink-100">
+          <p className="font-bold text-ink text-lg">{noReplyCount.toString()}</p>
+          <p className="text-ink-300 text-xs mt-0.5">Need reply</p>
+        </div>
       </div>
+      {combined.rating != null && combined.hasTnf && combined.hasGoogle && (
+        <p className="text-[11px] text-ink-300 -mt-2">
+          Overall rating blends both sources — your booking-verified TrueNorth&nbsp;Frames reviews are weighted {combined.tnfWeight}× vs. public Google reviews.
+        </p>
+      )}
 
       {/* Policy notice */}
       <div className="bg-ink-50 rounded-xl px-4 py-3 text-xs text-ink-500 leading-relaxed border border-ink-100">
