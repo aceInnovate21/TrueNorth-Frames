@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, notFound } from '@/lib/api-helpers'
-import { searchGooglePlace } from '@/lib/trust/fetchers/google'
+import { searchGooglePlaces } from '@/lib/trust/fetchers/google'
 import { syncTrustScore } from '@/lib/trust/sync'
 
-// POST — look up a photographer's public Google listing by business name,
-// store the matched place_id, and run a trust sync.
-// Body: { businessName: string, location?: string }
-export async function POST(request: NextRequest) {
+// GET — search public Google listings by business name and return candidates
+// for the photographer to confirm. Does NOT save anything.
+// Query: ?q=<businessName>&location=<optional>
+export async function GET(request: NextRequest) {
   const { user, adminDb } = await getServerSession()
   if (!user) return unauthorized()
   const db = adminDb as any
 
-  const body = await request.json().catch(() => ({}))
-  const businessName = (body?.businessName ?? '').toString().trim()
-  const location     = (body?.location ?? '').toString().trim() || undefined
-  if (!businessName) return badRequest('Business name is required')
+  const { searchParams } = new URL(request.url)
+  const q        = (searchParams.get('q') ?? '').trim()
+  const location = (searchParams.get('location') ?? '').trim() || undefined
+  if (!q) return badRequest('Business name is required')
 
   const { data: profile } = await db
     .from('photographer_profiles')
@@ -23,17 +23,37 @@ export async function POST(request: NextRequest) {
     .single()
   if (!profile) return notFound('Photographer profile not found')
 
-  const result = await searchGooglePlace(businessName, location ?? profile.location ?? 'Edmonton AB')
+  const result = await searchGooglePlaces(q, location ?? profile.location ?? 'Edmonton AB')
   if ('error' in result) return NextResponse.json({ error: result.error }, { status: 422 })
 
-  const c = result.candidate
+  return NextResponse.json({ candidates: result.candidates })
+}
+
+// POST — confirm a specific listing the photographer picked, store it, and sync.
+// Body: { placeId: string, name: string }
+export async function POST(request: NextRequest) {
+  const { user, adminDb } = await getServerSession()
+  if (!user) return unauthorized()
+  const db = adminDb as any
+
+  const body    = await request.json().catch(() => ({}))
+  const placeId = (body?.placeId ?? '').toString().trim()
+  const name    = (body?.name ?? '').toString().trim()
+  if (!placeId) return badRequest('Please choose your listing first')
+
+  const { data: profile } = await db
+    .from('photographer_profiles')
+    .select('id')
+    .eq('user_id', user.id)
+    .single()
+  if (!profile) return notFound('Photographer profile not found')
 
   // Save the confirmed listing so future syncs are stable.
   await db.from('photographer_profiles')
-    .update({ google_place_id: c.placeId, google_business_name: c.name })
+    .update({ google_place_id: placeId, google_business_name: name || null })
     .eq('id', profile.id)
 
-  // Compute the trust score immediately from the freshly linked listing.
+  // Compute the trust score immediately from the confirmed listing.
   let trustScore: number | null = null
   try {
     trustScore = await syncTrustScore(profile.id)
@@ -41,18 +61,7 @@ export async function POST(request: NextRequest) {
     // Non-fatal: the listing is linked; the next sync will pick up the score.
   }
 
-  return NextResponse.json({
-    success: true,
-    listing: {
-      placeId:     c.placeId,
-      name:        c.name,
-      address:     c.address,
-      rating:      c.rating ?? null,
-      reviewCount: c.reviewCount,
-      operational: c.operational,
-    },
-    trust_score: trustScore,
-  })
+  return NextResponse.json({ success: true, trust_score: trustScore })
 }
 
 // DELETE — unlink the Google listing and clear the trust score.

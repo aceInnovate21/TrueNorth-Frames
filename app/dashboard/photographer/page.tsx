@@ -3567,7 +3567,8 @@ function TrustScoreTab({
   onDismissNotification,
   onSync,
   onDisconnect,
-  onConnectGoogle,
+  onSearchGoogle,
+  onConfirmGoogle,
 }: {
   trustData: any
   loading: boolean
@@ -3576,7 +3577,8 @@ function TrustScoreTab({
   onDismissNotification: () => void
   onSync: () => void
   onDisconnect: (platform: string) => Promise<void>
-  onConnectGoogle: (businessName: string) => Promise<void>
+  onSearchGoogle: (businessName: string) => Promise<{ candidates?: any[]; error?: string }>
+  onConfirmGoogle: (placeId: string, name: string) => Promise<void>
 }) {
   const score: number    = trustData?.trust_score ?? 0
   const breakdown        = trustData?.breakdown
@@ -3586,12 +3588,32 @@ function TrustScoreTab({
   const gbpConnected     = !!connected.google?.isActive
   const gbpSig           = signals.google
 
-  const [bizName, setBizName]       = useState('')
-  const [connecting, setConnecting] = useState(false)
-  async function handleConnect() {
-    if (!bizName.trim() || connecting) return
+  const [bizName, setBizName]         = useState('')
+  const [searching, setSearching]     = useState(false)
+  const [connecting, setConnecting]   = useState(false)
+  const [candidates, setCandidates]   = useState<any[] | null>(null)
+  const [searchError, setSearchError] = useState<string | null>(null)
+
+  async function handleSearch() {
+    if (!bizName.trim() || searching) return
+    setSearching(true); setSearchError(null); setCandidates(null)
+    try {
+      const res = await onSearchGoogle(bizName.trim())
+      if (res.error) setSearchError(res.error)
+      else setCandidates(res.candidates ?? [])
+    } finally {
+      setSearching(false)
+    }
+  }
+  async function handlePick(c: any) {
+    if (connecting) return
     setConnecting(true)
-    try { await onConnectGoogle(bizName.trim()) } finally { setConnecting(false) }
+    try {
+      await onConfirmGoogle(c.placeId, c.name)
+      setCandidates(null); setBizName('')
+    } finally {
+      setConnecting(false)
+    }
   }
 
   return (
@@ -3753,31 +3775,70 @@ function TrustScoreTab({
             </div>
           </div>
 
-          {/* Link your public Google listing (no login required) */}
+          {/* Link your public Google listing (no login required) — search then confirm */}
           {!gbpConnected && (
             <div className="mt-3 pt-3 border-t border-ink-100">
               <label className="block text-xs font-medium text-ink-500 mb-1.5">
-                Enter your business name as it appears on Google
+                Search for your business on Google
               </label>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   value={bizName}
                   onChange={(e) => setBizName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleConnect() }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSearch() }}
                   placeholder="e.g. TrueNorth Frames, Edmonton"
                   className="flex-1 text-sm px-3 py-2 rounded-lg border border-ink-200 focus:border-ink-400 focus:outline-none"
                 />
                 <button
-                  onClick={handleConnect}
-                  disabled={!bizName.trim() || connecting}
+                  onClick={handleSearch}
+                  disabled={!bizName.trim() || searching}
                   className="text-xs font-semibold text-white px-4 py-2 rounded-lg bg-ink hover:bg-ink-800 disabled:opacity-40 transition-all whitespace-nowrap">
-                  {connecting ? 'Finding…' : 'Connect'}
+                  {searching ? 'Searching…' : 'Search'}
                 </button>
               </div>
               <p className="text-[11px] text-ink-300 mt-1.5">
-                We&apos;ll find your public Google listing and pull your star rating &amp; review count. No Google login needed.
+                We search public Google listings — no Google login needed. Pick the one that&apos;s yours below.
               </p>
+
+              {searchError && (
+                <p className="text-xs text-red-600 mt-2">{searchError}</p>
+              )}
+
+              {candidates && candidates.length === 0 && (
+                <p className="text-xs text-ink-400 mt-2">No matches found. Try the exact name shown on Google Maps, and include your city.</p>
+              )}
+
+              {candidates && candidates.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs font-medium text-ink-500">Which one is your business?</p>
+                  {candidates.map((c: any) => (
+                    <button
+                      key={c.placeId}
+                      onClick={() => handlePick(c)}
+                      disabled={connecting}
+                      className="w-full text-left p-3 rounded-lg border border-ink-200 hover:border-ink-400 hover:bg-ink-50 disabled:opacity-50 transition-all">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-ink truncate">{c.name}</p>
+                          {c.address && <p className="text-[11px] text-ink-300 truncate">{c.address}</p>}
+                          <p className="text-[11px] text-ink-400 mt-0.5">
+                            {c.rating != null ? `★ ${Number(c.rating).toFixed(1)}` : 'No rating'}
+                            {' · '}{c.reviewCount ?? 0} reviews
+                            {c.operational === false ? ' · ⚠ not operational' : ''}
+                          </p>
+                        </div>
+                        <span className="text-xs font-semibold text-white bg-ink px-3 py-1.5 rounded-lg whitespace-nowrap flex-shrink-0">
+                          {connecting ? '…' : 'This is me'}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                  <p className="text-[11px] text-ink-300">
+                    Don&apos;t see yours? Refine the name above and search again.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -6318,20 +6379,26 @@ function PhotographerDashboardInner() {
                   const d = await fetch('/api/photographer/trust').then(r => r.ok ? r.json() : null)
                   if (d) setTrustData(d)
                 }}
-                onConnectGoogle={async (businessName: string) => {
+                onSearchGoogle={async (businessName: string) => {
+                  const res = await fetch(`/api/photographer/trust/google-place?q=${encodeURIComponent(businessName)}`)
+                  const data = await res.json().catch(() => null)
+                  if (!res.ok) return { error: data?.error ?? 'Search failed — try again.' }
+                  return { candidates: data?.candidates ?? [] }
+                }}
+                onConfirmGoogle={async (placeId: string, name: string) => {
                   const res = await fetch('/api/photographer/trust/google-place', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ businessName }),
+                    body: JSON.stringify({ placeId, name }),
                   })
                   const data = await res.json().catch(() => null)
                   if (!res.ok) {
-                    setTrustNotification({ type: 'error', msg: data?.error ?? 'Could not find your Google listing — check the name and try again.' })
+                    setTrustNotification({ type: 'error', msg: data?.error ?? 'Could not link that listing — try again.' })
                     return
                   }
                   setTrustNotification({
                     type: 'success',
-                    msg: `Connected to ${data?.listing?.name ?? 'your listing'}${data?.trust_score != null ? ` — trust score ${data.trust_score}` : ''}.`,
+                    msg: `Connected to ${name || 'your listing'}${data?.trust_score != null ? ` — trust score ${data.trust_score}` : ''}.`,
                   })
                   const d = await fetch('/api/photographer/trust').then(r => r.ok ? r.json() : null)
                   if (d) setTrustData(d)

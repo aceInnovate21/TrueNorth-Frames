@@ -28,12 +28,25 @@ export interface GooglePlaceCandidate {
   operational:  boolean
 }
 
-// Search Google Places (New) by business name for a confirmation candidate.
-// Returns the best match so the photographer can confirm it's their listing.
-export async function searchGooglePlace(
+function toCandidate(place: any, fallbackName = ''): GooglePlaceCandidate {
+  return {
+    placeId:     place.id,
+    name:        place.displayName?.text ?? fallbackName,
+    address:     place.formattedAddress ?? '',
+    rating:      typeof place.rating === 'number' ? place.rating : undefined,
+    reviewCount: place.userRatingCount ?? 0,
+    operational: place.businessStatus === 'OPERATIONAL',
+  }
+}
+
+// Search Google Places (New) by business name and return several candidates so
+// the photographer can confirm which listing is theirs (avoids grabbing the
+// wrong business when names are similar).
+export async function searchGooglePlaces(
   businessName: string,
   location = 'Edmonton AB',
-): Promise<{ candidate: GooglePlaceCandidate } | { error: string }> {
+  limit = 5,
+): Promise<{ candidates: GooglePlaceCandidate[] } | { error: string }> {
   const key = process.env.GOOGLE_PLACES_API_KEY
   if (!key) return { error: 'Google reviews lookup is not configured yet. Please contact support.' }
 
@@ -45,29 +58,30 @@ export async function searchGooglePlace(
         'X-Goog-Api-Key':   key,
         'X-Goog-FieldMask': PLACES_FIELD_MASK,
       },
-      body: JSON.stringify({ textQuery: `${businessName} ${location}`.trim() }),
+      body: JSON.stringify({ textQuery: `${businessName} ${location}`.trim(), pageSize: Math.min(limit, 20) }),
     })
     if (!res.ok) {
       const body = await res.json().catch(() => null)
       return { error: body?.error?.message ?? `Places search failed (HTTP ${res.status})` }
     }
     const data = await res.json()
-    const place = data?.places?.[0]
-    if (!place?.id) return { error: 'No Google listing found for that business name. Try the exact name as it appears on Google Maps.' }
+    const places: any[] = Array.isArray(data?.places) ? data.places.filter((p: any) => p?.id) : []
+    if (places.length === 0) return { error: 'No Google listing found for that business name. Try the exact name as it appears on Google Maps.' }
 
-    return {
-      candidate: {
-        placeId:     place.id,
-        name:        place.displayName?.text ?? businessName,
-        address:     place.formattedAddress ?? '',
-        rating:      typeof place.rating === 'number' ? place.rating : undefined,
-        reviewCount: place.userRatingCount ?? 0,
-        operational: place.businessStatus === 'OPERATIONAL',
-      },
-    }
+    return { candidates: places.slice(0, limit).map((p) => toCandidate(p, businessName)) }
   } catch (e: any) {
     return { error: e?.message ?? 'Places API error' }
   }
+}
+
+// Single best match — kept for the name-based sync fallback.
+export async function searchGooglePlace(
+  businessName: string,
+  location = 'Edmonton AB',
+): Promise<{ candidate: GooglePlaceCandidate } | { error: string }> {
+  const result = await searchGooglePlaces(businessName, location, 1)
+  if ('error' in result) return result
+  return { candidate: result.candidates[0] }
 }
 
 // Fetch public trust signals for a photographer's Google listing.
