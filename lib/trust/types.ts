@@ -35,13 +35,16 @@ export interface TrustBreakdown {
   computedAt: string
 }
 
-// Score formula: base 75 + up to 25 from GBP signals
+// Score formula: base 75 + up to 25 from public Google Places signals.
+// (Owner-verified badge and account age were removed — the Places API does not
+//  expose them. Their weight was redistributed to reviews and the active-listing
+//  signal.)
 // Breakdown of the +25:
-//   reviews pillar  (rating 55% + count 45%) → up to +12.5 pts
-//   age pillar      (account age)             → up to  +3.0 pts
-//   verification    (completeness + verified) → up to  +9.5 pts
-//     └ profile completeness % → up to +4.5
-//     └ GBP verified badge     →       +5.0
+//   reviews pillar  (rating 55% + count 45%)          → up to +18.0 pts
+//   verification    (completeness + active listing)   → up to  +7.0 pts
+//     └ profile completeness %      → up to +4.0
+//     └ listing operational status  →       +3.0
+//   age pillar      (retired — always 0)              →       +0.0
 
 export const TRUST_WEIGHTS = {
   BASE_SCORE: 75,
@@ -49,9 +52,9 @@ export const TRUST_WEIGHTS = {
 
   // Allocation of the 25 bonus points (must sum to 25)
   bonus: {
-    reviews:      12.5,   // GBP star rating + review count
-    age:           3.0,   // GBP account age
-    verification:  9.5,   // completeness + GBP verified
+    reviews:      18.0,   // Google star rating + review count
+    age:           0.0,   // retired (account age not available via Places)
+    verification:  7.0,   // profile completeness + active-listing status
   },
 
   // Within reviews pillar (rating vs count)
@@ -62,12 +65,12 @@ export const TRUST_WEIGHTS = {
 
   // Within verification pillar
   verification: {
-    completeness: 0.474,  // → up to 4.5 pts  (9.5 × 0.474 ≈ 4.5)
-    gbpVerified:  0.526,  // → up to 5.0 pts  (9.5 × 0.526 ≈ 5.0)
+    completeness: 0.571,  // → up to 4.0 pts  (7.0 × 0.571 ≈ 4.0)
+    gbpVerified:  0.429,  // → up to 3.0 pts  (7.0 × 0.429 ≈ 3.0) — now "active listing"
   },
 
   caps: {
     reviewCount:   200,    // 200 reviews = 100% of count signal
-    accountAgeDays: 1_825, // 5 years = 100%
+    accountAgeDays: 1_825, // 5 years = 100% (unused — age retired)
   },
 } as const

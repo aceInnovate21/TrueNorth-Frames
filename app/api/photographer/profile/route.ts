@@ -38,7 +38,7 @@ export async function GET() {
       db.from('photographer_specialties').select('specialty').eq('photographer_id', photographerId),
       db.from('external_platform_links').select('platform, profile_url').eq('photographer_id', photographerId),
       db.from('external_platform_links').select('platform_review_count').eq('photographer_id', photographerId).eq('platform', 'google').maybeSingle(),
-      db.from('platform_oauth_tokens').select('photographer_id').eq('photographer_id', photographerId).eq('platform', 'google').eq('is_active', true).maybeSingle(),
+      db.from('photographer_profiles').select('google_place_id').eq('id', photographerId).maybeSingle(),
       db.from('portfolio_photos').select('id').eq('photographer_id', photographerId),
       db.from('booking_requests').select('*', { count: 'exact', head: true }).eq('photographer_id', photographerId).eq('status', 'completed'),
     ])
@@ -46,7 +46,7 @@ export async function GET() {
     specialties = (specialtyRows ?? []).map((s: { specialty: string }) => s.specialty)
     for (const link of linkRows ?? []) linksMap[link.platform] = link.profile_url
     gbpReviewCount = gbpLink?.platform_review_count ?? 0
-    isGbpOAuthConnected = !!oauthRow
+    isGbpOAuthConnected = !!oauthRow?.google_place_id
     portfolioPhotoCount = (photoRows ?? []).length
     completedBookings = bookingCount ?? 0
   }

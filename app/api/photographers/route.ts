@@ -146,12 +146,11 @@ export async function GET(request: NextRequest) {
       .select('photographer_id, platform_review_count')
       .eq('platform', 'google')
       .in('photographer_id', filteredIds),
-    // OAuth connection is the verified signal — not the self-reported link
-    db.from('platform_oauth_tokens')
-      .select('photographer_id')
-      .eq('platform', 'google')
-      .eq('is_active', true)
-      .in('photographer_id', filteredIds),
+    // A confirmed public Google listing is the trust signal (Places-based)
+    db.from('photographer_profiles')
+      .select('id')
+      .not('google_place_id', 'is', null)
+      .in('id', filteredIds),
     db.from('reviews')
       .select('photographer_id')
       .in('photographer_id', filteredIds)
@@ -173,7 +172,7 @@ export async function GET(request: NextRequest) {
     gbpReviewCountMap[row.photographer_id] = row.platform_review_count ?? 0
   }
 
-  const gbpOAuthSet = new Set((gbpOAuthRows ?? []).map((r: any) => r.photographer_id as string))
+  const gbpOAuthSet = new Set((gbpOAuthRows ?? []).map((r: any) => r.id as string))
 
   const platformReviewCountMap: Record<string, number> = {}
   for (const row of platformReviews ?? []) {

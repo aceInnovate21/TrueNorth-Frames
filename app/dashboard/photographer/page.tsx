@@ -3567,6 +3567,8 @@ function TrustScoreTab({
   onDismissNotification,
   onSync,
   onDisconnect,
+  onSearchGoogle,
+  onConfirmGoogle,
 }: {
   trustData: any
   loading: boolean
@@ -3575,6 +3577,8 @@ function TrustScoreTab({
   onDismissNotification: () => void
   onSync: () => void
   onDisconnect: (platform: string) => Promise<void>
+  onSearchGoogle: (businessName: string) => Promise<{ candidates?: any[]; error?: string }>
+  onConfirmGoogle: (placeId: string, name: string) => Promise<void>
 }) {
   const score: number    = trustData?.trust_score ?? 0
   const breakdown        = trustData?.breakdown
@@ -3583,6 +3587,34 @@ function TrustScoreTab({
   const syncLog: any[]   = trustData?.sync_log ?? []
   const gbpConnected     = !!connected.google?.isActive
   const gbpSig           = signals.google
+
+  const [bizName, setBizName]         = useState('')
+  const [searching, setSearching]     = useState(false)
+  const [connecting, setConnecting]   = useState(false)
+  const [candidates, setCandidates]   = useState<any[] | null>(null)
+  const [searchError, setSearchError] = useState<string | null>(null)
+
+  async function handleSearch() {
+    if (!bizName.trim() || searching) return
+    setSearching(true); setSearchError(null); setCandidates(null)
+    try {
+      const res = await onSearchGoogle(bizName.trim())
+      if (res.error) setSearchError(res.error)
+      else setCandidates(res.candidates ?? [])
+    } finally {
+      setSearching(false)
+    }
+  }
+  async function handlePick(c: any) {
+    if (connecting) return
+    setConnecting(true)
+    try {
+      await onConfirmGoogle(c.placeId, c.name)
+      setCandidates(null); setBizName('')
+    } finally {
+      setConnecting(false)
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -3681,22 +3713,16 @@ function TrustScoreTab({
                   label="Reviews (rating + count)"
                   score={breakdown.reviews ?? 0}
                   color="#3b82f6"
-                  note="Google star rating (55%) · Review count (45%) — up to +12.5 pts"
+                  note="Google star rating (55%) · Review count (45%) — up to +18 pts"
                 />
                 <PillarBar
-                  label="Account age"
-                  score={breakdown.activity ?? 0}
-                  color="#f59e0b"
-                  note="GBP account age up to 5 years — up to +3 pts"
-                />
-                <PillarBar
-                  label="Verification (completeness + GBP verified)"
+                  label="Verification (completeness + active listing)"
                   score={breakdown.verification ?? 0}
                   color="#10b981"
-                  note="Profile completeness (45%) · Google verified status (55%) — up to +9.5 pts"
+                  note="Profile completeness · Google listing active — up to +7 pts"
                 />
                 <p className="text-[10px] text-ink-300 pt-1 border-t border-ink-50">
-                  Score range: 75 (GBP connected) → 100 (all signals maxed)
+                  Score range: 75 (Google connected) → 100 (all signals maxed)
                 </p>
               </div>
             ) : (
@@ -3715,8 +3741,8 @@ function TrustScoreTab({
             <Globe className="w-4 h-4 text-ink-400" />
           </div>
           <div>
-            <h2 className="font-semibold text-ink">Google Business Profile</h2>
-            <p className="text-xs text-ink-300">Your sole trust signal — review rating, count, verified status &amp; account age</p>
+            <h2 className="font-semibold text-ink">Google Reviews</h2>
+            <p className="text-xs text-ink-300">Your public Google star rating &amp; review count — no login required</p>
           </div>
         </div>
 
@@ -3728,35 +3754,93 @@ function TrustScoreTab({
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-ink">Google Business</p>
-                <p className="text-xs text-ink-300">Review rating · Review count · Verified status · Account age</p>
+                <p className="text-xs text-ink-300">Review rating · Review count · Active listing</p>
                 {gbpConnected && connected.google?.username && (
                   <p className="text-xs text-ink-400 mt-0.5">{connected.google.username}</p>
                 )}
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              {gbpConnected ? (
+              {gbpConnected && (
                 <>
                   <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Connected
                   </span>
-                  <a href="/api/oauth/google"
-                    className="text-xs text-ink-400 hover:text-ink border border-ink-100 hover:border-ink-300 px-3 py-1.5 rounded-lg transition-all">
-                    Reconnect
-                  </a>
                   <button onClick={() => onDisconnect('google')}
                     className="text-xs text-ink-300 hover:text-red-500 border border-transparent hover:border-red-200 px-2 py-1.5 rounded-lg transition-all">
                     ✕
                   </button>
                 </>
-              ) : (
-                <a href="/api/oauth/google"
-                  className="text-xs font-semibold text-white px-4 py-1.5 rounded-lg bg-ink hover:bg-ink-800 transition-all">
-                  Connect
-                </a>
               )}
             </div>
           </div>
+
+          {/* Link your public Google listing (no login required) — search then confirm */}
+          {!gbpConnected && (
+            <div className="mt-3 pt-3 border-t border-ink-100">
+              <label className="block text-xs font-medium text-ink-500 mb-1.5">
+                Search for your business on Google
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={bizName}
+                  onChange={(e) => setBizName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSearch() }}
+                  placeholder="e.g. TrueNorth Frames, Edmonton"
+                  className="flex-1 text-sm px-3 py-2 rounded-lg border border-ink-200 focus:border-ink-400 focus:outline-none"
+                />
+                <button
+                  onClick={handleSearch}
+                  disabled={!bizName.trim() || searching}
+                  className="text-xs font-semibold text-white px-4 py-2 rounded-lg bg-ink hover:bg-ink-800 disabled:opacity-40 transition-all whitespace-nowrap">
+                  {searching ? 'Searching…' : 'Search'}
+                </button>
+              </div>
+              <p className="text-[11px] text-ink-300 mt-1.5">
+                We search public Google listings — no Google login needed. Pick the one that&apos;s yours below.
+              </p>
+
+              {searchError && (
+                <p className="text-xs text-red-600 mt-2">{searchError}</p>
+              )}
+
+              {candidates && candidates.length === 0 && (
+                <p className="text-xs text-ink-400 mt-2">No matches found. Try the exact name shown on Google Maps, and include your city.</p>
+              )}
+
+              {candidates && candidates.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs font-medium text-ink-500">Which one is your business?</p>
+                  {candidates.map((c: any) => (
+                    <button
+                      key={c.placeId}
+                      onClick={() => handlePick(c)}
+                      disabled={connecting}
+                      className="w-full text-left p-3 rounded-lg border border-ink-200 hover:border-ink-400 hover:bg-ink-50 disabled:opacity-50 transition-all">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-ink truncate">{c.name}</p>
+                          {c.address && <p className="text-[11px] text-ink-300 truncate">{c.address}</p>}
+                          <p className="text-[11px] text-ink-400 mt-0.5">
+                            {c.rating != null ? `★ ${Number(c.rating).toFixed(1)}` : 'No rating'}
+                            {' · '}{c.reviewCount ?? 0} reviews
+                            {c.operational === false ? ' · ⚠ not operational' : ''}
+                          </p>
+                        </div>
+                        <span className="text-xs font-semibold text-white bg-ink px-3 py-1.5 rounded-lg whitespace-nowrap flex-shrink-0">
+                          {connecting ? '…' : 'This is me'}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                  <p className="text-[11px] text-ink-300">
+                    Don&apos;t see yours? Refine the name above and search again.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* GBP signal detail */}
           {gbpConnected && gbpSig && (
@@ -3773,19 +3857,11 @@ function TrustScoreTab({
                   <p className="text-sm font-semibold text-ink">{gbpSig.review_count}</p>
                 </div>
               )}
-              {gbpSig.account_age_days != null && (
-                <div>
-                  <p className="text-[10px] text-ink-300 uppercase tracking-wide">Account age</p>
-                  <p className="text-sm font-semibold text-ink">
-                    {Math.floor(gbpSig.account_age_days / 365)}y {Math.floor((gbpSig.account_age_days % 365) / 30)}m
-                  </p>
-                </div>
-              )}
               {gbpSig.is_verified != null && (
                 <div>
-                  <p className="text-[10px] text-ink-300 uppercase tracking-wide">Verified</p>
+                  <p className="text-[10px] text-ink-300 uppercase tracking-wide">Listing</p>
                   <p className={`text-sm font-semibold ${gbpSig.is_verified ? 'text-emerald-600' : 'text-ink-400'}`}>
-                    {gbpSig.is_verified ? '✓ Verified' : 'Not verified'}
+                    {gbpSig.is_verified ? '✓ Active' : 'Inactive'}
                   </p>
                 </div>
               )}
@@ -3795,11 +3871,11 @@ function TrustScoreTab({
 
         {!gbpConnected && (
           <div className="mt-4 p-4 bg-amber-50 border border-amber-100 rounded-xl">
-            <p className="text-xs font-semibold text-amber-800 mb-1">Why connect Google Business?</p>
+            <p className="text-xs font-semibold text-amber-800 mb-1">Why connect Google reviews?</p>
             <ul className="text-xs text-amber-700 space-y-1 list-disc list-inside">
               <li>Instantly unlocks a trust score of 75+ visible to all clients</li>
               <li>Your star rating and review count appear on your public profile</li>
-              <li>Earns a "Verified on Google" badge</li>
+              <li>Takes seconds — just enter your business name, no Google login</li>
             </ul>
           </div>
         )}
@@ -6298,8 +6374,32 @@ function PhotographerDashboardInner() {
                     .catch(() => setTrustNotification({ type: 'error', msg: 'Sync failed — try again' }))
                     .finally(() => setTrustSyncing(false))
                 }}
-                onDisconnect={async (platform: string) => {
-                  await fetch(`/api/oauth/${platform}`, { method: 'DELETE' })
+                onDisconnect={async (_platform: string) => {
+                  await fetch('/api/photographer/trust/google-place', { method: 'DELETE' })
+                  const d = await fetch('/api/photographer/trust').then(r => r.ok ? r.json() : null)
+                  if (d) setTrustData(d)
+                }}
+                onSearchGoogle={async (businessName: string) => {
+                  const res = await fetch(`/api/photographer/trust/google-place?q=${encodeURIComponent(businessName)}`)
+                  const data = await res.json().catch(() => null)
+                  if (!res.ok) return { error: data?.error ?? 'Search failed — try again.' }
+                  return { candidates: data?.candidates ?? [] }
+                }}
+                onConfirmGoogle={async (placeId: string, name: string) => {
+                  const res = await fetch('/api/photographer/trust/google-place', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ placeId, name }),
+                  })
+                  const data = await res.json().catch(() => null)
+                  if (!res.ok) {
+                    setTrustNotification({ type: 'error', msg: data?.error ?? 'Could not link that listing — try again.' })
+                    return
+                  }
+                  setTrustNotification({
+                    type: 'success',
+                    msg: `Connected to ${name || 'your listing'}${data?.trust_score != null ? ` — trust score ${data.trust_score}` : ''}.`,
+                  })
                   const d = await fetch('/api/photographer/trust').then(r => r.ok ? r.json() : null)
                   if (d) setTrustData(d)
                 }}

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { fetchGoogleSignals, fetchGooglePlacesSignals, refreshGoogleToken } from './fetchers/google'
+import { fetchGooglePlacesSignals } from './fetchers/google'
 import { computeTrustScore } from './score-engine'
 import { PlatformSignals } from './types'
 
@@ -19,51 +19,22 @@ export async function syncTrustScore(photographerId: string): Promise<number> {
 
   const { data: profile } = await db
     .from('photographer_profiles')
-    .select('native_avg_rating, native_review_count, completeness_score, trust_score, display_name, location')
+    .select('native_avg_rating, native_review_count, completeness_score, trust_score, display_name, location, google_place_id, google_business_name')
     .eq('id', photographerId)
     .single()
 
-  // Load Google OAuth token if connected
-  const { data: tokens } = await db
-    .from('platform_oauth_tokens')
-    .select('platform, access_token, refresh_token, token_expires_at, platform_user_id')
-    .eq('photographer_id', photographerId)
-    .eq('platform', 'google')
-    .eq('is_active', true)
-
-  const googleToken = tokens?.[0] ?? null
-
-  // Refresh Google token if expiring within 5 min
-  if (googleToken?.refresh_token) {
-    const expiresAt = googleToken.token_expires_at ? new Date(googleToken.token_expires_at) : null
-    const expiresSoon = !expiresAt || expiresAt.getTime() < Date.now() + 5 * 60 * 1000
-    if (expiresSoon) {
-      const refreshed = await refreshGoogleToken(googleToken.refresh_token)
-      if (!('error' in refreshed)) {
-        await db.from('platform_oauth_tokens')
-          .update({
-            access_token:      refreshed.accessToken,
-            token_expires_at:  refreshed.expiresAt.toISOString(),
-            last_refreshed_at: new Date().toISOString(),
-          })
-          .eq('photographer_id', photographerId)
-          .eq('platform', 'google')
-        googleToken.access_token = refreshed.accessToken
-      }
-    }
-  }
-
   const scoreBefore = profile?.trust_score ?? 0
 
-  // Fetch Google signals — OAuth first, Places API fallback
+  // Fetch Google signals from the public Places API (New).
+  // Prefer the confirmed place_id (stable); otherwise search by the confirmed
+  // business name. A photographer who has not linked a listing yet is skipped.
   let google: PlatformSignals | null = null
-  if (googleToken?.access_token) {
-    google = await fetchGoogleSignals(googleToken.access_token)
-  } else if (profile?.display_name && process.env.GOOGLE_PLACES_API_KEY) {
-    google = await fetchGooglePlacesSignals(
-      profile.display_name,
-      profile.location ?? 'Edmonton AB'
-    )
+  if (process.env.GOOGLE_PLACES_API_KEY && (profile?.google_place_id || profile?.google_business_name)) {
+    google = await fetchGooglePlacesSignals({
+      placeId:      profile.google_place_id ?? undefined,
+      businessName: profile.google_business_name ?? undefined,
+      location:     profile.location ?? 'Edmonton AB',
+    })
   }
 
   const breakdown = computeTrustScore({
@@ -112,11 +83,11 @@ export async function syncTrustScore(photographerId: string): Promise<number> {
       profile_url:           '',
       platform_rating:       google.reviewRating ?? null,
       platform_review_count: google.reviewCount ?? null,
-      account_age_days:      google.accountAgeDays ?? null,
+      account_age_days:      null,
       is_verified:           google.isVerified ?? false,
       platform_user_id:      google.platformUserId ?? null,
       platform_username:     google.platformUsername ?? null,
-      is_oauth_connected:    !!googleToken,
+      is_oauth_connected:    false,
       last_fetched_at:       breakdown.computedAt,
     }, { onConflict: 'photographer_id,platform', ignoreDuplicates: false })
   }
@@ -141,28 +112,19 @@ export async function syncTrustScore(photographerId: string): Promise<number> {
   return newScore
 }
 
-// Sync all photographers who have either a Google OAuth token OR a GBP link via Places.
+// Sync all photographers who have linked a Google listing (place_id or business name).
 // Photographers with neither are skipped (no score to compute).
 export async function syncAllPhotographers(): Promise<{ photographerId: string; score: number; error?: string }[]> {
   const db = adminDb()
 
-  // Get all photographers with an active Google token
-  const { data: tokenRows } = await db
-    .from('platform_oauth_tokens')
-    .select('photographer_id')
-    .eq('platform', 'google')
-    .eq('is_active', true)
+  // Photographers who have confirmed a Google listing.
+  const { data: linkedRows } = await db
+    .from('photographer_profiles')
+    .select('id')
+    .or('google_place_id.not.is.null,google_business_name.not.is.null')
 
-  // Also get photographers with a GBP link (Places fallback) who have no OAuth token
-  const { data: linkRows } = await db
-    .from('external_platform_links')
-    .select('photographer_id')
-    .eq('platform', 'google')
-
-  const tokenIds  = new Set((tokenRows ?? []).map((r: any) => r.photographer_id as string))
-  const linkIds   = (linkRows ?? []).map((r: any) => r.photographer_id as string)
-  const allIdsArr = [...Array.from(tokenIds), ...linkIds]
-  const unique    = allIdsArr.filter((id, i) => allIdsArr.indexOf(id) === i)
+  const idsArr = (linkedRows ?? []).map((r: any) => r.id as string)
+  const unique = idsArr.filter((id: string, i: number) => idsArr.indexOf(id) === i)
 
   const results = await Promise.allSettled(
     unique.map((id: string) => syncTrustScore(id).then(score => ({ photographerId: id, score })))
