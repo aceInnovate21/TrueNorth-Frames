@@ -3503,10 +3503,6 @@ function DashboardLightbox({ photos, startIdx, onClose }: {
 
 // ─── TrustScoreTab ────────────────────────────────────────────────────────────
 
-// Temporary notice while the Google Business Profile connection is pending
-// approval / quota increase. Flip to false to hide the banner once GBP is live.
-const GBP_CONNECT_MAINTENANCE = true
-
 // Score arc scaled for 75–100 range (0 = not connected, shown separately)
 function ScoreArc({ score }: { score: number }) {
   const size  = 140
@@ -3632,18 +3628,6 @@ function TrustScoreTab({
           <button onClick={onDismissNotification} className="text-current opacity-60 hover:opacity-100 flex-shrink-0">
             <X className="w-4 h-4" />
           </button>
-        </div>
-      )}
-
-      {/* GBP connection maintenance notice */}
-      {GBP_CONNECT_MAINTENANCE && (
-        <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-amber-200 bg-amber-50 text-sm text-amber-800">
-          <Clock className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          <span className="flex-1">
-            <span className="font-semibold">Google Business Profile connection is temporarily unavailable.</span>{' '}
-            We're finishing the Google verification for this integration and expect it back shortly. Your trust
-            score and profile are unaffected in the meantime — thanks for your patience.
-          </span>
         </div>
       )}
 
