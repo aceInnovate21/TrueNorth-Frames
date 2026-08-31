@@ -3905,8 +3905,43 @@ function TrustScoreTab({
                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${trustData?.google?.show_reviews ? 'translate-x-5' : ''}`} />
               </button>
             </div>
-            {Array.isArray(trustData?.google?.reviews) && trustData.google.reviews.length === 0 && trustData?.google?.show_reviews && (
+            {Array.isArray(trustData?.google?.reviews) && trustData.google.reviews.length === 0 && (
               <p className="text-[11px] text-ink-300 mt-2">No Google review snippets available yet — they&apos;ll appear after the next sync.</p>
+            )}
+
+            {/* Preview of the exact 5 reviews that would show publicly */}
+            {Array.isArray(trustData?.google?.reviews) && trustData.google.reviews.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-ink-100">
+                <p className="text-[11px] font-medium text-ink-500 mb-2">
+                  These are the {trustData.google.reviews.length} reviews we can show{trustData?.google?.show_reviews ? ' (live on your profile)' : ' — turn on the toggle to display them'}:
+                </p>
+                <div className="space-y-2">
+                  {trustData.google.reviews.map((g: any, i: number) => (
+                    <div key={`gp-${i}`} className={`p-3 rounded-lg border ${trustData?.google?.show_reviews ? 'border-ink-100 bg-white' : 'border-dashed border-ink-200 bg-white/50'}`}>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {g.authorPhoto ? (
+                            <img src={g.authorPhoto} alt={g.author} className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+                          ) : (
+                            <div className="w-5 h-5 rounded-full bg-ink-100 flex items-center justify-center text-[9px] font-semibold text-ink-400 flex-shrink-0">{(g.author ?? 'G').slice(0, 1)}</div>
+                          )}
+                          <span className="text-xs font-semibold text-ink truncate">{g.author}</span>
+                          <span className="text-[10px] text-ink-300 flex-shrink-0">{g.relativeTime}</span>
+                        </div>
+                        <div className="flex items-center gap-0.5 flex-shrink-0">
+                          {[1, 2, 3, 4, 5].map(n => (
+                            <span key={n} className={`text-[10px] ${n <= g.rating ? 'text-amber-400' : 'text-ink-200'}`}>★</span>
+                          ))}
+                        </div>
+                      </div>
+                      {g.text && <p className="text-[11px] text-ink-500 leading-relaxed line-clamp-3">{g.text}</p>}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-ink-300 mt-2">
+                  We can&apos;t edit or choose which reviews appear — Google returns these as &ldquo;most relevant.&rdquo;
+                </p>
+              </div>
             )}
           </div>
         )}
