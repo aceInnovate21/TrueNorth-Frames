@@ -69,11 +69,16 @@ export async function syncTrustScore(photographerId: string): Promise<number> {
     last_computed_at:   breakdown.computedAt,
   }, { onConflict: 'photographer_id' })
 
-  // Update photographer_profiles
-  await db.from('photographer_profiles').update({
+  // Update photographer_profiles (score + Google display data)
+  const profileUpdate: Record<string, any> = {
     trust_score:        newScore,
     last_trust_sync_at: breakdown.computedAt,
-  }).eq('id', photographerId)
+  }
+  if (google && !google.error) {
+    profileUpdate.google_maps_uri = google.googleMapsUri ?? null
+    profileUpdate.google_reviews  = google.googleReviews ?? []
+  }
+  await db.from('photographer_profiles').update(profileUpdate).eq('id', photographerId)
 
   // Update external_platform_links with fresh GBP data
   if (google && !google.error) {

@@ -1,4 +1,19 @@
-import { PlatformSignals } from '../types'
+import { PlatformSignals, GoogleReviewSnippet } from '../types'
+
+// Map Places API (New) review objects to the snippet shape we store/display.
+// Google's display policy requires attribution (author + photo) and a link back
+// to Google — both preserved here and surfaced with a "From Google" tag + link.
+function parseGoogleReviews(raw: any): GoogleReviewSnippet[] {
+  if (!Array.isArray(raw)) return []
+  return raw.slice(0, 5).map((r: any) => ({
+    author:       r?.authorAttribution?.displayName ?? 'Google user',
+    authorPhoto:  r?.authorAttribution?.photoUri ?? null,
+    rating:       typeof r?.rating === 'number' ? r.rating : 0,
+    text:         r?.text?.text ?? r?.originalText?.text ?? '',
+    relativeTime: r?.relativePublishTimeDescription ?? '',
+    publishTime:  r?.publishTime ?? null,
+  })).filter((r: GoogleReviewSnippet) => r.text || r.rating)
+}
 
 // Google Business Profile API (formerly My Business API)
 // Requires: https://www.googleapis.com/auth/business.manage scope
@@ -17,7 +32,9 @@ const GBP_REVIEWS = 'https://mybusiness.googleapis.com/v4'
 // rating, total review count, and whether the listing is a live/operational business.
 // Owner-verified badge and account age are intentionally NOT used (not exposed publicly).
 const PLACES_FIELD_MASK = 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.businessStatus'
-const PLACE_DETAIL_FIELD_MASK = 'id,displayName,formattedAddress,rating,userRatingCount,businessStatus'
+// Detail mask includes googleMapsUri + up to 5 "most relevant" reviews so we can
+// optionally surface review snippets (attributed + linked) on the public profile.
+const PLACE_DETAIL_FIELD_MASK = 'id,displayName,formattedAddress,rating,userRatingCount,businessStatus,googleMapsUri,reviews'
 
 export interface GooglePlaceCandidate {
   placeId:      string
@@ -99,6 +116,8 @@ export async function fetchGooglePlacesSignals(
     let rating: number | undefined
     let reviewCount = 0
     let operational = false
+    let mapsUri: string | undefined
+    let reviews: GoogleReviewSnippet[] = []
 
     if (!placeId) {
       if (!opts.businessName) return { platform: 'google', error: 'No Google business name on file to look up.' }
@@ -122,6 +141,8 @@ export async function fetchGooglePlacesSignals(
       rating = typeof place.rating === 'number' ? place.rating : undefined
       reviewCount = place.userRatingCount ?? 0
       operational = place.businessStatus === 'OPERATIONAL'
+      mapsUri = place.googleMapsUri
+      reviews = parseGoogleReviews(place.reviews)
     }
 
     return {
@@ -131,6 +152,8 @@ export async function fetchGooglePlacesSignals(
       reviewRating:     rating,
       reviewCount,
       isVerified:       operational,   // repurposed: "active/operational listing" (not owner-verified)
+      googleMapsUri:    mapsUri,
+      googleReviews:    reviews,
     }
   } catch (e: any) {
     return { platform: 'google', error: e?.message ?? 'Places API error' }

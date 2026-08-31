@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from '@/lib/api-helpers'
 import { computeBadge, BadgeSignals } from '@/lib/badges'
+import { combinedRating } from '@/lib/trust/combined-rating'
 import { todayInMarket, daysFromTodayInMarket } from '@/lib/date'
 
 // Public read-only route — no auth required, uses service role for reliable reads
@@ -26,7 +27,8 @@ export async function GET(
       avatar_url, cover_image_url, website_url, instagram_url,
       rate_display, rate_note, trust_score, native_avg_rating,
       native_review_count, profile_view_count, years_experience, completeness_score, created_at,
-      contact_instagram_url, contact_facebook_url, is_founder
+      contact_instagram_url, contact_facebook_url, is_founder,
+      show_google_reviews, google_maps_uri, google_reviews, google_place_id
     `)
     .eq('username', params.username)
     .eq('profile_status', 'approved')
@@ -207,9 +209,35 @@ export async function GET(
 
   const r2Base = process.env.R2_PUBLIC_URL ?? ''
 
+  // ── Google reviews + combined (weighted) rating ─────────────────────────────
+  const googleRating = linksMap.google?.rating ?? null
+  const googleCount  = linksMap.google?.count ?? 0
+  const combined = combinedRating({
+    tnfAvg:      profile.native_avg_rating,
+    tnfCount:    profile.native_review_count,
+    googleAvg:   googleRating,
+    googleCount: googleCount,
+  })
+  const googleBlock = (profile.google_place_id || googleCount || googleRating != null) ? {
+    rating:      googleRating,
+    review_count: googleCount,
+    maps_uri:    profile.google_maps_uri ?? null,
+    // Snippets are only exposed when the photographer opted in to display them.
+    reviews:     profile.show_google_reviews ? (profile.google_reviews ?? []) : [],
+    show_reviews: !!profile.show_google_reviews,
+  } : null
+
   return NextResponse.json({
     id: profile.id,
     username: profile.username,
+    google: googleBlock,
+    combined_rating: {
+      rating:      combined.rating,
+      total_count: combined.totalCount,
+      tnf_weight:  combined.tnfWeight,
+      tnf: { rating: Number(profile.native_avg_rating ?? 0), count: Number(profile.native_review_count ?? 0) },
+      google: { rating: googleRating, count: googleCount },
+    },
     display_name: profile.display_name,
     tagline: profile.tagline ?? '',
     bio: profile.bio ?? '',

@@ -30,6 +30,7 @@ import { PhotographerConnections, GroupChat, type Group, type GroupMessage } fro
 import { Inbox } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { computeBadge, computeBadgeProgress, type BadgeSignals } from '@/lib/badges'
+import { combinedRating } from '@/lib/trust/combined-rating'
 import { PhotographerBadge } from '@/components/photographer-badge'
 import { SocialsTab } from '@/components/socials-tab'
 
@@ -3565,6 +3566,7 @@ function TrustScoreTab({
   onDisconnect,
   onSearchGoogle,
   onConfirmGoogle,
+  onToggleGoogleReviews,
 }: {
   trustData: any
   loading: boolean
@@ -3575,6 +3577,7 @@ function TrustScoreTab({
   onDisconnect: (platform: string) => Promise<void>
   onSearchGoogle: (businessName: string) => Promise<{ candidates?: any[]; error?: string }>
   onConfirmGoogle: (placeId: string, name: string) => Promise<void>
+  onToggleGoogleReviews: (show: boolean) => Promise<void>
 }) {
   const score: number    = trustData?.trust_score ?? 0
   const breakdown        = trustData?.breakdown
@@ -3718,6 +3721,34 @@ function TrustScoreTab({
         )}
       </div>
 
+      {/* Reviews KPIs */}
+      {gbpConnected && (() => {
+        const gRating = trustData?.google?.rating
+        const gCount  = trustData?.google?.review_count ?? 0
+        const tnfRating = trustData?.native_avg_rating ?? 0
+        const tnfCount  = trustData?.native_review_count ?? 0
+        const combined  = combinedRating({ tnfAvg: tnfRating, tnfCount, googleAvg: gRating, googleCount: gCount })
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+              <p className="text-[10px] text-ink-300 uppercase tracking-wide">Google reviews</p>
+              <p className="text-lg font-bold text-ink mt-0.5">{gRating != null ? `★ ${Number(gRating).toFixed(1)}` : '—'}</p>
+              <p className="text-xs text-ink-400">{gCount} review{gCount === 1 ? '' : 's'} on Google</p>
+            </div>
+            <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+              <p className="text-[10px] text-ink-300 uppercase tracking-wide">TrueNorth Frames</p>
+              <p className="text-lg font-bold text-ink mt-0.5">{tnfCount > 0 ? `★ ${Number(tnfRating).toFixed(1)}` : '—'}</p>
+              <p className="text-xs text-ink-400">{tnfCount} booking-verified</p>
+            </div>
+            <div className="bg-white rounded-2xl p-4 border border-emerald-100" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+              <p className="text-[10px] text-emerald-600 uppercase tracking-wide font-semibold">Overall (weighted)</p>
+              <p className="text-lg font-bold text-ink mt-0.5">{combined.rating != null ? `★ ${combined.rating.toFixed(1)}` : '—'}</p>
+              <p className="text-xs text-ink-400">TNF reviews weighted {combined.tnfWeight}×</p>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Google Business Profile connection */}
       <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
         <div className="flex items-center gap-3 mb-5">
@@ -3852,6 +3883,33 @@ function TrustScoreTab({
             </div>
           )}
         </div>
+
+        {/* Opt-in: show Google review snippets on public profile */}
+        {gbpConnected && (
+          <div className="mt-4 p-4 rounded-xl border border-ink-100 bg-ink-50/40">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-ink">Show my Google reviews on my public profile</p>
+                <p className="text-xs text-ink-400 mt-1 leading-relaxed">
+                  We&apos;ll display your <span className="font-medium">5 most relevant</span> Google reviews, exactly as
+                  they appear on Google — we can&apos;t edit, reorder, or hide individual reviews (a Google constraint).
+                  Each is tagged &ldquo;From Google&rdquo; and links back to Google. Your TrueNorth&nbsp;Frames reviews
+                  always appear first.
+                </p>
+              </div>
+              <button
+                role="switch"
+                aria-checked={!!trustData?.google?.show_reviews}
+                onClick={() => onToggleGoogleReviews(!trustData?.google?.show_reviews)}
+                className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${trustData?.google?.show_reviews ? 'bg-emerald-500' : 'bg-ink-200'}`}>
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${trustData?.google?.show_reviews ? 'translate-x-5' : ''}`} />
+              </button>
+            </div>
+            {Array.isArray(trustData?.google?.reviews) && trustData.google.reviews.length === 0 && trustData?.google?.show_reviews && (
+              <p className="text-[11px] text-ink-300 mt-2">No Google review snippets available yet — they&apos;ll appear after the next sync.</p>
+            )}
+          </div>
+        )}
 
         {!gbpConnected && (
           <div className="mt-4 p-4 bg-amber-50 border border-amber-100 rounded-xl">
@@ -6384,6 +6442,19 @@ function PhotographerDashboardInner() {
                     type: 'success',
                     msg: `Connected to ${name || 'your listing'}${data?.trust_score != null ? ` — trust score ${data.trust_score}` : ''}.`,
                   })
+                  const d = await fetch('/api/photographer/trust').then(r => r.ok ? r.json() : null)
+                  if (d) setTrustData(d)
+                }}
+                onToggleGoogleReviews={async (show: boolean) => {
+                  const res = await fetch('/api/photographer/trust/google-place', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ showGoogleReviews: show }),
+                  })
+                  if (!res.ok) {
+                    setTrustNotification({ type: 'error', msg: 'Could not update your Google reviews setting.' })
+                    return
+                  }
                   const d = await fetch('/api/photographer/trust').then(r => r.ok ? r.json() : null)
                   if (d) setTrustData(d)
                 }}
