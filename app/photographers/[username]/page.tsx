@@ -696,6 +696,48 @@ function MiniStars({ value }: { value: number }) {
   )
 }
 
+// A Google review snippet — shown verbatim, attributed, tagged "From Google",
+// and linked back to Google (per Google's display policy). We can't edit these.
+function GoogleReviewCard({ r, mapsUri }: { r: any; mapsUri: string | null }) {
+  return (
+    <div className="bg-white rounded-2xl p-5 border border-ink-50"
+      style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 bg-ink-50">
+            {r.authorPhoto ? (
+              <img src={r.authorPhoto} alt={r.author} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-ink-300 text-xs font-semibold">
+                {(r.author ?? 'G').slice(0, 1)}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-ink text-sm truncate">{r.author}</p>
+            <p className="text-[11px] text-ink-300">{r.relativeTime}</p>
+          </div>
+        </div>
+        <span className="flex items-center gap-1 text-[10px] font-semibold text-ink-500 bg-ink-50 border border-ink-100 px-2 py-1 rounded-full flex-shrink-0">
+          <Globe className="w-3 h-3" /> From Google
+        </span>
+      </div>
+      <div className="flex items-center gap-0.5 mb-2">
+        {[1, 2, 3, 4, 5].map(i => (
+          <Star key={i} className={`w-3 h-3 ${i <= r.rating ? 'text-amber-400 fill-amber-400' : 'text-ink-100 fill-ink-100'}`} />
+        ))}
+      </div>
+      {r.text && <p className="text-sm text-ink-600 leading-relaxed whitespace-pre-line">{r.text}</p>}
+      {mapsUri && (
+        <a href={mapsUri} target="_blank" rel="noopener noreferrer"
+          className="mt-2 inline-flex items-center gap-0.5 text-[11px] font-medium text-blue-600 hover:text-blue-700">
+          Read on Google <ExternalLink className="w-3 h-3" />
+        </a>
+      )}
+    </div>
+  )
+}
+
 function ReviewCard({ r, photographerName, photographerAvatar }: { r: any; photographerName: string; photographerAvatar: string | null }) {
   const subRatings = SUB_LABELS.filter(s => r[s.key] != null)
   return (
@@ -991,6 +1033,12 @@ export default function ProfilePage({ params }: { params: { username: string } }
   const liveAvgRating = hasReviews
     ? Math.round((reviewList.reduce((s: number, r: any) => s + r.rating, 0) / reviewList.length) * 10) / 10
     : 0
+  // Google reviews + combined (weighted) rating
+  const google = p.google as { rating: number | null; review_count: number; maps_uri: string | null; reviews: any[]; show_reviews: boolean } | null
+  const combined = p.combined_rating as { rating: number | null; total_count: number; tnf_weight: number } | null
+  const googleReviewSnippets: any[] = (google?.show_reviews ? google?.reviews : []) ?? []
+  const hasGoogleReviews = googleReviewSnippets.length > 0
+
   const hasAvailability = p.availability?.length > 0
   const portfolioAlbums: PortfolioAlbum[] = p.portfolio_albums ?? []
   const portfolioPhotos: PortfolioPhoto[] = p.portfolio_photos ?? []
@@ -1182,9 +1230,51 @@ export default function ProfilePage({ params }: { params: { username: string } }
                     </div>
                     {hasReviews && <StarRow rating={liveAvgRating} count={liveReviewCount} />}
                   </div>
+
+                  {/* Rating summary — weighted overall + per-source breakdown */}
+                  {(combined?.rating != null || (google && google.review_count > 0)) && (
+                    <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="rounded-2xl p-4 border border-emerald-100 bg-emerald-50/40">
+                        <p className="text-[10px] text-emerald-700 uppercase tracking-wide font-semibold">Overall rating</p>
+                        <p className="text-2xl font-bold text-ink mt-0.5">{combined?.rating != null ? combined.rating.toFixed(1) : '—'}</p>
+                        <p className="text-[11px] text-ink-400">
+                          {combined?.total_count ?? 0} reviews · TNF weighted {combined?.tnf_weight ?? 1.25}×
+                        </p>
+                      </div>
+                      <div className="rounded-2xl p-4 border border-ink-100 bg-white">
+                        <p className="text-[10px] text-ink-400 uppercase tracking-wide">TrueNorth Frames</p>
+                        <p className="text-2xl font-bold text-ink mt-0.5">{liveReviewCount > 0 ? liveAvgRating.toFixed(1) : '—'}</p>
+                        <p className="text-[11px] text-ink-400">{liveReviewCount} booking-verified</p>
+                      </div>
+                      <div className="rounded-2xl p-4 border border-ink-100 bg-white">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] text-ink-400 uppercase tracking-wide">Google</p>
+                          {google?.maps_uri && (
+                            <a href={google.maps_uri} target="_blank" rel="noopener noreferrer"
+                              className="text-[11px] font-medium text-blue-600 hover:text-blue-700 inline-flex items-center gap-0.5">
+                              View on Google <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                        <p className="text-2xl font-bold text-ink mt-0.5">{google?.rating != null ? Number(google.rating).toFixed(1) : '—'}</p>
+                        <p className="text-[11px] text-ink-400">{google?.review_count ?? 0} on Google</p>
+                      </div>
+                    </div>
+                  )}
+
                   {hasReviews ? (
                     <div className="space-y-3">
+                      {/* TrueNorth Frames reviews always feature first */}
                       {p.native_reviews.map((r: any) => <ReviewCard key={r.id} r={r} photographerName={p.display_name} photographerAvatar={p.avatar_url} />)}
+                      {hasGoogleReviews && googleReviewSnippets.map((g: any, i: number) => (
+                        <GoogleReviewCard key={`g-${i}`} r={g} mapsUri={google?.maps_uri ?? null} />
+                      ))}
+                    </div>
+                  ) : hasGoogleReviews ? (
+                    <div className="space-y-3">
+                      {googleReviewSnippets.map((g: any, i: number) => (
+                        <GoogleReviewCard key={`g-${i}`} r={g} mapsUri={google?.maps_uri ?? null} />
+                      ))}
                     </div>
                   ) : (
                     <div className="bg-white rounded-2xl py-12 text-center border border-ink-50"

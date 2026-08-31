@@ -13,7 +13,7 @@ export async function GET() {
 
   const { data: profile } = await db
     .from('photographer_profiles')
-    .select('id, trust_score, last_trust_sync_at, native_avg_rating, native_review_count, google_place_id, google_business_name')
+    .select('id, trust_score, last_trust_sync_at, native_avg_rating, native_review_count, google_place_id, google_business_name, show_google_reviews, google_maps_uri, google_reviews')
     .eq('user_id', user.id)
     .single()
 
@@ -88,6 +88,14 @@ export async function GET() {
     connected_platforms: connectedPlatforms,
     latest_signals:      latestByPlatform,
     sync_log:            syncLog ?? [],
+    google: {
+      place_linked:  !!profile.google_place_id,
+      show_reviews:  !!profile.show_google_reviews,
+      maps_uri:      profile.google_maps_uri ?? null,
+      reviews:       profile.google_reviews ?? [],
+      review_count:  latestByPlatform.google?.review_count ?? null,
+      rating:        latestByPlatform.google?.review_rating ?? null,
+    },
   })
 }
 

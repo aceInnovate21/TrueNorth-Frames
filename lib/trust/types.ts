@@ -4,6 +4,17 @@
 
 export type Platform = 'google'
 
+// A single Google review as returned by the Places API (New). We store only
+// what Google's display policy allows us to show, always attributed and linked.
+export interface GoogleReviewSnippet {
+  author:      string
+  authorPhoto: string | null
+  rating:      number        // 1–5
+  text:        string
+  relativeTime: string       // e.g. "2 months ago"
+  publishTime: string | null // ISO
+}
+
 export interface PlatformSignals {
   platform: string   // 'google' in production; 'instagram'/'facebook' reserved for post-launch
   platformUserId?:   string
@@ -13,6 +24,9 @@ export interface PlatformSignals {
   reviewCount?:      number
   accountAgeDays?:   number
   isVerified?:       boolean
+  // Public Google listing extras (Places API New)
+  googleMapsUri?:    string
+  googleReviews?:    GoogleReviewSnippet[]   // up to 5 "most relevant" reviews
   // Social signals (post-launch — Instagram/Facebook)
   followerCount?:    number
   followingCount?:   number
