@@ -865,7 +865,7 @@ function computeScore(p: ProfileData & { faqCount?: number }) {
     { key: 'portfolio',    label: 'Portfolio photos',        done: p.hasPortfolio,                 weight: 15, tab: 'portfolio',     cta: 'Upload photos' },
     { key: 'availability', label: 'Availability set',        done: p.availabilitySet,              weight: 10, tab: 'availability',  cta: 'Set availability' },
     { key: 'faq',          label: 'At least 1 FAQ added',   done: (p.faqCount ?? 0) > 0,          weight: 5,  tab: 'faq',           cta: 'Add a FAQ' },
-    { key: 'trust',        label: 'Trust score connected',  done: Number(p.trustScore ?? 0) > 0,  weight: 20, tab: 'trust',         cta: 'Connect GBP' },
+    { key: 'trust',        label: 'Google reviews connected', done: Number(p.trustScore ?? 0) > 0,  weight: 20, tab: 'trust',         cta: 'Connect Google' },
   ]
   const earned = sections.filter(s => s.done).reduce((a, s) => a + s.weight, 0)
   const total = sections.reduce((a, s) => a + s.weight, 0)
@@ -6418,6 +6418,7 @@ function PhotographerDashboardInner() {
                 }}
                 onDisconnect={async (_platform: string) => {
                   await fetch('/api/photographer/trust/google-place', { method: 'DELETE' })
+                  setProfile(prev => ({ ...prev, trustScore: 0 }))
                   const d = await fetch('/api/photographer/trust').then(r => r.ok ? r.json() : null)
                   if (d) setTrustData(d)
                 }}
@@ -6442,6 +6443,10 @@ function PhotographerDashboardInner() {
                     type: 'success',
                     msg: `Connected to ${name || 'your listing'}${data?.trust_score != null ? ` — trust score ${data.trust_score}` : ''}.`,
                   })
+                  // Reflect the new score in the profile-completion checklist immediately.
+                  if (data?.trust_score != null) {
+                    setProfile(prev => ({ ...prev, trustScore: data.trust_score }))
+                  }
                   const d = await fetch('/api/photographer/trust').then(r => r.ok ? r.json() : null)
                   if (d) setTrustData(d)
                 }}
