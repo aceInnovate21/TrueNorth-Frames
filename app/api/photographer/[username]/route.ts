@@ -121,8 +121,8 @@ export async function GET(
       .eq('photographer_id', photographerId).eq('flag_status', 'none'),
     db.from('booking_requests').select('*', { count: 'exact', head: true })
       .eq('photographer_id', photographerId).eq('status', 'completed'),
-    db.from('platform_oauth_tokens').select('photographer_id')
-      .eq('photographer_id', photographerId).eq('platform', 'google').eq('is_active', true).maybeSingle(),
+    db.from('photographer_profiles').select('google_place_id')
+      .eq('id', photographerId).maybeSingle(),
   ])
 
   const accountAgeDays = profile.created_at
@@ -136,7 +136,7 @@ export async function GET(
     completedBookings:    completedBookings   ?? 0,
     completenessScore:    Number(profile.completeness_score ?? 0),
     accountAgeDays,
-    isGbpOAuthConnected:  !!gbpOAuthRow,
+    isGbpOAuthConnected:  !!gbpOAuthRow?.google_place_id,
     gbpReviewCount:       gbpLink?.platform_review_count ?? 0,
     yearsExperience:      profile.years_experience ?? null,
     // Single-profile view — no cross-photographer ranking context

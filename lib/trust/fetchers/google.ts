@@ -13,42 +13,110 @@ const GBP_REVIEWS = 'https://mybusiness.googleapis.com/v4'
 // Requires only GOOGLE_PLACES_API_KEY — no user auth needed.
 // Photographer provides their business name; we search Places and get rating + count.
 
-export async function fetchGooglePlacesSignals(businessName: string, location = 'Edmonton AB'): Promise<PlatformSignals> {
+// Fields we read from Places API (New). We only need the public trust signals:
+// rating, total review count, and whether the listing is a live/operational business.
+// Owner-verified badge and account age are intentionally NOT used (not exposed publicly).
+const PLACES_FIELD_MASK = 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.businessStatus'
+const PLACE_DETAIL_FIELD_MASK = 'id,displayName,formattedAddress,rating,userRatingCount,businessStatus'
+
+export interface GooglePlaceCandidate {
+  placeId:      string
+  name:         string
+  address:      string
+  rating?:      number
+  reviewCount:  number
+  operational:  boolean
+}
+
+// Search Google Places (New) by business name for a confirmation candidate.
+// Returns the best match so the photographer can confirm it's their listing.
+export async function searchGooglePlace(
+  businessName: string,
+  location = 'Edmonton AB',
+): Promise<{ candidate: GooglePlaceCandidate } | { error: string }> {
+  const key = process.env.GOOGLE_PLACES_API_KEY
+  if (!key) return { error: 'Google reviews lookup is not configured yet. Please contact support.' }
+
+  try {
+    const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type':     'application/json',
+        'X-Goog-Api-Key':   key,
+        'X-Goog-FieldMask': PLACES_FIELD_MASK,
+      },
+      body: JSON.stringify({ textQuery: `${businessName} ${location}`.trim() }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      return { error: body?.error?.message ?? `Places search failed (HTTP ${res.status})` }
+    }
+    const data = await res.json()
+    const place = data?.places?.[0]
+    if (!place?.id) return { error: 'No Google listing found for that business name. Try the exact name as it appears on Google Maps.' }
+
+    return {
+      candidate: {
+        placeId:     place.id,
+        name:        place.displayName?.text ?? businessName,
+        address:     place.formattedAddress ?? '',
+        rating:      typeof place.rating === 'number' ? place.rating : undefined,
+        reviewCount: place.userRatingCount ?? 0,
+        operational: place.businessStatus === 'OPERATIONAL',
+      },
+    }
+  } catch (e: any) {
+    return { error: e?.message ?? 'Places API error' }
+  }
+}
+
+// Fetch public trust signals for a photographer's Google listing.
+// Prefer a stored place_id (stable); fall back to a name search.
+export async function fetchGooglePlacesSignals(
+  opts: { placeId?: string; businessName?: string; location?: string },
+): Promise<PlatformSignals> {
   const key = process.env.GOOGLE_PLACES_API_KEY
   if (!key) return { platform: 'google', error: 'GOOGLE_PLACES_API_KEY not set' }
 
   try {
-    // Step 1: Find the place by name
-    const searchUrl = new URL('https://maps.googleapis.com/maps/api/place/findplacefromtext/json')
-    searchUrl.searchParams.set('input', `${businessName} ${location}`)
-    searchUrl.searchParams.set('inputtype', 'textquery')
-    searchUrl.searchParams.set('fields', 'place_id,name,rating,user_ratings_total,formatted_address')
-    searchUrl.searchParams.set('key', key)
+    // Resolve a place: by stored id (preferred) or by name search.
+    let placeId = opts.placeId
+    let name: string | undefined
+    let rating: number | undefined
+    let reviewCount = 0
+    let operational = false
 
-    const searchRes = await fetch(searchUrl.toString(), { next: { revalidate: 0 } })
-    if (!searchRes.ok) return { platform: 'google', error: `Places search HTTP ${searchRes.status}` }
-
-    const searchData = await searchRes.json()
-    const candidate = searchData?.candidates?.[0]
-    if (!candidate?.place_id) return { platform: 'google', error: 'No Google Business listing found for this name' }
-
-    // Step 2: Get full details including review count
-    const detailUrl = new URL('https://maps.googleapis.com/maps/api/place/details/json')
-    detailUrl.searchParams.set('place_id', candidate.place_id)
-    detailUrl.searchParams.set('fields', 'name,rating,user_ratings_total,business_status,opening_hours')
-    detailUrl.searchParams.set('key', key)
-
-    const detailRes = await fetch(detailUrl.toString(), { next: { revalidate: 0 } })
-    const detailData = detailRes.ok ? await detailRes.json() : null
-    const place = detailData?.result ?? candidate
+    if (!placeId) {
+      if (!opts.businessName) return { platform: 'google', error: 'No Google business name on file to look up.' }
+      const search = await searchGooglePlace(opts.businessName, opts.location ?? 'Edmonton AB')
+      if ('error' in search) return { platform: 'google', error: search.error }
+      const c = search.candidate
+      placeId = c.placeId; name = c.name; rating = c.rating; reviewCount = c.reviewCount; operational = c.operational
+    } else {
+      const res = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`, {
+        headers: {
+          'X-Goog-Api-Key':   key,
+          'X-Goog-FieldMask': PLACE_DETAIL_FIELD_MASK,
+        },
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        return { platform: 'google', error: body?.error?.message ?? `Google listing lookup failed (HTTP ${res.status})` }
+      }
+      const place = await res.json()
+      name = place.displayName?.text
+      rating = typeof place.rating === 'number' ? place.rating : undefined
+      reviewCount = place.userRatingCount ?? 0
+      operational = place.businessStatus === 'OPERATIONAL'
+    }
 
     return {
-      platform:        'google',
-      platformUserId:  candidate.place_id,
-      platformUsername: place.name ?? businessName,
-      reviewRating:    place.rating ?? undefined,
-      reviewCount:     place.user_ratings_total ?? 0,
-      isVerified:      place.business_status === 'OPERATIONAL',
+      platform:         'google',
+      platformUserId:   placeId,
+      platformUsername: name ?? opts.businessName ?? '',
+      reviewRating:     rating,
+      reviewCount,
+      isVerified:       operational,   // repurposed: "active/operational listing" (not owner-verified)
     }
   } catch (e: any) {
     return { platform: 'google', error: e?.message ?? 'Places API error' }
