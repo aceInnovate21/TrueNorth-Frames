@@ -809,6 +809,8 @@ interface ProfileData {
   completedBookings: number
   isGbpOAuthConnected: boolean
   gbpReviewCount: number
+  gbpAvgRating: number | null
+  overallRating: number | null
   accountAgeDays: number
   profileStatus: string
   statusNote: string | null
@@ -4320,6 +4322,8 @@ function PhotographerDashboardInner() {
     completedBookings: 0,
     isGbpOAuthConnected: false,
     gbpReviewCount: 0,
+    gbpAvgRating: null,
+    overallRating: null,
     accountAgeDays: 0,
     profileStatus: 'pending',
     statusNote: null,
@@ -4376,6 +4380,8 @@ function PhotographerDashboardInner() {
           completedBookings:   data.completed_bookings ?? 0,
           isGbpOAuthConnected: data.is_gbp_oauth_connected ?? false,
           gbpReviewCount:      data.gbp_review_count ?? 0,
+          gbpAvgRating:        data.gbp_avg_rating ?? null,
+          overallRating:       data.overall_rating ?? null,
           accountAgeDays:      data.account_age_days ?? 0,
           profileStatus:       data.profile_status ?? 'pending',
           statusNote:          data.status_note ?? null,
@@ -5419,11 +5425,20 @@ function PhotographerDashboardInner() {
                   >
                     <Star className="w-4 h-4 text-ink-300 mb-2" />
                     <p className="font-bold text-ink text-xl">
-                      {profile.nativeAvgRating > 0 ? profile.nativeAvgRating.toFixed(1) : '—'}
+                      {profile.overallRating != null
+                        ? profile.overallRating.toFixed(1)
+                        : profile.nativeAvgRating > 0 ? profile.nativeAvgRating.toFixed(1) : '—'}
                     </p>
-                    <p className="text-ink-400 text-xs mt-0.5">Avg rating</p>
+                    <p className="text-ink-400 text-xs mt-0.5">Overall rating</p>
                     <p className="text-ink-300 text-[10px] mt-1">
-                      {profile.nativeReviewCount > 0 ? `${profile.nativeReviewCount} review${profile.nativeReviewCount !== 1 ? 's' : ''}` : 'No reviews yet'}
+                      {(() => {
+                        const total = (profile.nativeReviewCount ?? 0) + (profile.gbpReviewCount ?? 0)
+                        if (total === 0) return 'No reviews yet'
+                        const parts: string[] = []
+                        if (profile.nativeReviewCount > 0) parts.push(`${profile.nativeReviewCount} TNF`)
+                        if (profile.gbpReviewCount > 0) parts.push(`${profile.gbpReviewCount} Google`)
+                        return parts.join(' · ')
+                      })()}
                     </p>
                   </button>
 

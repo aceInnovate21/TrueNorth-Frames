@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
+import { combinedRating } from '@/lib/trust/combined-rating'
 
 export async function GET() {
   const { adminDb, user } = await getServerSession()
@@ -22,6 +23,7 @@ export async function GET() {
   let specialties: string[] = []
   let linksMap: Record<string, string> = {}
   let gbpReviewCount = 0
+  let gbpRating: number | null = null
   let isGbpOAuthConnected = false
   let portfolioPhotoCount = 0
   let completedBookings = 0
@@ -37,7 +39,7 @@ export async function GET() {
     ] = await Promise.all([
       db.from('photographer_specialties').select('specialty').eq('photographer_id', photographerId),
       db.from('external_platform_links').select('platform, profile_url').eq('photographer_id', photographerId),
-      db.from('external_platform_links').select('platform_review_count').eq('photographer_id', photographerId).eq('platform', 'google').maybeSingle(),
+      db.from('external_platform_links').select('platform_review_count, platform_rating').eq('photographer_id', photographerId).eq('platform', 'google').maybeSingle(),
       db.from('photographer_profiles').select('google_place_id').eq('id', photographerId).maybeSingle(),
       db.from('portfolio_photos').select('id').eq('photographer_id', photographerId),
       db.from('booking_requests').select('*', { count: 'exact', head: true }).eq('photographer_id', photographerId).eq('status', 'completed'),
@@ -46,6 +48,7 @@ export async function GET() {
     specialties = (specialtyRows ?? []).map((s: { specialty: string }) => s.specialty)
     for (const link of linkRows ?? []) linksMap[link.platform] = link.profile_url
     gbpReviewCount = gbpLink?.platform_review_count ?? 0
+    gbpRating      = gbpLink?.platform_rating ?? null
     isGbpOAuthConnected = !!oauthRow?.google_place_id
     portfolioPhotoCount = (photoRows ?? []).length
     completedBookings = bookingCount ?? 0
@@ -98,6 +101,13 @@ export async function GET() {
     completed_bookings:    completedBookings,
     is_gbp_oauth_connected: isGbpOAuthConnected,
     gbp_review_count:      gbpReviewCount,
+    gbp_avg_rating:        gbpRating,
+    overall_rating:        combinedRating({
+      tnfAvg:      Number(profile?.native_avg_rating ?? 0),
+      tnfCount:    Number(profile?.native_review_count ?? 0),
+      googleAvg:   gbpRating,
+      googleCount: gbpReviewCount,
+    }).rating,
     account_age_days:      accountAgeDays,
   })
 }
