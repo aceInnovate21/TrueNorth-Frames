@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, notFound } from '@/lib/api-helpers'
+import { computeCompleteness } from '@/lib/completeness'
 
 // GET /api/admin/photographer/[user_id]
 // Admin-only. Returns a photographer's full submitted profile — regardless of
@@ -39,6 +40,8 @@ export async function GET(
     { data: packages },
     { data: faqs },
     { data: portfolioPhotos },
+    { data: weeklySlots },
+    { data: dayStatuses },
   ] = await Promise.all([
     db.from('users').select('email, full_name, account_status, created_at').eq('id', params.user_id).maybeSingle(),
     db.from('photographer_specialties').select('specialty').eq('photographer_id', photographerId),
@@ -57,6 +60,8 @@ export async function GET(
       .select('id, caption, storage_asset_id, sort_order')
       .eq('photographer_id', photographerId)
       .order('sort_order', { ascending: true }),
+    db.from('weekly_time_slots').select('day_of_week').eq('photographer_id', photographerId).eq('is_active', true),
+    db.from('availability_day_status').select('status').eq('photographer_id', photographerId),
   ])
 
   // Resolve portfolio photo storage keys → public R2 URLs.
@@ -67,6 +72,27 @@ export async function GET(
     for (const a of assets ?? []) keyMap[a.id] = a.key
   }
   const r2Base = process.env.R2_PUBLIC_URL ?? ''
+
+  // Completeness is derived live from real signals — the stored
+  // completeness_score column is not kept up to date (defaults to 0).
+  const gbpConnected = (links ?? []).some(
+    (l: any) => l.platform === 'google' && l.is_oauth_connected
+  )
+  const availabilitySet =
+    (weeklySlots ?? []).length > 0 ||
+    (dayStatuses ?? []).some((d: any) => ['available', 'busy', 'tentative'].includes(d.status))
+  const completenessScore = computeCompleteness({
+    displayName:         profile.display_name,
+    bio:                 profile.bio,
+    location:            profile.location,
+    rate:                profile.rate_display,
+    avatarUrl:           profile.avatar_url,
+    specialtyCount:      (specialties ?? []).length,
+    portfolioPhotoCount: (portfolioPhotos ?? []).length,
+    availabilitySet,
+    faqCount:            (faqs ?? []).length,
+    isGbpOAuthConnected: gbpConnected,
+  })
 
   return NextResponse.json({
     user_id: profile.user_id,
@@ -87,7 +113,7 @@ export async function GET(
     native_avg_rating: profile.native_avg_rating ?? 0,
     native_review_count: profile.native_review_count ?? 0,
     years_experience: profile.years_experience ?? null,
-    completeness_score: profile.completeness_score ?? null,
+    completeness_score: completenessScore,
     profile_status: profile.profile_status,
     status_note: profile.status_note ?? null,
     created_at: profile.created_at,
