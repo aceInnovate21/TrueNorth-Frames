@@ -4186,7 +4186,7 @@ function PhotographerDashboardInner() {
           contactFacebook:     data.contact_facebook_url ?? '',
           avatarUrl:           data.avatar_url ?? '',
           coverImageUrl:       data.cover_image_url ?? '',
-          trustScore:          0,
+          trustScore:          data.trust_score ?? 0,
           completenessScore:   data.completeness_score ?? 0,
           nativeAvgRating:     data.native_avg_rating ?? 0,
           nativeReviewCount:   data.native_review_count ?? 0,
