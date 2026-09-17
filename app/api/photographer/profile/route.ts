@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
+import { computeCompleteness } from '@/lib/completeness'
 import { combinedRating } from '@/lib/trust/combined-rating'
 
 export async function GET() {
@@ -10,7 +11,7 @@ export async function GET() {
 
   const { data: profile, error: profileError } = await db
     .from('photographer_profiles')
-    .select('id, username, display_name, bio, location, website_url, instagram_url, avatar_url, cover_image_url, contact_instagram_url, contact_facebook_url, completeness_score, native_avg_rating, native_review_count, years_experience, created_at, profile_status, status_note')
+    .select('id, username, display_name, bio, location, rate_display, website_url, instagram_url, avatar_url, cover_image_url, contact_instagram_url, contact_facebook_url, completeness_score, trust_score, native_avg_rating, native_review_count, years_experience, created_at, profile_status, status_note')
     .eq('user_id', user.id)
     .single()
 
@@ -27,6 +28,8 @@ export async function GET() {
   let isGbpOAuthConnected = false
   let portfolioPhotoCount = 0
   let completedBookings = 0
+  let faqTotal = 0
+  let availabilitySet = false
 
   if (photographerId) {
     const [
@@ -36,6 +39,9 @@ export async function GET() {
       { data: oauthRow },
       { data: photoRows },
       { count: bookingCount },
+      { count: faqCount },
+      { data: weeklySlots },
+      { data: dayStatuses },
     ] = await Promise.all([
       db.from('photographer_specialties').select('specialty').eq('photographer_id', photographerId),
       db.from('external_platform_links').select('platform, profile_url').eq('photographer_id', photographerId),
@@ -43,6 +49,9 @@ export async function GET() {
       db.from('photographer_profiles').select('google_place_id').eq('id', photographerId).maybeSingle(),
       db.from('portfolio_photos').select('id').eq('photographer_id', photographerId),
       db.from('booking_requests').select('*', { count: 'exact', head: true }).eq('photographer_id', photographerId).eq('status', 'completed'),
+      db.from('photographer_faqs').select('*', { count: 'exact', head: true }).eq('photographer_id', photographerId),
+      db.from('weekly_time_slots').select('day_of_week').eq('photographer_id', photographerId).eq('is_active', true),
+      db.from('availability_day_status').select('status').eq('photographer_id', photographerId),
     ])
 
     specialties = (specialtyRows ?? []).map((s: { specialty: string }) => s.specialty)
@@ -52,6 +61,10 @@ export async function GET() {
     isGbpOAuthConnected = !!oauthRow?.google_place_id
     portfolioPhotoCount = (photoRows ?? []).length
     completedBookings = bookingCount ?? 0
+    faqTotal = faqCount ?? 0
+    availabilitySet =
+      (weeklySlots ?? []).length > 0 ||
+      (dayStatuses ?? []).some((d: { status: string }) => ['available', 'busy', 'tentative'].includes(d.status))
   }
 
   // Read the onboarding-tour flag separately and defensively: if migration 036
@@ -70,6 +83,34 @@ export async function GET() {
       onboardingTourCompleted = false
     }
   }
+
+  // Derive completeness live — the stored completeness_score column is not
+  // kept up to date, so computing it here keeps the dashboard and badges accurate.
+  const completenessScore = computeCompleteness({
+    displayName:         profile?.display_name,
+    bio:                 profile?.bio,
+    location:            profile?.location,
+    avatarUrl:           profile?.avatar_url,
+    specialtyCount:      specialties.length,
+    portfolioPhotoCount,
+    availabilitySet,
+    faqCount:            faqTotal,
+    isGbpOAuthConnected,
+  })
+
+  // Persist the freshly computed score so every read path (public listing,
+  // public profile, admin) sees an accurate stored value. Write only when it
+  // changed, and never let a write failure break the profile load.
+  if (photographerId && Number(profile?.completeness_score ?? -1) !== completenessScore) {
+    try {
+      await db.from('photographer_profiles')
+        .update({ completeness_score: completenessScore })
+        .eq('id', photographerId)
+    } catch {
+      // non-fatal — the returned value is still correct
+    }
+  }
+
 
   const accountAgeDays = profile?.created_at
     ? Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 86400))
@@ -90,7 +131,8 @@ export async function GET() {
     contact_instagram_url: profile?.contact_instagram_url ?? '',
     contact_facebook_url:  profile?.contact_facebook_url ?? '',
     // Badge signal data
-    completeness_score:    Number(profile?.completeness_score ?? 0),
+    completeness_score:    completenessScore,
+    trust_score:           Number(profile?.trust_score ?? 0),
     native_avg_rating:     Number(profile?.native_avg_rating ?? 0),
     native_review_count:   profile?.native_review_count ?? 0,
     years_experience:      profile?.years_experience ?? null,
