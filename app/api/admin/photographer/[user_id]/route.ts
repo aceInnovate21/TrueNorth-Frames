@@ -94,6 +94,18 @@ export async function GET(
     isGbpOAuthConnected: gbpConnected,
   })
 
+  // Persist so the public listing / profile (which read the stored column)
+  // stay accurate. Write only on change; never fail the request over it.
+  if (Number(profile.completeness_score ?? -1) !== completenessScore) {
+    try {
+      await db.from('photographer_profiles')
+        .update({ completeness_score: completenessScore })
+        .eq('id', photographerId)
+    } catch {
+      // non-fatal
+    }
+  }
+
   return NextResponse.json({
     user_id: profile.user_id,
     username: profile.username,

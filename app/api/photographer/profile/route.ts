@@ -113,6 +113,19 @@ export async function GET() {
     isGbpOAuthConnected,
   })
 
+  // Persist the freshly computed score so every read path (public listing,
+  // public profile, admin) sees an accurate stored value. Write only when it
+  // changed, and never let a write failure break the profile load.
+  if (photographerId && Number(profile?.completeness_score ?? -1) !== completenessScore) {
+    try {
+      await db.from('photographer_profiles')
+        .update({ completeness_score: completenessScore })
+        .eq('id', photographerId)
+    } catch {
+      // non-fatal — the returned value is still correct
+    }
+  }
+
   const accountAgeDays = profile?.created_at
     ? Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 86400))
     : 0
