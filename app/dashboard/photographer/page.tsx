@@ -864,7 +864,7 @@ function computeScore(p: ProfileData & { faqCount?: number }) {
     { key: 'portfolio',    label: 'Portfolio photos',        done: p.hasPortfolio,                 weight: 15, tab: 'portfolio',     cta: 'Upload photos' },
     { key: 'availability', label: 'Availability set',        done: p.availabilitySet,              weight: 10, tab: 'availability',  cta: 'Set availability' },
     { key: 'faq',          label: 'At least 1 FAQ added',   done: (p.faqCount ?? 0) > 0,          weight: 5,  tab: 'faq',           cta: 'Add a FAQ' },
-    { key: 'trust',        label: 'Trust score connected',  done: Number(p.trustScore ?? 0) > 0,  weight: 20, tab: 'trust',         cta: 'Connect GBP' },
+    { key: 'trust',        label: 'Google Business connected', done: !!p.isGbpOAuthConnected,       weight: 20, tab: 'trust',         cta: 'Connect GBP' },
   ]
   const earned = sections.filter(s => s.done).reduce((a, s) => a + s.weight, 0)
   const total = sections.reduce((a, s) => a + s.weight, 0)
@@ -5308,7 +5308,8 @@ function PhotographerDashboardInner() {
                   </div>
                 </div>
 
-                {/* ── Profile completion card ── */}
+                {/* ── Profile completion card ── (hidden once the profile is 100% complete) */}
+                {pct < 100 && (
                 <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
                   <div className="flex items-center justify-between mb-4">
                     <p className="font-semibold text-ink text-sm">Profile completion</p>
@@ -5343,6 +5344,7 @@ function PhotographerDashboardInner() {
                     ))}
                   </div>
                 </div>
+                )}
 
                 {/* ── Badge progress card ── */}
                 <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
@@ -6303,7 +6305,8 @@ function PhotographerDashboardInner() {
               </Link>
             </div>
 
-            {/* Completion score */}
+            {/* Completion score — hidden once the profile is 100% complete */}
+            {pct < 100 && (
             <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
               <p className="font-semibold text-ink text-sm mb-4">Profile completion</p>
               <div className="flex items-center gap-4 mb-4">
@@ -6341,6 +6344,7 @@ function PhotographerDashboardInner() {
                 </button>
               )}
             </div>
+            )}
 
             {/* Quick actions */}
             <div className="bg-white rounded-2xl p-5" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
