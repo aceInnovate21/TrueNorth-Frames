@@ -13,7 +13,7 @@ export async function GET() {
 
   const { data: profile } = await db
     .from('photographer_profiles')
-    .select('id, trust_score, last_trust_sync_at, native_avg_rating, native_review_count')
+    .select('id, trust_score, last_trust_sync_at, native_avg_rating, native_review_count, google_place_id, google_business_name, show_google_reviews, google_maps_uri, google_reviews')
     .eq('user_id', user.id)
     .single()
 
@@ -38,6 +38,15 @@ export async function GET() {
       username:    t.platform_username ?? '',
       connectedAt: t.connected_at,
       isActive:    t.is_active,
+    }
+  }
+
+  // Google is now linked via a public Places listing (no OAuth token).
+  if (profile.google_place_id || profile.google_business_name) {
+    connectedPlatforms.google = {
+      username:    profile.google_business_name ?? '',
+      connectedAt: profile.last_trust_sync_at ?? '',
+      isActive:    true,
     }
   }
 
@@ -79,6 +88,14 @@ export async function GET() {
     connected_platforms: connectedPlatforms,
     latest_signals:      latestByPlatform,
     sync_log:            syncLog ?? [],
+    google: {
+      place_linked:  !!profile.google_place_id,
+      show_reviews:  !!profile.show_google_reviews,
+      maps_uri:      profile.google_maps_uri ?? null,
+      reviews:       profile.google_reviews ?? [],
+      review_count:  latestByPlatform.google?.review_count ?? null,
+      rating:        latestByPlatform.google?.review_rating ?? null,
+    },
   })
 }
 

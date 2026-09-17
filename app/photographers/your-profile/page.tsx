@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
 import {
   ArrowLeft, Star, MapPin, Shield, Camera, CheckCircle2,
-  Globe, Instagram, Facebook, ExternalLink, Award, Calendar, DollarSign,
+  Globe, Instagram, Facebook, ExternalLink, Award, Calendar,
   ChevronDown, Package, Eye, Pencil, AlertCircle, ChevronLeft, ChevronRight, X, Layers,
 } from 'lucide-react'
 
@@ -19,8 +19,6 @@ interface ProfileData {
   cover_image_url: string | null
   website_url: string
   instagram_url: string
-  rate_display: string
-  rate_note: string
   trust_score: number
   native_avg_rating: number
   native_review_count: number
@@ -556,7 +554,6 @@ export default function YourProfilePreviewPage() {
 
   const completenessItems = [
     { label: 'Bio', done: p.bio.trim().length > 0 },
-    { label: 'Rate', done: !!p.rate_display },
     { label: 'Specialties', done: p.specialties.length > 0 },
     { label: 'Portfolio', done: hasPortfolio },
   ]
@@ -670,12 +667,6 @@ export default function YourProfilePreviewPage() {
                     <Award className="w-3 h-3 text-ink-300" />
                     <span className="text-ink-300 text-xs">Member since {formatDate(p.member_since)}</span>
                   </div>
-                  {p.rate_display && (
-                    <div className="flex items-center gap-1">
-                      <DollarSign className="w-3 h-3 text-ink-400" />
-                      <span className="text-ink-500 text-xs font-semibold">{p.rate_display}</span>
-                    </div>
-                  )}
                   {hasReviews && <StarRow rating={liveAvgRating} count={liveReviewCount} />}
                 </div>
               </div>
@@ -823,18 +814,7 @@ export default function YourProfilePreviewPage() {
             {/* Book CTA — disabled in preview */}
             <div className="bg-ink rounded-2xl p-5 text-white">
               <p className="font-semibold text-base mb-1">Book {p.display_name.split(' ')[0] || 'me'}</p>
-              {p.rate_display ? (
-                <div className="mb-4">
-                  <p className="text-white/60 text-[10px] uppercase tracking-wide mb-0.5">Starting from</p>
-                  <p className="font-bold text-white text-xl leading-none">{p.rate_display}</p>
-                  {p.rate_note && <p className="text-white/50 text-xs mt-1">{p.rate_note}</p>}
-                </div>
-              ) : (
-                <Link href="/dashboard/photographer/edit#rate" className="flex items-center gap-1.5 mb-4 text-white/50 hover:text-white/80 text-xs transition-colors">
-                  <DollarSign className="w-3.5 h-3.5" />
-                  <span className="underline underline-offset-2">Add your rate</span>
-                </Link>
-              )}
+              <p className="text-white/60 text-xs mb-4">Send a message to discuss dates, packages and pricing.</p>
               <button disabled className="w-full bg-white hover:bg-ink-50 text-ink font-semibold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm opacity-40 cursor-not-allowed" title="Disabled in preview mode">
                 Send a message
               </button>

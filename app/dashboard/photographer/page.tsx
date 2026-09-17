@@ -9,12 +9,13 @@ import {
   Bell, Camera, CheckCircle2, ChevronRight, Globe, Instagram,
   MapPin, MessageSquare, Star, User, Zap, ArrowRight,
   Eye, AlertCircle, Shield, ImagePlus, X, Send, Calendar,
-  Clock, ChevronLeft, DollarSign, Save, Settings, ExternalLink,
+  Clock, ChevronLeft, Save, Settings, ExternalLink,
   Package, Users, HelpCircle, GripVertical, ChevronDown, ChevronUp,
   ChevronsUp, ChevronsDown, LogOut,
   Plus, Pencil, Trash2, Paperclip, FileText, Play,
   FolderPlus, FolderOpen, Video, Image as ImageIcon,
   Facebook, RefreshCw, Link2, UserPlus, Search, Home, Menu, Loader2,
+  Share2,
 } from 'lucide-react'
 import { DashboardSidebar, type SidebarGroup } from '@/components/dashboard-sidebar'
 import { DashboardTour, type TourStep } from '@/components/dashboard-tour'
@@ -29,7 +30,9 @@ import { PhotographerConnections, GroupChat, type Group, type GroupMessage } fro
 import { Inbox } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { computeBadge, computeBadgeProgress, type BadgeSignals } from '@/lib/badges'
+import { combinedRating } from '@/lib/trust/combined-rating'
 import { PhotographerBadge } from '@/components/photographer-badge'
+import { SocialsTab } from '@/components/socials-tab'
 
 // ─── FAQ types & seed ─────────────────────────────────────────────────────────
 
@@ -77,7 +80,7 @@ function totalPortfolioVideos(albums: PortfolioAlbum[]) { return albums.reduce((
 
 // ─── Booking request types ───────────────────────────────────────────────────
 
-type DashboardTab = 'overview' | 'portfolio' | 'messages' | 'requests' | 'availability' | 'packages' | 'reviews' | 'network' | 'faq' | 'settings' | 'trust'
+type DashboardTab = 'overview' | 'portfolio' | 'messages' | 'requests' | 'availability' | 'packages' | 'reviews' | 'network' | 'faq' | 'settings' | 'trust' | 'socials'
 
 // First-run guided tour. Each step spotlights a rail nav item (desktop) and
 // switches to that tab; on mobile the rail is a drawer, so the step gracefully
@@ -787,8 +790,6 @@ interface ProfileData {
   displayName: string
   bio: string
   area: string
-  rate: string
-  rateUnit: string
   specialties: string[]
   websiteUrl: string
   contactInstagram: string
@@ -808,6 +809,8 @@ interface ProfileData {
   completedBookings: number
   isGbpOAuthConnected: boolean
   gbpReviewCount: number
+  gbpAvgRating: number | null
+  overallRating: number | null
   accountAgeDays: number
   profileStatus: string
   statusNote: string | null
@@ -841,8 +844,9 @@ interface ChatMsg {
 
 
 const SPECIALTIES_ALL = [
-  'Wedding', 'Portrait', 'Corporate', 'Newborn', 'Family', 'Event',
-  'Real Estate', 'Product', 'Street', 'Boudoir', 'Sports', 'Food',
+  'Wedding', 'Portrait', 'Headshot', 'Corporate', 'Newborn', 'Maternity',
+  'Family', 'Event', 'Graduation', 'Real Estate', 'Product', 'Fashion',
+  'Street', 'Boudoir', 'Sports', 'Food', 'Pets', 'Travel',
 ]
 
 const EDMONTON_AREAS = [
@@ -858,13 +862,12 @@ function computeScore(p: ProfileData & { faqCount?: number }) {
     { key: 'name',         label: 'Display name',          done: !!p.displayName,                weight: 10, tab: 'settings',      cta: 'Add your name' },
     { key: 'bio',          label: 'Bio written',            done: p.bio.length >= 20,             weight: 10, tab: 'settings',      cta: 'Write your bio' },
     { key: 'area',         label: 'Location set',           done: !!p.area,                       weight: 5,  tab: 'settings',      cta: 'Set your area' },
-    { key: 'rate',         label: 'Rate added',             done: !!p.rate,                       weight: 5,  tab: 'settings',      cta: 'Add your rate' },
     { key: 'avatar',       label: 'Profile photo',          done: !!p.avatarUrl,                  weight: 10, tab: 'settings',      cta: 'Upload photo' },
     { key: 'specialties',  label: 'Specialties chosen',     done: p.specialties.length > 0,       weight: 10, tab: 'settings',      cta: 'Pick specialties' },
     { key: 'portfolio',    label: 'Portfolio photos',        done: p.hasPortfolio,                 weight: 15, tab: 'portfolio',     cta: 'Upload photos' },
     { key: 'availability', label: 'Availability set',        done: p.availabilitySet,              weight: 10, tab: 'availability',  cta: 'Set availability' },
     { key: 'faq',          label: 'At least 1 FAQ added',   done: (p.faqCount ?? 0) > 0,          weight: 5,  tab: 'faq',           cta: 'Add a FAQ' },
-    { key: 'trust',        label: 'Google Business connected', done: !!p.isGbpOAuthConnected,       weight: 20, tab: 'trust',         cta: 'Connect GBP' },
+    { key: 'trust',        label: 'Google reviews connected', done: !!p.isGbpOAuthConnected,        weight: 20, tab: 'trust',         cta: 'Connect Google' },
   ]
   const earned = sections.filter(s => s.done).reduce((a, s) => a + s.weight, 0)
   const total = sections.reduce((a, s) => a + s.weight, 0)
@@ -2675,6 +2678,7 @@ function ProfileSettingsTab({ profile, setProfile }: {
   setProfile: React.Dispatch<React.SetStateAction<ProfileData>>
 }) {
   const [local, setLocal] = useState({ ...profile })
+  const [customSpecialty, setCustomSpecialty] = useState('')
   const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({
     basics: 'idle', specialties: 'idle', contacts: 'idle', account: 'idle',
   })
@@ -2710,8 +2714,6 @@ function ProfileSettingsTab({ profile, setProfile }: {
       local.displayName !== profile.displayName ||
       local.bio !== profile.bio ||
       local.area !== profile.area ||
-      (local.rate || '') !== (profile.rate || '') ||
-      local.rateUnit !== profile.rateUnit ||
       local.websiteUrl !== profile.websiteUrl ||
       local.yearsExperience !== profile.yearsExperience
     ) dirty.push('basics')
@@ -2872,8 +2874,6 @@ function ProfileSettingsTab({ profile, setProfile }: {
         display_name: local.displayName.trim(),
         bio: local.bio.trim(),
         location: local.area,
-        rate_amount: local.rate || null,
-        rate_unit: local.rateUnit,
         website_url: local.websiteUrl.trim(),
         years_experience: local.yearsExperience,
       }
@@ -2932,6 +2932,20 @@ function ProfileSettingsTab({ profile, setProfile }: {
         ? l.specialties.filter(x => x !== s)
         : l.specialties.length < 5 ? [...l.specialties, s] : l.specialties,
     }))
+  }
+
+  function addCustomSpecialty() {
+    const raw = customSpecialty.trim().slice(0, 60)
+    if (!raw) return
+    // Snap to a preset's canonical casing when it matches one, so chips stay in sync
+    const preset = SPECIALTIES_ALL.find(s => s.toLowerCase() === raw.toLowerCase())
+    const value = preset ?? raw
+    setLocal(l => {
+      if (l.specialties.length >= 5) return l
+      if (l.specialties.some(s => s.toLowerCase() === value.toLowerCase())) return l
+      return { ...l, specialties: [...l.specialties, value] }
+    })
+    setCustomSpecialty('')
   }
 
   const bioLen = local.bio.length
@@ -3142,33 +3156,6 @@ function ProfileSettingsTab({ profile, setProfile }: {
             </div>
           </div>
 
-          {/* Rate */}
-          <div>
-            <label className="block text-sm font-medium text-ink mb-1.5">
-              <span className="flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5 text-ink-300" />Starting rate</span>
-            </label>
-            <div className="flex gap-3">
-              <div className="relative flex-1">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-300 text-sm font-medium pointer-events-none">$</span>
-                <input
-                  type="number" min={0} placeholder="150"
-                  value={local.rate}
-                  onChange={e => setLocal(l => ({ ...l, rate: e.target.value }))}
-                  className="w-full border border-ink-100 rounded-xl pl-8 pr-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink focus:ring-2 focus:ring-ink/10 transition-all"
-                />
-              </div>
-              <select
-                value={local.rateUnit}
-                onChange={e => setLocal(l => ({ ...l, rateUnit: e.target.value }))}
-                className="border border-ink-100 rounded-xl px-3 py-3 text-sm text-ink outline-none focus:border-ink bg-white"
-              >
-                <option value="hr">/ hr</option>
-                <option value="half">/ half day</option>
-                <option value="full">/ full day</option>
-              </select>
-            </div>
-          </div>
-
           {/* Years of experience */}
           <div>
             <label className="block text-sm font-medium text-ink mb-2">Years of photography experience</label>
@@ -3209,7 +3196,7 @@ function ProfileSettingsTab({ profile, setProfile }: {
           <h2 className="font-semibold text-ink">Specialties</h2>
         </div>
 
-        <p className="text-xs text-ink-300 mb-4">Pick up to 5. These appear as tags on your public profile.</p>
+        <p className="text-xs text-ink-300 mb-4">Pick up to 5, or add your own. These appear as tags on your public profile.</p>
         <div className="flex flex-wrap gap-2 mb-4">
           {SPECIALTIES_ALL.map(s => {
             const sel = local.specialties.includes(s)
@@ -3225,6 +3212,38 @@ function ProfileSettingsTab({ profile, setProfile }: {
             )
           })}
         </div>
+
+        {/* Custom specialty entry */}
+        <div className="flex gap-2 mb-4">
+          <input
+            type="text" value={customSpecialty} maxLength={60}
+            onChange={e => setCustomSpecialty(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomSpecialty() } }}
+            disabled={local.specialties.length >= 5}
+            placeholder={local.specialties.length >= 5 ? 'Maximum 5 specialties selected' : 'Add your own — e.g. Headshot, Pets…'}
+            className="flex-1 border border-ink-100 rounded-xl px-4 py-2 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink-300 transition-all disabled:bg-ink-50 disabled:cursor-not-allowed"
+          />
+          <button
+            type="button" onClick={addCustomSpecialty}
+            disabled={!customSpecialty.trim() || local.specialties.length >= 5}
+            className="text-sm font-medium px-4 py-2 rounded-xl border border-ink-100 text-ink-500 hover:border-ink-300 hover:text-ink transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Add
+          </button>
+        </div>
+
+        {/* Custom (non-preset) selections shown as removable chips */}
+        {local.specialties.filter(s => !SPECIALTIES_ALL.includes(s)).length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {local.specialties.filter(s => !SPECIALTIES_ALL.includes(s)).map(s => (
+              <button key={s} type="button" onClick={() => toggleSpecialty(s)}
+                className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl border bg-ink text-white border-ink">
+                {s}
+                <X className="w-3.5 h-3.5" />
+              </button>
+            ))}
+          </div>
+        )}
 
         {local.specialties.length > 0 && (
           <div className="bg-ink-50 rounded-xl px-4 py-3 mb-4">
@@ -3547,6 +3566,9 @@ function TrustScoreTab({
   onDismissNotification,
   onSync,
   onDisconnect,
+  onSearchGoogle,
+  onConfirmGoogle,
+  onToggleGoogleReviews,
 }: {
   trustData: any
   loading: boolean
@@ -3555,6 +3577,9 @@ function TrustScoreTab({
   onDismissNotification: () => void
   onSync: () => void
   onDisconnect: (platform: string) => Promise<void>
+  onSearchGoogle: (businessName: string) => Promise<{ candidates?: any[]; error?: string }>
+  onConfirmGoogle: (placeId: string, name: string) => Promise<void>
+  onToggleGoogleReviews: (show: boolean) => Promise<void>
 }) {
   const score: number    = trustData?.trust_score ?? 0
   const breakdown        = trustData?.breakdown
@@ -3563,6 +3588,34 @@ function TrustScoreTab({
   const syncLog: any[]   = trustData?.sync_log ?? []
   const gbpConnected     = !!connected.google?.isActive
   const gbpSig           = signals.google
+
+  const [bizName, setBizName]         = useState('')
+  const [searching, setSearching]     = useState(false)
+  const [connecting, setConnecting]   = useState(false)
+  const [candidates, setCandidates]   = useState<any[] | null>(null)
+  const [searchError, setSearchError] = useState<string | null>(null)
+
+  async function handleSearch() {
+    if (!bizName.trim() || searching) return
+    setSearching(true); setSearchError(null); setCandidates(null)
+    try {
+      const res = await onSearchGoogle(bizName.trim())
+      if (res.error) setSearchError(res.error)
+      else setCandidates(res.candidates ?? [])
+    } finally {
+      setSearching(false)
+    }
+  }
+  async function handlePick(c: any) {
+    if (connecting) return
+    setConnecting(true)
+    try {
+      await onConfirmGoogle(c.placeId, c.name)
+      setCandidates(null); setBizName('')
+    } finally {
+      setConnecting(false)
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -3649,22 +3702,16 @@ function TrustScoreTab({
                   label="Reviews (rating + count)"
                   score={breakdown.reviews ?? 0}
                   color="#3b82f6"
-                  note="Google star rating (55%) · Review count (45%) — up to +12.5 pts"
+                  note="Google star rating (55%) · Review count (45%) — up to +18 pts"
                 />
                 <PillarBar
-                  label="Account age"
-                  score={breakdown.activity ?? 0}
-                  color="#f59e0b"
-                  note="GBP account age up to 5 years — up to +3 pts"
-                />
-                <PillarBar
-                  label="Verification (completeness + GBP verified)"
+                  label="Verification (completeness + active listing)"
                   score={breakdown.verification ?? 0}
                   color="#10b981"
-                  note="Profile completeness (45%) · Google verified status (55%) — up to +9.5 pts"
+                  note="Profile completeness · Google listing active — up to +7 pts"
                 />
                 <p className="text-[10px] text-ink-300 pt-1 border-t border-ink-50">
-                  Score range: 75 (GBP connected) → 100 (all signals maxed)
+                  Score range: 75 (Google connected) → 100 (all signals maxed)
                 </p>
               </div>
             ) : (
@@ -3676,6 +3723,34 @@ function TrustScoreTab({
         )}
       </div>
 
+      {/* Reviews KPIs */}
+      {gbpConnected && (() => {
+        const gRating = trustData?.google?.rating
+        const gCount  = trustData?.google?.review_count ?? 0
+        const tnfRating = trustData?.native_avg_rating ?? 0
+        const tnfCount  = trustData?.native_review_count ?? 0
+        const combined  = combinedRating({ tnfAvg: tnfRating, tnfCount, googleAvg: gRating, googleCount: gCount })
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+              <p className="text-[10px] text-ink-300 uppercase tracking-wide">Google reviews</p>
+              <p className="text-lg font-bold text-ink mt-0.5">{gRating != null ? `★ ${Number(gRating).toFixed(1)}` : '—'}</p>
+              <p className="text-xs text-ink-400">{gCount} review{gCount === 1 ? '' : 's'} on Google</p>
+            </div>
+            <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
+              <p className="text-[10px] text-ink-300 uppercase tracking-wide">TrueNorth Frames</p>
+              <p className="text-lg font-bold text-ink mt-0.5">{tnfCount > 0 ? `★ ${Number(tnfRating).toFixed(1)}` : '—'}</p>
+              <p className="text-xs text-ink-400">{tnfCount} booking-verified</p>
+            </div>
+            <div className="bg-white rounded-2xl p-4 border border-emerald-100" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+              <p className="text-[10px] text-emerald-600 uppercase tracking-wide font-semibold">Overall (weighted)</p>
+              <p className="text-lg font-bold text-ink mt-0.5">{combined.rating != null ? `★ ${combined.rating.toFixed(1)}` : '—'}</p>
+              <p className="text-xs text-ink-400">TNF reviews weighted {combined.tnfWeight}×</p>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Google Business Profile connection */}
       <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.04)' }}>
         <div className="flex items-center gap-3 mb-5">
@@ -3683,8 +3758,8 @@ function TrustScoreTab({
             <Globe className="w-4 h-4 text-ink-400" />
           </div>
           <div>
-            <h2 className="font-semibold text-ink">Google Business Profile</h2>
-            <p className="text-xs text-ink-300">Your sole trust signal — review rating, count, verified status &amp; account age</p>
+            <h2 className="font-semibold text-ink">Google Reviews</h2>
+            <p className="text-xs text-ink-300">Your public Google star rating &amp; review count — no login required</p>
           </div>
         </div>
 
@@ -3696,35 +3771,93 @@ function TrustScoreTab({
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-ink">Google Business</p>
-                <p className="text-xs text-ink-300">Review rating · Review count · Verified status · Account age</p>
+                <p className="text-xs text-ink-300">Review rating · Review count · Active listing</p>
                 {gbpConnected && connected.google?.username && (
                   <p className="text-xs text-ink-400 mt-0.5">{connected.google.username}</p>
                 )}
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              {gbpConnected ? (
+              {gbpConnected && (
                 <>
                   <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Connected
                   </span>
-                  <a href="/api/oauth/google"
-                    className="text-xs text-ink-400 hover:text-ink border border-ink-100 hover:border-ink-300 px-3 py-1.5 rounded-lg transition-all">
-                    Reconnect
-                  </a>
                   <button onClick={() => onDisconnect('google')}
                     className="text-xs text-ink-300 hover:text-red-500 border border-transparent hover:border-red-200 px-2 py-1.5 rounded-lg transition-all">
                     ✕
                   </button>
                 </>
-              ) : (
-                <a href="/api/oauth/google"
-                  className="text-xs font-semibold text-white px-4 py-1.5 rounded-lg bg-ink hover:bg-ink-800 transition-all">
-                  Connect
-                </a>
               )}
             </div>
           </div>
+
+          {/* Link your public Google listing (no login required) — search then confirm */}
+          {!gbpConnected && (
+            <div className="mt-3 pt-3 border-t border-ink-100">
+              <label className="block text-xs font-medium text-ink-500 mb-1.5">
+                Search for your business on Google
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={bizName}
+                  onChange={(e) => setBizName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSearch() }}
+                  placeholder="e.g. TrueNorth Frames, Edmonton"
+                  className="flex-1 text-sm px-3 py-2 rounded-lg border border-ink-200 focus:border-ink-400 focus:outline-none"
+                />
+                <button
+                  onClick={handleSearch}
+                  disabled={!bizName.trim() || searching}
+                  className="text-xs font-semibold text-white px-4 py-2 rounded-lg bg-ink hover:bg-ink-800 disabled:opacity-40 transition-all whitespace-nowrap">
+                  {searching ? 'Searching…' : 'Search'}
+                </button>
+              </div>
+              <p className="text-[11px] text-ink-300 mt-1.5">
+                We search public Google listings — no Google login needed. Pick the one that&apos;s yours below.
+              </p>
+
+              {searchError && (
+                <p className="text-xs text-red-600 mt-2">{searchError}</p>
+              )}
+
+              {candidates && candidates.length === 0 && (
+                <p className="text-xs text-ink-400 mt-2">No matches found. Try the exact name shown on Google Maps, and include your city.</p>
+              )}
+
+              {candidates && candidates.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs font-medium text-ink-500">Which one is your business?</p>
+                  {candidates.map((c: any) => (
+                    <button
+                      key={c.placeId}
+                      onClick={() => handlePick(c)}
+                      disabled={connecting}
+                      className="w-full text-left p-3 rounded-lg border border-ink-200 hover:border-ink-400 hover:bg-ink-50 disabled:opacity-50 transition-all">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-ink truncate">{c.name}</p>
+                          {c.address && <p className="text-[11px] text-ink-300 truncate">{c.address}</p>}
+                          <p className="text-[11px] text-ink-400 mt-0.5">
+                            {c.rating != null ? `★ ${Number(c.rating).toFixed(1)}` : 'No rating'}
+                            {' · '}{c.reviewCount ?? 0} reviews
+                            {c.operational === false ? ' · ⚠ not operational' : ''}
+                          </p>
+                        </div>
+                        <span className="text-xs font-semibold text-white bg-ink px-3 py-1.5 rounded-lg whitespace-nowrap flex-shrink-0">
+                          {connecting ? '…' : 'This is me'}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                  <p className="text-[11px] text-ink-300">
+                    Don&apos;t see yours? Refine the name above and search again.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* GBP signal detail */}
           {gbpConnected && gbpSig && (
@@ -3741,19 +3874,11 @@ function TrustScoreTab({
                   <p className="text-sm font-semibold text-ink">{gbpSig.review_count}</p>
                 </div>
               )}
-              {gbpSig.account_age_days != null && (
-                <div>
-                  <p className="text-[10px] text-ink-300 uppercase tracking-wide">Account age</p>
-                  <p className="text-sm font-semibold text-ink">
-                    {Math.floor(gbpSig.account_age_days / 365)}y {Math.floor((gbpSig.account_age_days % 365) / 30)}m
-                  </p>
-                </div>
-              )}
               {gbpSig.is_verified != null && (
                 <div>
-                  <p className="text-[10px] text-ink-300 uppercase tracking-wide">Verified</p>
+                  <p className="text-[10px] text-ink-300 uppercase tracking-wide">Listing</p>
                   <p className={`text-sm font-semibold ${gbpSig.is_verified ? 'text-emerald-600' : 'text-ink-400'}`}>
-                    {gbpSig.is_verified ? '✓ Verified' : 'Not verified'}
+                    {gbpSig.is_verified ? '✓ Active' : 'Inactive'}
                   </p>
                 </div>
               )}
@@ -3761,13 +3886,75 @@ function TrustScoreTab({
           )}
         </div>
 
+        {/* Opt-in: show Google review snippets on public profile */}
+        {gbpConnected && (
+          <div className="mt-4 p-4 rounded-xl border border-ink-100 bg-ink-50/40">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-ink">Show my Google reviews on my public profile</p>
+                <p className="text-xs text-ink-400 mt-1 leading-relaxed">
+                  We&apos;ll display your <span className="font-medium">5 most relevant</span> Google reviews, exactly as
+                  they appear on Google — we can&apos;t edit, reorder, or hide individual reviews (a Google constraint).
+                  Each is tagged &ldquo;From Google&rdquo; and links back to Google. Your TrueNorth&nbsp;Frames reviews
+                  always appear first.
+                </p>
+              </div>
+              <button
+                role="switch"
+                aria-checked={!!trustData?.google?.show_reviews}
+                onClick={() => onToggleGoogleReviews(!trustData?.google?.show_reviews)}
+                className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${trustData?.google?.show_reviews ? 'bg-emerald-500' : 'bg-ink-200'}`}>
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${trustData?.google?.show_reviews ? 'translate-x-5' : ''}`} />
+              </button>
+            </div>
+            {Array.isArray(trustData?.google?.reviews) && trustData.google.reviews.length === 0 && (
+              <p className="text-[11px] text-ink-300 mt-2">No Google review snippets available yet — they&apos;ll appear after the next sync.</p>
+            )}
+
+            {/* Preview of the exact 5 reviews that would show publicly */}
+            {Array.isArray(trustData?.google?.reviews) && trustData.google.reviews.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-ink-100">
+                <p className="text-[11px] font-medium text-ink-500 mb-2">
+                  These are the {trustData.google.reviews.length} reviews we can show{trustData?.google?.show_reviews ? ' (live on your profile)' : ' — turn on the toggle to display them'}:
+                </p>
+                <div className="space-y-2">
+                  {trustData.google.reviews.map((g: any, i: number) => (
+                    <div key={`gp-${i}`} className={`p-3 rounded-lg border ${trustData?.google?.show_reviews ? 'border-ink-100 bg-white' : 'border-dashed border-ink-200 bg-white/50'}`}>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {g.authorPhoto ? (
+                            <img src={g.authorPhoto} alt={g.author} className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+                          ) : (
+                            <div className="w-5 h-5 rounded-full bg-ink-100 flex items-center justify-center text-[9px] font-semibold text-ink-400 flex-shrink-0">{(g.author ?? 'G').slice(0, 1)}</div>
+                          )}
+                          <span className="text-xs font-semibold text-ink truncate">{g.author}</span>
+                          <span className="text-[10px] text-ink-300 flex-shrink-0">{g.relativeTime}</span>
+                        </div>
+                        <div className="flex items-center gap-0.5 flex-shrink-0">
+                          {[1, 2, 3, 4, 5].map(n => (
+                            <span key={n} className={`text-[10px] ${n <= g.rating ? 'text-amber-400' : 'text-ink-200'}`}>★</span>
+                          ))}
+                        </div>
+                      </div>
+                      {g.text && <p className="text-[11px] text-ink-500 leading-relaxed line-clamp-3">{g.text}</p>}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-ink-300 mt-2">
+                  We can&apos;t edit or choose which reviews appear — Google returns these as &ldquo;most relevant.&rdquo;
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {!gbpConnected && (
           <div className="mt-4 p-4 bg-amber-50 border border-amber-100 rounded-xl">
-            <p className="text-xs font-semibold text-amber-800 mb-1">Why connect Google Business?</p>
+            <p className="text-xs font-semibold text-amber-800 mb-1">Why connect Google reviews?</p>
             <ul className="text-xs text-amber-700 space-y-1 list-disc list-inside">
               <li>Instantly unlocks a trust score of 75+ visible to all clients</li>
               <li>Your star rating and review count appear on your public profile</li>
-              <li>Earns a "Verified on Google" badge</li>
+              <li>Takes seconds — just enter your business name, no Google login</li>
             </ul>
           </div>
         )}
@@ -4117,8 +4304,6 @@ function PhotographerDashboardInner() {
     displayName: '',
     bio: '',
     area: '',
-    rate: '',
-    rateUnit: 'hr',
     specialties: [],
     websiteUrl: '',
     contactInstagram: '',
@@ -4137,6 +4322,8 @@ function PhotographerDashboardInner() {
     completedBookings: 0,
     isGbpOAuthConnected: false,
     gbpReviewCount: 0,
+    gbpAvgRating: null,
+    overallRating: null,
     accountAgeDays: 0,
     profileStatus: 'pending',
     statusNote: null,
@@ -4178,8 +4365,6 @@ function PhotographerDashboardInner() {
           displayName:         data.display_name ?? '',
           bio:                 data.bio ?? '',
           area:                data.location ?? '',
-          rate:                data.rate_amount ?? '',
-          rateUnit:            data.rate_unit ?? 'hr',
           specialties:         data.specialties ?? [],
           websiteUrl:          data.website_url ?? '',
           contactInstagram:    data.contact_instagram_url ?? '',
@@ -4195,6 +4380,8 @@ function PhotographerDashboardInner() {
           completedBookings:   data.completed_bookings ?? 0,
           isGbpOAuthConnected: data.is_gbp_oauth_connected ?? false,
           gbpReviewCount:      data.gbp_review_count ?? 0,
+          gbpAvgRating:        data.gbp_avg_rating ?? null,
+          overallRating:       data.overall_rating ?? null,
           accountAgeDays:      data.account_age_days ?? 0,
           profileStatus:       data.profile_status ?? 'pending',
           statusNote:          data.status_note ?? null,
@@ -4697,7 +4884,7 @@ function PhotographerDashboardInner() {
     if (res.ok) { setStandaloneVideos(prev => prev.filter(v => v.id !== videoId)); refreshStorage() }
   }
 
-  const validTabs: DashboardTab[] = ['overview','portfolio','messages','requests','availability','packages','reviews','network','faq','settings','trust']
+  const validTabs: DashboardTab[] = ['overview','portfolio','messages','requests','availability','packages','reviews','network','faq','settings','trust','socials']
   const [activeTab, setActiveTab] = useState<DashboardTab>(() => {
     if (trustConnected || trustError) return 'trust'
     return tabParam && validTabs.includes(tabParam) ? tabParam : 'overview'
@@ -4912,6 +5099,7 @@ function PhotographerDashboardInner() {
     { key: 'packages', label: 'Packages' },
     { key: 'reviews', label: 'Reviews' },
     { key: 'network', label: 'Network' },
+    { key: 'socials', label: 'Socials' },
     { key: 'faq', label: 'FAQ' },
     { key: 'trust', label: 'Trust Score' },
     { key: 'settings', label: 'Settings' },
@@ -4937,6 +5125,7 @@ function PhotographerDashboardInner() {
         { key: 'messages', label: 'Messages', icon: MessageSquare, badge: totalUnreadMessages },
         { key: 'reviews', label: 'Reviews', icon: Star },
         { key: 'network', label: 'Network', icon: Users },
+        { key: 'socials', label: 'Socials', icon: Share2 },
       ],
     },
     {
@@ -5236,11 +5425,20 @@ function PhotographerDashboardInner() {
                   >
                     <Star className="w-4 h-4 text-ink-300 mb-2" />
                     <p className="font-bold text-ink text-xl">
-                      {profile.nativeAvgRating > 0 ? profile.nativeAvgRating.toFixed(1) : '—'}
+                      {profile.overallRating != null
+                        ? profile.overallRating.toFixed(1)
+                        : profile.nativeAvgRating > 0 ? profile.nativeAvgRating.toFixed(1) : '—'}
                     </p>
-                    <p className="text-ink-400 text-xs mt-0.5">Avg rating</p>
+                    <p className="text-ink-400 text-xs mt-0.5">Overall rating</p>
                     <p className="text-ink-300 text-[10px] mt-1">
-                      {profile.nativeReviewCount > 0 ? `${profile.nativeReviewCount} review${profile.nativeReviewCount !== 1 ? 's' : ''}` : 'No reviews yet'}
+                      {(() => {
+                        const total = (profile.nativeReviewCount ?? 0) + (profile.gbpReviewCount ?? 0)
+                        if (total === 0) return 'No reviews yet'
+                        const parts: string[] = []
+                        if (profile.nativeReviewCount > 0) parts.push(`${profile.nativeReviewCount} TNF`)
+                        if (profile.gbpReviewCount > 0) parts.push(`${profile.gbpReviewCount} Google`)
+                        return parts.join(' · ')
+                      })()}
                     </p>
                   </button>
 
@@ -5592,6 +5790,9 @@ function PhotographerDashboardInner() {
                 />
               </div>
             )}
+
+            {/* ── Socials tab ───────────────────────────────────────── */}
+            {activeTab === 'socials' && <SocialsTab />}
 
             {/* ── FAQ tab ───────────────────────────────────────────── */}
             {activeTab === 'faq' && (
@@ -6267,8 +6468,50 @@ function PhotographerDashboardInner() {
                     .catch(() => setTrustNotification({ type: 'error', msg: 'Sync failed — try again' }))
                     .finally(() => setTrustSyncing(false))
                 }}
-                onDisconnect={async (platform: string) => {
-                  await fetch(`/api/oauth/${platform}`, { method: 'DELETE' })
+                onDisconnect={async (_platform: string) => {
+                  await fetch('/api/photographer/trust/google-place', { method: 'DELETE' })
+                  setProfile(prev => ({ ...prev, trustScore: 0 }))
+                  const d = await fetch('/api/photographer/trust').then(r => r.ok ? r.json() : null)
+                  if (d) setTrustData(d)
+                }}
+                onSearchGoogle={async (businessName: string) => {
+                  const res = await fetch(`/api/photographer/trust/google-place?q=${encodeURIComponent(businessName)}`)
+                  const data = await res.json().catch(() => null)
+                  if (!res.ok) return { error: data?.error ?? 'Search failed — try again.' }
+                  return { candidates: data?.candidates ?? [] }
+                }}
+                onConfirmGoogle={async (placeId: string, name: string) => {
+                  const res = await fetch('/api/photographer/trust/google-place', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ placeId, name }),
+                  })
+                  const data = await res.json().catch(() => null)
+                  if (!res.ok) {
+                    setTrustNotification({ type: 'error', msg: data?.error ?? 'Could not link that listing — try again.' })
+                    return
+                  }
+                  setTrustNotification({
+                    type: 'success',
+                    msg: `Connected to ${name || 'your listing'}${data?.trust_score != null ? ` — trust score ${data.trust_score}` : ''}.`,
+                  })
+                  // Reflect the new score in the profile-completion checklist immediately.
+                  if (data?.trust_score != null) {
+                    setProfile(prev => ({ ...prev, trustScore: data.trust_score }))
+                  }
+                  const d = await fetch('/api/photographer/trust').then(r => r.ok ? r.json() : null)
+                  if (d) setTrustData(d)
+                }}
+                onToggleGoogleReviews={async (show: boolean) => {
+                  const res = await fetch('/api/photographer/trust/google-place', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ showGoogleReviews: show }),
+                  })
+                  if (!res.ok) {
+                    setTrustNotification({ type: 'error', msg: 'Could not update your Google reviews setting.' })
+                    return
+                  }
                   const d = await fetch('/api/photographer/trust').then(r => r.ok ? r.json() : null)
                   if (d) setTrustData(d)
                 }}

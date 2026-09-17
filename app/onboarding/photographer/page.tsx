@@ -6,12 +6,13 @@ import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import {
   ArrowRight, ArrowLeft, CheckCircle2, Camera,
-  User, Globe, Shield, Zap, AlertCircle, Star,
+  User, Globe, Shield, Zap, AlertCircle, Star, X,
 } from 'lucide-react'
 
 const SPECIALTIES = [
-  'Wedding', 'Portrait', 'Corporate', 'Newborn', 'Family', 'Event',
-  'Real Estate', 'Product', 'Street', 'Boudoir', 'Sports', 'Food',
+  'Wedding', 'Portrait', 'Headshot', 'Corporate', 'Newborn', 'Maternity',
+  'Family', 'Event', 'Graduation', 'Real Estate', 'Product', 'Fashion',
+  'Street', 'Boudoir', 'Sports', 'Food', 'Pets', 'Travel',
 ]
 
 const EDMONTON_AREAS = [
@@ -106,11 +107,11 @@ function PhotographerOnboardingForm() {
   const [displayName, setDisplayName] = useState('')
   const [bio, setBio] = useState('')
   const [area, setArea] = useState('')
-  const [rate, setRate] = useState('')
   const [yearsExperience, setYearsExperience] = useState<string>('')
 
   // Step 2 — specialties
   const [selectedSpecialties, setSelectedSpecialties] = useState<string[]>([])
+  const [customSpecialty, setCustomSpecialty] = useState('')
 
   // Step 3 — trust questions
   const [hasGbp, setHasGbp]             = useState<boolean | null>(null)
@@ -132,7 +133,7 @@ function PhotographerOnboardingForm() {
   function touch(f: string) { setTouched(t => ({ ...t, [f]: true })) }
 
   // Validations — step 3 is always valid (presence questions are optional context)
-  const step1Valid = displayName.trim() && bio.trim().length >= 20 && area && rate && yearsExperience !== ''
+  const step1Valid = displayName.trim() && bio.trim().length >= 20 && area && yearsExperience !== ''
   const step2Valid = selectedSpecialties.length >= 1
   const step3Valid = true
 
@@ -140,6 +141,20 @@ function PhotographerOnboardingForm() {
     setSelectedSpecialties(prev =>
       prev.includes(s) ? prev.filter(x => x !== s) : prev.length < 5 ? [...prev, s] : prev
     )
+  }
+
+  function addCustomSpecialty() {
+    const raw = customSpecialty.trim().slice(0, 60)
+    if (!raw) return
+    // Snap to a preset's canonical casing when it matches one, so chips stay in sync
+    const preset = SPECIALTIES.find(s => s.toLowerCase() === raw.toLowerCase())
+    const value = preset ?? raw
+    setSelectedSpecialties(prev => {
+      if (prev.length >= 5) return prev
+      if (prev.some(s => s.toLowerCase() === value.toLowerCase())) return prev
+      return [...prev, value]
+    })
+    setCustomSpecialty('')
   }
 
   async function handleFinish() {
@@ -155,7 +170,6 @@ function PhotographerOnboardingForm() {
         display_name: displayName,
         bio,
         location: area,
-        rate,
         specialties: selectedSpecialties,
         website_url: hasWebsite && websiteUrl.trim() ? websiteUrl.trim() : null,
         years_experience: yearsExperience ? Number(yearsExperience) : null,
@@ -280,24 +294,6 @@ function PhotographerOnboardingForm() {
               )}
             </div>
 
-            {/* Rate */}
-            <div>
-              <label className="block text-sm font-medium text-ink mb-1.5">
-                Starting rate (CAD/hr) <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-300 text-sm">$</span>
-                <input
-                  type="number" min={50} max={1000} placeholder="150"
-                  value={rate} onChange={e => setRate(e.target.value)} onBlur={() => touch('rate')}
-                  className={`w-full border rounded-xl pl-8 pr-4 py-3 text-sm text-ink placeholder-ink-200 outline-none focus:ring-2 transition-all ${
-                    touched.rate && !rate ? 'border-red-300 focus:ring-red-100' : 'border-ink-100 focus:border-ink focus:ring-ink/10'
-                  }`}
-                />
-              </div>
-              <p className="mt-1 text-xs text-ink-300">You negotiate the final rate directly — this is just your starting point.</p>
-            </div>
-
             {/* Years of experience */}
             <div>
               <label className="block text-sm font-medium text-ink mb-1.5">
@@ -333,7 +329,7 @@ function PhotographerOnboardingForm() {
           <button
             type="button"
             onClick={() => {
-              touch('displayName'); touch('bio'); touch('rate')
+              touch('displayName'); touch('bio')
               touch('area'); touch('yearsExperience')
               if (step1Valid) setStep(2)
             }}
@@ -358,10 +354,10 @@ function PhotographerOnboardingForm() {
               <Camera className="w-5 h-5 text-ink-400" />
             </div>
             <h1 className="font-serif text-3xl font-bold text-ink mb-2">What do you shoot?</h1>
-            <p className="text-ink-300 text-sm">Pick up to 5 specialties. These appear as filter tags on your profile. <span className="text-red-500">*</span></p>
+            <p className="text-ink-300 text-sm">Pick up to 5 specialties, or add your own. These appear as filter tags on your profile. <span className="text-red-500">*</span></p>
           </div>
 
-          <div className="flex flex-wrap gap-2 mb-8">
+          <div className="flex flex-wrap gap-2 mb-4">
             {SPECIALTIES.map(s => {
               const selected = selectedSpecialties.includes(s)
               const maxed = selectedSpecialties.length >= 5 && !selected
@@ -377,6 +373,38 @@ function PhotographerOnboardingForm() {
               )
             })}
           </div>
+
+          {/* Custom specialty entry */}
+          <div className="flex gap-2 mb-4">
+            <input
+              type="text" value={customSpecialty} maxLength={60}
+              onChange={e => setCustomSpecialty(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomSpecialty() } }}
+              disabled={selectedSpecialties.length >= 5}
+              placeholder={selectedSpecialties.length >= 5 ? 'Maximum 5 specialties selected' : 'Add your own — e.g. Headshot, Pets…'}
+              className="flex-1 border-2 border-ink-100 rounded-full px-4 py-2 text-sm text-ink placeholder-ink-200 outline-none focus:border-ink-300 transition-all disabled:bg-ink-50 disabled:cursor-not-allowed"
+            />
+            <button
+              type="button" onClick={addCustomSpecialty}
+              disabled={!customSpecialty.trim() || selectedSpecialties.length >= 5}
+              className="text-sm font-medium px-4 py-2 rounded-full border-2 border-ink-100 text-ink-500 hover:border-ink-300 hover:text-ink transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Add
+            </button>
+          </div>
+
+          {/* Custom (non-preset) selections shown as removable chips */}
+          {selectedSpecialties.filter(s => !SPECIALTIES.includes(s)).length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {selectedSpecialties.filter(s => !SPECIALTIES.includes(s)).map(s => (
+                <button key={s} type="button" onClick={() => toggleSpecialty(s)}
+                  className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-full border-2 bg-ink text-white border-ink">
+                  {s}
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              ))}
+            </div>
+          )}
 
           {selectedSpecialties.length > 0 && (
             <div className="bg-ink-50 rounded-xl px-4 py-3 mb-6">

@@ -85,7 +85,6 @@ export async function GET(
     displayName:         profile.display_name,
     bio:                 profile.bio,
     location:            profile.location,
-    rate:                profile.rate_display,
     avatarUrl:           profile.avatar_url,
     specialtyCount:      (specialties ?? []).length,
     portfolioPhotoCount: (portfolioPhotos ?? []).length,

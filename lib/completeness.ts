@@ -9,7 +9,6 @@ export interface CompletenessSignals {
   displayName?: string | null
   bio?: string | null
   location?: string | null
-  rate?: string | null            // any non-empty rate value (e.g. rate_display)
   avatarUrl?: string | null
   specialtyCount?: number
   portfolioPhotoCount?: number
@@ -19,13 +18,12 @@ export interface CompletenessSignals {
 }
 
 // Weights mirror the dashboard checklist (app/dashboard/photographer/page.tsx).
-// They sum to 100.
+// The score is normalized against the total, so the weights need not sum to 100.
 export function computeCompleteness(s: CompletenessSignals): number {
   const items: Array<{ done: boolean; weight: number }> = [
     { done: !!s.displayName,                        weight: 10 }, // Display name
     { done: (s.bio ?? '').length >= 20,             weight: 10 }, // Bio written
     { done: !!s.location,                           weight: 5  }, // Location set
-    { done: !!s.rate,                               weight: 5  }, // Rate added
     { done: !!s.avatarUrl,                          weight: 10 }, // Profile photo
     { done: (s.specialtyCount ?? 0) > 0,            weight: 10 }, // Specialties chosen
     { done: (s.portfolioPhotoCount ?? 0) > 0,       weight: 15 }, // Portfolio photos

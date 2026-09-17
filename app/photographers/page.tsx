@@ -26,7 +26,6 @@ interface Photographer {
   location: string
   avatar_url: string | null
   cover_src: string | null
-  rate_display: string
   trust_score: number
   native_avg_rating: number
   native_review_count: number

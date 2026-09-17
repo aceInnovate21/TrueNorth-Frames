@@ -1,11 +1,26 @@
-import { PlatformSignals } from '../types'
+import { PlatformSignals, GoogleReviewSnippet } from '../types'
+
+// Map Places API (New) review objects to the snippet shape we store/display.
+// Google's display policy requires attribution (author + photo) and a link back
+// to Google — both preserved here and surfaced with a "From Google" tag + link.
+function parseGoogleReviews(raw: any): GoogleReviewSnippet[] {
+  if (!Array.isArray(raw)) return []
+  return raw.slice(0, 5).map((r: any) => ({
+    author:       r?.authorAttribution?.displayName ?? 'Google user',
+    authorPhoto:  r?.authorAttribution?.photoUri ?? null,
+    rating:       typeof r?.rating === 'number' ? r.rating : 0,
+    text:         r?.text?.text ?? r?.originalText?.text ?? '',
+    relativeTime: r?.relativePublishTimeDescription ?? '',
+    publishTime:  r?.publishTime ?? null,
+  })).filter((r: GoogleReviewSnippet) => r.text || r.rating)
+}
 
 // Google Business Profile API (formerly My Business API)
 // Requires: https://www.googleapis.com/auth/business.manage scope
 // Access via OAuth 2.0 — token stored in platform_oauth_tokens
 
 const GBP_BASE = 'https://mybusinessaccountmanagement.googleapis.com/v1'
-const GBP_INFO = 'https://mybusinessinformation.googleapis.com/v1'
+const GBP_INFO = 'https://mybusinessbusinessinformation.googleapis.com/v1'
 const GBP_REVIEWS = 'https://mybusiness.googleapis.com/v4'
 
 // ── Places API fallback ────────────────────────────────────────────────────────
@@ -13,42 +28,132 @@ const GBP_REVIEWS = 'https://mybusiness.googleapis.com/v4'
 // Requires only GOOGLE_PLACES_API_KEY — no user auth needed.
 // Photographer provides their business name; we search Places and get rating + count.
 
-export async function fetchGooglePlacesSignals(businessName: string, location = 'Edmonton AB'): Promise<PlatformSignals> {
+// Fields we read from Places API (New). We only need the public trust signals:
+// rating, total review count, and whether the listing is a live/operational business.
+// Owner-verified badge and account age are intentionally NOT used (not exposed publicly).
+const PLACES_FIELD_MASK = 'places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.businessStatus'
+// Detail mask includes googleMapsUri + up to 5 "most relevant" reviews so we can
+// optionally surface review snippets (attributed + linked) on the public profile.
+const PLACE_DETAIL_FIELD_MASK = 'id,displayName,formattedAddress,rating,userRatingCount,businessStatus,googleMapsUri,reviews'
+
+export interface GooglePlaceCandidate {
+  placeId:      string
+  name:         string
+  address:      string
+  rating?:      number
+  reviewCount:  number
+  operational:  boolean
+}
+
+function toCandidate(place: any, fallbackName = ''): GooglePlaceCandidate {
+  return {
+    placeId:     place.id,
+    name:        place.displayName?.text ?? fallbackName,
+    address:     place.formattedAddress ?? '',
+    rating:      typeof place.rating === 'number' ? place.rating : undefined,
+    reviewCount: place.userRatingCount ?? 0,
+    operational: place.businessStatus === 'OPERATIONAL',
+  }
+}
+
+// Search Google Places (New) by business name and return several candidates so
+// the photographer can confirm which listing is theirs (avoids grabbing the
+// wrong business when names are similar).
+export async function searchGooglePlaces(
+  businessName: string,
+  location = 'Edmonton AB',
+  limit = 5,
+): Promise<{ candidates: GooglePlaceCandidate[] } | { error: string }> {
+  const key = process.env.GOOGLE_PLACES_API_KEY
+  if (!key) return { error: 'Google reviews lookup is not configured yet. Please contact support.' }
+
+  try {
+    const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type':     'application/json',
+        'X-Goog-Api-Key':   key,
+        'X-Goog-FieldMask': PLACES_FIELD_MASK,
+      },
+      body: JSON.stringify({ textQuery: `${businessName} ${location}`.trim(), pageSize: Math.min(limit, 20) }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      return { error: body?.error?.message ?? `Places search failed (HTTP ${res.status})` }
+    }
+    const data = await res.json()
+    const places: any[] = Array.isArray(data?.places) ? data.places.filter((p: any) => p?.id) : []
+    if (places.length === 0) return { error: 'No Google listing found for that business name. Try the exact name as it appears on Google Maps.' }
+
+    return { candidates: places.slice(0, limit).map((p) => toCandidate(p, businessName)) }
+  } catch (e: any) {
+    return { error: e?.message ?? 'Places API error' }
+  }
+}
+
+// Single best match — kept for the name-based sync fallback.
+export async function searchGooglePlace(
+  businessName: string,
+  location = 'Edmonton AB',
+): Promise<{ candidate: GooglePlaceCandidate } | { error: string }> {
+  const result = await searchGooglePlaces(businessName, location, 1)
+  if ('error' in result) return result
+  return { candidate: result.candidates[0] }
+}
+
+// Fetch public trust signals for a photographer's Google listing.
+// Prefer a stored place_id (stable); fall back to a name search.
+export async function fetchGooglePlacesSignals(
+  opts: { placeId?: string; businessName?: string; location?: string },
+): Promise<PlatformSignals> {
   const key = process.env.GOOGLE_PLACES_API_KEY
   if (!key) return { platform: 'google', error: 'GOOGLE_PLACES_API_KEY not set' }
 
   try {
-    // Step 1: Find the place by name
-    const searchUrl = new URL('https://maps.googleapis.com/maps/api/place/findplacefromtext/json')
-    searchUrl.searchParams.set('input', `${businessName} ${location}`)
-    searchUrl.searchParams.set('inputtype', 'textquery')
-    searchUrl.searchParams.set('fields', 'place_id,name,rating,user_ratings_total,formatted_address')
-    searchUrl.searchParams.set('key', key)
+    // Resolve a place: by stored id (preferred) or by name search.
+    let placeId = opts.placeId
+    let name: string | undefined
+    let rating: number | undefined
+    let reviewCount = 0
+    let operational = false
+    let mapsUri: string | undefined
+    let reviews: GoogleReviewSnippet[] = []
 
-    const searchRes = await fetch(searchUrl.toString(), { next: { revalidate: 0 } })
-    if (!searchRes.ok) return { platform: 'google', error: `Places search HTTP ${searchRes.status}` }
-
-    const searchData = await searchRes.json()
-    const candidate = searchData?.candidates?.[0]
-    if (!candidate?.place_id) return { platform: 'google', error: 'No Google Business listing found for this name' }
-
-    // Step 2: Get full details including review count
-    const detailUrl = new URL('https://maps.googleapis.com/maps/api/place/details/json')
-    detailUrl.searchParams.set('place_id', candidate.place_id)
-    detailUrl.searchParams.set('fields', 'name,rating,user_ratings_total,business_status,opening_hours')
-    detailUrl.searchParams.set('key', key)
-
-    const detailRes = await fetch(detailUrl.toString(), { next: { revalidate: 0 } })
-    const detailData = detailRes.ok ? await detailRes.json() : null
-    const place = detailData?.result ?? candidate
+    if (!placeId) {
+      if (!opts.businessName) return { platform: 'google', error: 'No Google business name on file to look up.' }
+      const search = await searchGooglePlace(opts.businessName, opts.location ?? 'Edmonton AB')
+      if ('error' in search) return { platform: 'google', error: search.error }
+      const c = search.candidate
+      placeId = c.placeId; name = c.name; rating = c.rating; reviewCount = c.reviewCount; operational = c.operational
+    } else {
+      const res = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`, {
+        headers: {
+          'X-Goog-Api-Key':   key,
+          'X-Goog-FieldMask': PLACE_DETAIL_FIELD_MASK,
+        },
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        return { platform: 'google', error: body?.error?.message ?? `Google listing lookup failed (HTTP ${res.status})` }
+      }
+      const place = await res.json()
+      name = place.displayName?.text
+      rating = typeof place.rating === 'number' ? place.rating : undefined
+      reviewCount = place.userRatingCount ?? 0
+      operational = place.businessStatus === 'OPERATIONAL'
+      mapsUri = place.googleMapsUri
+      reviews = parseGoogleReviews(place.reviews)
+    }
 
     return {
-      platform:        'google',
-      platformUserId:  candidate.place_id,
-      platformUsername: place.name ?? businessName,
-      reviewRating:    place.rating ?? undefined,
-      reviewCount:     place.user_ratings_total ?? 0,
-      isVerified:      place.business_status === 'OPERATIONAL',
+      platform:         'google',
+      platformUserId:   placeId,
+      platformUsername: name ?? opts.businessName ?? '',
+      reviewRating:     rating,
+      reviewCount,
+      isVerified:       operational,   // repurposed: "active/operational listing" (not owner-verified)
+      googleMapsUri:    mapsUri,
+      googleReviews:    reviews,
     }
   } catch (e: any) {
     return { platform: 'google', error: e?.message ?? 'Places API error' }
@@ -63,10 +168,39 @@ export async function fetchGoogleSignals(accessToken: string): Promise<PlatformS
       next: { revalidate: 0 },
     })
     if (!accountsRes.ok) {
-      if (accountsRes.status === 403) {
-        return { platform: 'google', error: 'No Google Business Profile found for this account. Create one at business.google.com and reconnect.' }
+      // Read Google's structured error so we don't mislabel the failure.
+      const body = await accountsRes.json().catch(() => null)
+      const reason: string = body?.error?.status ?? body?.error?.errors?.[0]?.reason ?? ''
+      const detail: string = body?.error?.message ?? ''
+
+      // 401 → the access token is expired/revoked → user needs to reconnect.
+      if (accountsRes.status === 401) {
+        return { platform: 'google', error: 'Google connection expired — please reconnect your account.' }
       }
-      return { platform: 'google', error: `Google API error (${accountsRes.status}) — please reconnect your account.` }
+
+      // 429 (or 403 RESOURCE_EXHAUSTED) → the Business Profile API is enabled
+      // but this app's project has 0 / exhausted quota. Requires Google's
+      // one-time Business Profile API access approval — not a user problem.
+      if (accountsRes.status === 429) {
+        return { platform: 'google', error: `Google Business Profile API quota not yet granted for this app — the access request is still pending (platform config on our side). [429${detail ? ': ' + detail : ''}]` }
+      }
+
+      // 403 does NOT mean "no business profile". It almost always means the
+      // Business Profile APIs are not enabled / not yet granted quota for this
+      // app's Google Cloud project (SERVICE_DISABLED / accessNotConfigured /
+      // rate-limit-0). Surface the real reason instead of telling a photographer
+      // who owns a profile to go create one.
+      if (accountsRes.status === 403) {
+        if (/disabled|not been used|accessNotConfigured|SERVICE_DISABLED/i.test(`${reason} ${detail}`)) {
+          return { platform: 'google', error: `Google Business Profile API is not enabled for this app yet (platform config on our side). [${reason || 403}${detail ? ': ' + detail : ''}]` }
+        }
+        if (/rateLimitExceeded|RESOURCE_EXHAUSTED|quota/i.test(`${reason} ${detail}`)) {
+          return { platform: 'google', error: `Google Business Profile API quota not yet granted for this app — the access request is still pending (platform config on our side). [${reason || 403}${detail ? ': ' + detail : ''}]` }
+        }
+        return { platform: 'google', error: `Google denied access to your Business Profile (permission denied)${detail ? `: ${detail}` : ''}. If you manage your profile through a Google group or organization, make sure this account has owner/manager access, then reconnect.` }
+      }
+
+      return { platform: 'google', error: `Google API error (${accountsRes.status})${detail ? `: ${detail}` : ''} — please reconnect your account.` }
     }
     const accountsData = await accountsRes.json()
     const account = accountsData?.accounts?.[0]

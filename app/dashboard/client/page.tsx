@@ -103,7 +103,6 @@ interface SavedPhotographer {
   username: string | null
   display_name: string | null
   avatar_url: string | null
-  rate_display: string | null
   native_avg_rating: number | null
 }
 
@@ -1620,7 +1619,6 @@ export default function ClientDashboard() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="font-semibold text-ink text-xs leading-tight group-hover:underline truncate">{pName}</p>
-                              <p className="text-ink-300 text-[10px]">{p.rate_display ?? ''}</p>
                             </div>
                             {p.native_avg_rating != null && (
                               <div className="flex items-center gap-0.5 flex-shrink-0">

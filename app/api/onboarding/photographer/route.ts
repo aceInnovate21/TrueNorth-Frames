@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json()
   const {
-    first_name, last_name, display_name, bio, location, rate,
+    first_name, last_name, display_name, bio, location,
     specialties = [], website_url, years_experience,
     has_gbp, has_gbp_reviews, has_website,
   } = body
@@ -41,7 +41,6 @@ export async function POST(request: NextRequest) {
   if (!display_name?.trim()) return badRequest('display_name is required')
   if (!bio?.trim() || bio.trim().length < 20) return badRequest('bio must be at least 20 characters')
   if (!location?.trim()) return badRequest('location is required')
-  if (!rate) return badRequest('rate is required')
 
   console.log('[onboarding/photographer] user:', user.id, 'display_name:', display_name)
 
@@ -67,9 +66,6 @@ export async function POST(request: NextRequest) {
     return serverError('Failed to update user record')
   }
 
-  const rateNum = parseFloat(rate)
-  const rateDisplay = `$${rateNum.toFixed(0)} / hr`
-
   // Check if profile already exists — if so, keep the existing username
   const { data: existingProfile } = await db
     .from('photographer_profiles')
@@ -91,7 +87,6 @@ export async function POST(request: NextRequest) {
       display_name: display_name.trim(),
       bio: bio.trim().slice(0, 1200),
       location: location.trim(),
-      rate_display: rateDisplay,
       profile_status: 'pending',
       ...(years_experience != null ? { years_experience: Number(years_experience) } : {}),
       website_url: website_url?.trim() || null,
@@ -151,7 +146,7 @@ export async function POST(request: NextRequest) {
           CATEGORY: 'photographer_approval',
           SUBMITTER_NAME: fullName,
           SUBMITTER_ROLE: 'photographer',
-          DESCRIPTION: `${fullName} (${user.email}) has completed onboarding and is waiting for approval.\n\nBio: ${bio.trim().slice(0, 200)}\nLocation: ${location}\nRate: ${rateDisplay}\nUsername: ${username}`,
+          DESCRIPTION: `${fullName} (${user.email}) has completed onboarding and is waiting for approval.\n\nBio: ${bio.trim().slice(0, 200)}\nLocation: ${location}\nUsername: ${username}`,
         },
       },
     } as any)

@@ -1,21 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession, unauthorized, badRequest, serverError } from '@/lib/api-helpers'
 import { computeCompleteness } from '@/lib/completeness'
-
-// Parse "$150 / hr" → { amount: "150", unit: "hr" }
-function parseRateDisplay(rateDisplay: string | null): { amount: string; unit: string } {
-  if (!rateDisplay) return { amount: '', unit: 'hr' }
-  const match = rateDisplay.match(/\$?(\d+(?:\.\d+)?)\s*\/\s*(.+)/)
-  if (!match) return { amount: '', unit: 'hr' }
-  const unitMap: Record<string, string> = { hr: 'hr', 'half day': 'half', 'full day': 'full' }
-  return { amount: match[1], unit: unitMap[match[2].trim()] ?? 'hr' }
-}
-
-function formatRateDisplay(amount: string, unit: string): string | null {
-  if (!amount) return null
-  const labelMap: Record<string, string> = { hr: 'hr', half: 'half day', full: 'full day' }
-  return `$${parseFloat(amount).toFixed(0)} / ${labelMap[unit] ?? 'hr'}`
-}
+import { combinedRating } from '@/lib/trust/combined-rating'
 
 export async function GET() {
   const { adminDb, user } = await getServerSession()
@@ -38,6 +24,7 @@ export async function GET() {
   let specialties: string[] = []
   let linksMap: Record<string, string> = {}
   let gbpReviewCount = 0
+  let gbpRating: number | null = null
   let isGbpOAuthConnected = false
   let portfolioPhotoCount = 0
   let completedBookings = 0
@@ -58,8 +45,8 @@ export async function GET() {
     ] = await Promise.all([
       db.from('photographer_specialties').select('specialty').eq('photographer_id', photographerId),
       db.from('external_platform_links').select('platform, profile_url').eq('photographer_id', photographerId),
-      db.from('external_platform_links').select('platform_review_count').eq('photographer_id', photographerId).eq('platform', 'google').maybeSingle(),
-      db.from('platform_oauth_tokens').select('photographer_id').eq('photographer_id', photographerId).eq('platform', 'google').eq('is_active', true).maybeSingle(),
+      db.from('external_platform_links').select('platform_review_count, platform_rating').eq('photographer_id', photographerId).eq('platform', 'google').maybeSingle(),
+      db.from('photographer_profiles').select('google_place_id').eq('id', photographerId).maybeSingle(),
       db.from('portfolio_photos').select('id').eq('photographer_id', photographerId),
       db.from('booking_requests').select('*', { count: 'exact', head: true }).eq('photographer_id', photographerId).eq('status', 'completed'),
       db.from('photographer_faqs').select('*', { count: 'exact', head: true }).eq('photographer_id', photographerId),
@@ -70,7 +57,8 @@ export async function GET() {
     specialties = (specialtyRows ?? []).map((s: { specialty: string }) => s.specialty)
     for (const link of linkRows ?? []) linksMap[link.platform] = link.profile_url
     gbpReviewCount = gbpLink?.platform_review_count ?? 0
-    isGbpOAuthConnected = !!oauthRow
+    gbpRating      = gbpLink?.platform_rating ?? null
+    isGbpOAuthConnected = !!oauthRow?.google_place_id
     portfolioPhotoCount = (photoRows ?? []).length
     completedBookings = bookingCount ?? 0
     faqTotal = faqCount ?? 0
@@ -96,15 +84,12 @@ export async function GET() {
     }
   }
 
-  const { amount, unit } = parseRateDisplay(profile?.rate_display ?? null)
-
   // Derive completeness live — the stored completeness_score column is not
   // kept up to date, so computing it here keeps the dashboard and badges accurate.
   const completenessScore = computeCompleteness({
     displayName:         profile?.display_name,
     bio:                 profile?.bio,
     location:            profile?.location,
-    rate:                amount,
     avatarUrl:           profile?.avatar_url,
     specialtyCount:      specialties.length,
     portfolioPhotoCount,
@@ -126,6 +111,7 @@ export async function GET() {
     }
   }
 
+
   const accountAgeDays = profile?.created_at
     ? Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 86400))
     : 0
@@ -135,8 +121,6 @@ export async function GET() {
     display_name:          profile?.display_name ?? '',
     bio:                   profile?.bio ?? '',
     location:              profile?.location ?? '',
-    rate_amount:           amount,
-    rate_unit:             unit,
     website_url:           profile?.website_url ?? '',
     avatar_url:            profile?.avatar_url ?? '',
     cover_image_url:       profile?.cover_image_url ?? '',
@@ -159,6 +143,13 @@ export async function GET() {
     completed_bookings:    completedBookings,
     is_gbp_oauth_connected: isGbpOAuthConnected,
     gbp_review_count:      gbpReviewCount,
+    gbp_avg_rating:        gbpRating,
+    overall_rating:        combinedRating({
+      tnfAvg:      Number(profile?.native_avg_rating ?? 0),
+      tnfCount:    Number(profile?.native_review_count ?? 0),
+      googleAvg:   gbpRating,
+      googleCount: gbpReviewCount,
+    }).rating,
     account_age_days:      accountAgeDays,
   })
 }
@@ -182,11 +173,9 @@ export async function PATCH(request: NextRequest) {
   const photographerId = profile.id
 
   if (section === 'basics') {
-    const { display_name, bio, location, rate_amount, rate_unit, website_url, years_experience } = body
+    const { display_name, bio, location, website_url, years_experience } = body
 
     if (!display_name?.trim()) return badRequest('display_name is required')
-
-    const rateDisplay = formatRateDisplay(rate_amount, rate_unit)
 
     const { error: userError } = await db
       .from('users')
@@ -201,7 +190,6 @@ export async function PATCH(request: NextRequest) {
         display_name: display_name.trim(),
         bio: bio?.trim() || null,
         location: location?.trim() || null,
-        rate_display: rateDisplay,
         website_url: website_url?.trim() || null,
         ...(years_experience != null ? { years_experience: Number(years_experience) } : {}),
         updated_at: new Date().toISOString(),
